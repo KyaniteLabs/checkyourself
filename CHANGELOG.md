@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.6.2
+
+- Added reviewed finding suppressions through `.checkyourself.yml`, keeping
+  suppressed findings visible in JSON while removing them from severity counts
+  and score caps.
+- Reduced false-positive P0 secret noise by separating high-confidence
+  credential shapes from lower-confidence secret-like assignments, with line
+  numbers, match type, confidence, and redacted context in evidence.
+- Made `score` useful without coverage by returning a low-confidence
+  scan-derived estimate, explicit `manual_evidence_needed`, and score history
+  receipts in `.checkyourself-score-history.json`.
+- Made `coverage --emit` write `CHECKYOURSELF_COVERAGE.generated.json` by
+  default in text mode, while preserving JSON stdout for agent pipelines.
+- Added the `diagnostic` alias, a starter `scan --deep` validation pass, and a
+  composite GitHub Action for PR/CI usage.
+- Added a field postmortem from real CheckYourself usage and updated CLI/MCP
+  docs to match the shipped behavior.
+
 ## 1.6.1
 
 - Redacted credential-shaped package script values before scan JSON or Markdown
