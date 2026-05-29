@@ -49,10 +49,19 @@ REQUIRED = [
     "assets/checkyourself-user-workflow.png",
     "assets/checkyourself-user-workflow.svg",
     "checkyourself.manifest.json",
+    "docs/cli.md",
+    "docs/mcp.md",
+    "docs/agent-access-cli-plan.md",
     "tools/checkyourself.py",
     "CHANGELOG.md",
     "samples/dogfood-fixture-broken-app.md",
     "schemas/dashboard-data.schema.json",
+    "schemas/scan.schema.json",
+    "schemas/coverage.schema.json",
+    "schemas/score-result.schema.json",
+    "schemas/backlog.schema.json",
+    "schemas/next-batch.schema.json",
+    "schemas/capabilities.schema.json",
 ]
 
 PUBLIC_EXCLUDES = [

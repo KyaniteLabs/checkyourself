@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CheckYourself Score Result",
+  "type": "object",
+  "required": [
+    "tool",
+    "schema",
+    "generated_at",
+    "score",
+    "raw_score",
+    "confidence",
+    "counts",
+    "caps_applied",
+    "per_category",
+    "findings_scored",
+    "coverage_complete"
+  ],
+  "properties": {
+    "tool": { "type": "string" },
+    "schema": { "type": "string", "enum": ["checkyourself-score/1"] },
+    "generated_at": { "type": "string" },
+    "score": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "raw_score": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "confidence": { "type": "string", "enum": ["high", "medium", "low"] },
+    "counts": {
+      "type": "object",
+      "required": ["P0", "P1", "P2", "P3"],
+      "properties": {
+        "P0": { "type": "integer", "minimum": 0 },
+        "P1": { "type": "integer", "minimum": 0 },
+        "P2": { "type": "integer", "minimum": 0 },
+        "P3": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "caps_applied": { "type": "array", "items": { "type": "object" } },
+    "per_category": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "category",
+          "weight",
+          "coverage_status",
+          "evidence_reviewed",
+          "missing_evidence",
+          "penalties",
+          "awarded"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "category": { "type": "string" },
+          "weight": { "type": "integer" },
+          "coverage_status": { "type": "string" },
+          "evidence_reviewed": { "type": "array", "items": { "type": "string" } },
+          "missing_evidence": { "type": "array", "items": { "type": "string" } },
+          "penalties": { "type": "array", "items": { "type": "object" } },
+          "awarded": { "type": "number", "minimum": 0 }
+        }
+      }
+    },
+    "findings_scored": { "type": "array", "items": { "type": "string" } },
+    "coverage_complete": { "type": "boolean" }
+  }
+}

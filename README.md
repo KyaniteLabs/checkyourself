@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Model-agnostic](https://img.shields.io/badge/AI-model--agnostic-blue.svg)](#works-with-your-ai-tool)
 [![Read-only first](https://img.shields.io/badge/safety-read--only%20first-brightgreen.svg)](#safety-model)
-[![Local CLI](https://img.shields.io/badge/CLI-optional%20local%20scan-black.svg)](#optional-local-cli)
+[![Local CLI](https://img.shields.io/badge/CLI-local%20agent%20engine-black.svg)](#local-cli-and-mcp)
 
 CheckYourself is a free, open-source audit system that turns your AI assistant into a pre-launch production reviewer.
 
@@ -115,24 +115,28 @@ CheckYourself is plain Markdown plus a small optional Python CLI, so it works wi
 
 Tool-specific setup guides live in [`06_ADAPTERS/`](06_ADAPTERS/README.md).
 
-## Optional Local CLI
+## Local CLI And MCP
 
-The folder workflow is the main product. The CLI is a zero-token head start:
+The folder workflow is the main product. The CLI is the deterministic engine for agents, CI, and local receipts:
 
 ```bash
 python3 tools/checkyourself.py /path/to/your/project
 ```
 
-It detects stack signals, flags obvious deterministic risks, writes a prefilled context file, and can emit JSON for agents or CI:
+It detects stack signals, flags obvious deterministic risks, writes a prefilled context file, emits schemas, checks coverage, computes the score, ranks the backlog, and exposes a thin MCP wrapper:
 
 ```bash
+python3 tools/checkyourself.py describe --format json
 python3 tools/checkyourself.py . --format json --no-write
+python3 tools/checkyourself.py coverage --emit --format json
+python3 tools/checkyourself.py score --findings CHECKYOURSELF_SCAN.generated.json --format json
 python3 tools/checkyourself.py . --ci
+python3 tools/checkyourself.py mcp
 ```
 
-The CLI does not replace the full diagnostic. It handles cheap discovery so your AI can spend its attention on judgment.
+The CLI does not replace the full diagnostic. It handles deterministic work so your AI can spend its attention on judgment.
 
-Read [`docs/cli.md`](docs/cli.md) for options. The agent-access roadmap is CLI-first, MCP later as a thin wrapper, and no hosted API unless CheckYourself becomes a service product. See [`docs/agent-access-cli-plan.md`](docs/agent-access-cli-plan.md).
+Read [`docs/cli.md`](docs/cli.md) for the command reference and [`docs/mcp.md`](docs/mcp.md) for MCP setup. There is no hosted API unless CheckYourself becomes a service product with accounts, shared history, hosted runs, or billing.
 
 ## Personality
 

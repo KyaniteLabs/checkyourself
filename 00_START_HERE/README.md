@@ -4,7 +4,7 @@ CheckYourself has these user-facing layers:
 
 1. **Folder diagnostic** - best default, using this folder as your AI's operating context.
 2. **Chat bootstrap** - operating instructions in `PASTE_THIS_INTO_YOUR_AI.md` for chat-only tools and non-repo workflows.
-3. **Optional local scanner** - `tools/checkyourself.py` detects your stack and obvious issues with zero tokens.
+3. **Local CLI** - `tools/checkyourself.py` detects your stack, emits schemas, scores evidence, ranks the backlog, and exposes MCP.
 4. **Optional dashboard** - a human-readable HTML/CSS view generated only when requested.
 5. **Advanced capability stack** - deeper production-hardening workflows in `90_ADVANCED/`.
 

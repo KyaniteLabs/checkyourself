@@ -62,6 +62,26 @@ Default to progressive context loading:
 5. Keep the findings register complete but compact. Expand details for P0/P1 findings and the next approval batch.
 6. Generate the HTML dashboard only when the user explicitly asks for it.
 
+## Machine interface
+
+To discover and drive CheckYourself programmatically, run:
+
+```bash
+python3 tools/checkyourself.py describe --format json
+```
+
+Use the CLI for deterministic receipts:
+
+- `scan` for local stack/risk discovery;
+- `coverage --emit` and `coverage --check` for the 20-surface evidence matrix;
+- `score` for reproducible Production Reality Score math;
+- `backlog` and `next` for approval-batch ordering;
+- `validate` and `schema` for output contracts;
+- `mcp` when the host supports local stdio MCP tools.
+
+The MCP server is a thin wrapper over the same CLI functions. Do not invent a
+separate scoring or backlog path in the agent.
+
 ## Required output for a diagnostic
 
 Use the Production Reality Report format in `05_OUTPUT_TEMPLATES/production-reality-report.md`.

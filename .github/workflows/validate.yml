@@ -28,13 +28,41 @@ jobs:
           git diff --check "$EMPTY_TREE"..HEAD
 
       - name: Compile Python tools
-        run: python -m py_compile tools/validate_public.py tools/checkyourself.py
+        run: python -m py_compile tools/validate_public.py tools/checkyourself.py tests/test_checkyourself_cli.py
 
       - name: Run unit tests
         run: python -m unittest discover -s tests
 
-      - name: Smoke-test the scan CLI
-        run: python tools/checkyourself.py . --no-write --quiet
+      - name: Smoke-test agent CLI contracts
+        run: |
+          python tools/checkyourself.py describe --format json > /tmp/checkyourself-capabilities.json
+          python tools/checkyourself.py validate --kind capabilities /tmp/checkyourself-capabilities.json
+          python tools/checkyourself.py scan . --format json --no-write > /tmp/checkyourself-scan.json
+          python tools/checkyourself.py validate --kind scan /tmp/checkyourself-scan.json
+          python tools/checkyourself.py score --findings /tmp/checkyourself-scan.json --format json > /tmp/checkyourself-score.json
+          python tools/checkyourself.py validate --kind score /tmp/checkyourself-score.json
+          python tools/checkyourself.py backlog --findings /tmp/checkyourself-scan.json --format json > /tmp/checkyourself-backlog.json
+          python tools/checkyourself.py validate --kind backlog /tmp/checkyourself-backlog.json
+          python tools/checkyourself.py next --findings /tmp/checkyourself-scan.json --format json > /tmp/checkyourself-next.json
+          python tools/checkyourself.py validate --kind next /tmp/checkyourself-next.json
+          python tools/checkyourself.py coverage --emit --format json > /tmp/checkyourself-coverage.json
+          python tools/checkyourself.py validate --kind coverage /tmp/checkyourself-coverage.json
+
+      - name: Smoke-test MCP wrapper
+        run: |
+          {
+            printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}'
+            printf '%s\n' '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+            printf '%s\n' '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
+            printf '%s\n' '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"describe","arguments":{}}}'
+          } | python tools/checkyourself.py mcp > /tmp/checkyourself-mcp.out
+          python - <<'PY'
+          import json
+          lines = [json.loads(line) for line in open("/tmp/checkyourself-mcp.out", encoding="utf-8")]
+          assert [line["id"] for line in lines] == [1, 2, 3]
+          assert any(tool["name"] == "score" for tool in lines[1]["result"]["tools"])
+          assert lines[2]["result"]["structuredContent"]["schema"] == "checkyourself-capabilities/1"
+          PY
 
       - name: Install gitleaks
         env:
