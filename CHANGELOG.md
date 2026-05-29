@@ -8,7 +8,8 @@
   `--json -`, and `--json --no-write`.
 - Added a small stdlib unit test suite for the CLI and wired it into GitHub
   Actions.
-- Updated the validation workflow to current GitHub action majors.
+- Updated the validation workflow to current GitHub action majors and made the
+  remote gitleaks scan install/run deterministically.
 - Added the agent-access CLI plan and decision record: CLI first, MCP later as
   a thin wrapper, no hosted API for the current open-source product.
 - Corrected the future scoring plan to be evidence-first instead of
