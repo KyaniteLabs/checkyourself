@@ -59,10 +59,65 @@
   ],
   "next_approval": "Approve creating and pushing the public KyaniteLabs/checkyourself remote when ready.",
   "learning_priorities": [
-    {"concept": "Generated artifact boundaries", "why": "Maintainer tools need safe defaults so launch prep does not pollute public commits."},
-    {"concept": "Metadata as agent instructions", "why": "Agents treat manifests and context files as routing truth."},
-    {"concept": "CI parity", "why": "Checks used to call a repo ready should be represented in CI or documented as manual gates."},
-    {"concept": "Public launch proof", "why": "Local green status is not the same as GitHub Actions passing after push."},
-    {"concept": "Agent eval fixtures", "why": "Prompt systems need small known-bad inputs to catch shallow diagnostic behavior."}
+    {
+      "concept": "Keep generated files out of the public repo",
+      "plain_english": "Some tools make temporary files while they work. Those files can be useful for you, but confusing or risky for everyone else if they get published by accident.",
+      "why": "Maintainer tools need safe defaults so launch prep does not pollute public commits.",
+      "triggered_by": ["CY-P2-001"],
+      "do_this_next": "Run each Creator Kit script once. After each run, check whether it created a new file. If the file is only for local use, ignore it or write it into an output folder.",
+      "success_signal": "`git status --short` shows only intentional source changes.",
+      "resource_title": "GitHub Docs: Ignoring files",
+      "resource_url": "https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files"
+    },
+    {
+      "concept": "Make one place the source of truth",
+      "plain_english": "If the README says one thing, the manifest says another, and the dashboard guide says a third thing, an AI assistant may follow the wrong instruction.",
+      "why": "Agents treat manifests and context files as routing truth.",
+      "triggered_by": ["CY-P2-002"],
+      "do_this_next": "Compare README, CONTEXT.md, dashboard docs, and checkyourself.manifest.json for contradictions about where agents should start and which dashboard path is default.",
+      "success_signal": "A new agent can answer which file to use without choosing between conflicting instructions.",
+      "resource_title": "Diataxis: Start here",
+      "resource_url": "https://diataxis.fr/start-here/"
+    },
+    {
+      "concept": "Make CI prove the same things you prove locally",
+      "plain_english": "CI is the robot checklist that runs when you push changes. It should cover the checks you trust before calling a repo ready.",
+      "why": "Checks used to call a repo ready should be represented in CI or documented as manual gates.",
+      "triggered_by": ["CY-P2-003"],
+      "do_this_next": "List every command you trust before launch. Put safe repeatable checks in .github/workflows/validate.yml and keep local-only checks in the launch checklist.",
+      "success_signal": "A broken JSON file, Python syntax error, or accidental generated file fails before release.",
+      "resource_title": "GitHub Docs: Quickstart for GitHub Actions",
+      "resource_url": "https://docs.github.com/en/actions/get-started/quickstart"
+    },
+    {
+      "concept": "Separate works-here from published-and-proven",
+      "plain_english": "A clean local repo is a good sign. It is not the same as a public repo with passing Actions, readable README, visible images, and release notes.",
+      "why": "Local green status is not the same as GitHub Actions passing after push.",
+      "triggered_by": ["CY-P2-004"],
+      "do_this_next": "After publishing, open the repo like a visitor. Confirm README rendering, image rendering, Actions, and release notes.",
+      "success_signal": "A stranger can use the public GitHub page without private context from this workspace.",
+      "resource_title": "GitHub Docs: Managing releases in a repository",
+      "resource_url": "https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository"
+    },
+    {
+      "concept": "Test the AI with one known-bad example",
+      "plain_english": "If CheckYourself is supposed to catch risky app patterns, it needs at least one fake risky app to practice on.",
+      "why": "Prompt systems need small known-bad inputs to catch shallow diagnostic behavior.",
+      "triggered_by": ["CY-P3-004"],
+      "do_this_next": "Give samples/dogfood-fixture-broken-app.md to one AI tool with the CheckYourself prompt. Check whether the answer includes all 20 coverage rows, a complete backlog, approval gates, and a learning plan.",
+      "success_signal": "The AI does not stop at top three issues and does not start fixing before approval.",
+      "resource_title": "OpenAI Cookbook: Getting started with OpenAI Evals",
+      "resource_url": "https://cookbook.openai.com/examples/evaluation/getting_started_with_openai_evals"
+    },
+    {
+      "concept": "Check visual outputs like a user",
+      "plain_english": "An HTML dashboard can be valid code and still be hard to read. Open it and confirm a normal person can understand it.",
+      "why": "The dashboard is part of the product experience, not just a generated file.",
+      "triggered_by": ["CY-P3-005"],
+      "do_this_next": "Open the generated dashboard, compare it to the Markdown report, and save a screenshot when it is part of launch proof.",
+      "success_signal": "The screenshot shows the score, finding counts, backlog, and learning section without broken layout.",
+      "resource_title": "Chrome for Developers: Lighthouse overview",
+      "resource_url": "https://developer.chrome.com/docs/lighthouse"
+    }
   ]
 }

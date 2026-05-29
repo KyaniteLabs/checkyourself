@@ -17,13 +17,32 @@ Evidence for this inference:
 
 ## Top 5 concepts to learn next
 
-| Priority | Concept | Triggering finding | Why it matters for this app | Level | Learn now or later |
-|---:|---|---|---|---|---|
-| 1 |  |  |  |  |  |
-| 2 |  |  |  |  |  |
-| 3 |  |  |  |  |  |
-| 4 |  |  |  |  |  |
-| 5 |  |  |  |  |  |
+Each priority should be plain enough for a non-developer to act on. Include:
+
+- the concept in everyday language;
+- the finding or fix that triggered it;
+- why it matters in real life;
+- exactly what to do next inside this project;
+- a success signal;
+- one live source or video link that teaches that specific issue.
+
+### Priority 1
+
+**Concept:**
+
+**Plain-English meaning:**
+
+**Triggered by:**
+
+**Why it matters for this project:**
+
+**Do this next:**
+
+**Success signal:**
+
+**Learn from:** [Title](https://example.com)
+
+Repeat this format for the remaining top priorities.
 
 ## 7-day practical plan
 
@@ -64,8 +83,8 @@ Evidence for this inference:
 
 ## Tiny exercises inside this project
 
-| Exercise | Related finding | Success signal |
-|---|---|---|
+| Exercise | Related finding | Success signal | Helpful source |
+|---|---|---|---|
 
 ## Glossary
 
