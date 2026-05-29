@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.5.2
+
+- Reworked the README with a tighter product story, less process leak, and a
+  clearer "check yourself before you wreck yourself" voice.
+- Rebuilt the workflow diagram with sharper stage labels and Kyanite-style dark
+  signal visuals.
+- Replaced the dogfood dashboard preview with a fresh cache-busting screenshot
+  filename.
+- Updated user-facing docs to match the latest CLI, dashboard, language,
+  accessibility, and product-personality behavior.
+
 ## 1.5.1
 
 - Added the real dogfood dashboard screenshot to the README and refreshed the

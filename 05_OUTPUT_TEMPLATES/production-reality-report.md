@@ -165,7 +165,7 @@ I can also generate a visual CheckYourself HTML/CSS dashboard from this report. 
 
 Dashboard generated? Yes / No
 
-Default: No. Offer the dashboard only after the report is complete. Generate it only when the user explicitly asks, with wording such as `dashboard yes`, `dashboard inline`, `DASHBOARD=inline`, or `DASHBOARD=html`.
+Default: No. Offer the dashboard only after the report is complete. Generate it only when the user explicitly asks, with wording such as `dashboard yes` or `dashboard inline`.
 
 If generated, use `10_DASHBOARD/CONTEXT.md` and include the complete remediation backlog. Do not re-run the audit just to build the dashboard.
 

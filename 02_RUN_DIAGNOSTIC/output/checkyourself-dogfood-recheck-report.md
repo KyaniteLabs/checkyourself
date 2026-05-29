@@ -24,7 +24,7 @@ remote GitHub Actions validation run passed.
 
 - Generated scanner output is ignored.
 - Dashboard manifest metadata now points to one HTML/CSS dashboard and one inline Markdown fallback.
-- GitHub Actions has a broader local quality gate.
+- GitHub Actions has a broader quality gate: public validation, whitespace, Python compile, unit tests, CLI smoke, and installed gitleaks.
 - Duplicate token-efficiency docs are removed.
 - Private v1.3 release note is marked historical.
 - Scanner generated header no longer references the old path.
@@ -36,4 +36,4 @@ remote GitHub Actions validation run passed.
 
 - Public repo: https://github.com/KyaniteLabs/checkyourself
 - Remote: `origin` -> `https://github.com/KyaniteLabs/checkyourself.git`
-- GitHub Actions: `Validate CheckYourself` run `26625079272` completed with success.
+- GitHub Actions: `Validate CheckYourself` run `26628784699` completed with success.

@@ -11,7 +11,7 @@ During the default diagnostic, produce:
 1. the Markdown Production Reality Report;
 2. the complete remediation backlog;
 3. the learning-plan seeds;
-4. a short offer: “I can also generate the optional HTML dashboard or a compact inline dashboard.”
+4. a short offer: "I can also generate the optional HTML dashboard or a compact inline dashboard."
 
 ## When the user asks for the dashboard
 
@@ -57,6 +57,7 @@ The dashboard must visualize:
   language or confirms an inferred candidate second language.
 - neurodivergence-accessible structure: short sections, predictable labels,
   high contrast, no flashing, and no information conveyed by color alone.
+- a little product attitude when useful: clear risk calls, no shame, no roast.
 
 The dashboard must not replace the full report. It is a visual companion.
 

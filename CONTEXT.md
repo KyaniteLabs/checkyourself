@@ -1,6 +1,7 @@
 # CheckYourself Context Router
 
-This file is the ICM-style entrypoint for agents using CheckYourself.
+This file is the file-first entrypoint for agents using CheckYourself. It keeps
+the repo ICM-compatible without making users read methodology notes first.
 
 CheckYourself is a public, folder-based diagnostic system. It uses staged
 Markdown context instead of a runtime framework. Load only the stage needed for

@@ -1,6 +1,8 @@
 # Optional Visual Dashboard
 
-The dashboard is an optional view of the CheckYourself report.
+The dashboard is an optional visual view of the CheckYourself report. It should
+feel like a launch instrument panel: opinionated, high-contrast, calm, and a
+little bit pointed.
 
 There is one rich visual dashboard path:
 
@@ -29,6 +31,10 @@ literal labels, high contrast, short paragraphs, stable tables, and no
 motion-dependent meaning. Detect the primary language and candidate second
 language at runtime. Include a second language only when the user explicitly
 requests it or confirms the inferred candidate.
+
+Voice guidance: useful side-eye is welcome; mean-spirited roasting is not. The
+dashboard can say "not ready yet" clearly, but it must also show the next safest
+move.
 
 ## Important
 

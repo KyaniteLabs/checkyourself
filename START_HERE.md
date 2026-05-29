@@ -1,12 +1,12 @@
 # Start Here
 
-You are about to use CheckYourself to diagnose an app before shipping it.
+You are about to use CheckYourself to reality-check an app before shipping it.
 
-The goal is not to shame the project. The goal is to make the invisible parts visible, then fix them safely with your approval.
+The goal is not to shame the project. The goal is to make the invisible parts visible, then fix them safely with your approval. Expect useful side-eye, not cruelty.
 
-## Choose your path
+## Choose Your Path
 
-### Path 1 — Coding tools that read files (best default)
+### Path 1 - Coding tools that read files
 
 Use this in Cursor, Windsurf, Claude Code, Codex, Replit, or any assistant that can read files.
 
@@ -16,7 +16,7 @@ Use this in Cursor, Windsurf, Claude Code, Codex, Replit, or any assistant that 
 4. Approve fixes one at a time or in safe batches.
 5. Recheck until every finding is resolved, deferred, accepted, blocked, or proven not applicable.
 
-### Path 2 — Chat-only tools (ChatGPT, Claude, Gemini)
+### Path 2 - Chat-only tools
 
 Use this when your assistant cannot read a project folder.
 
@@ -24,7 +24,7 @@ Use this when your assistant cannot read a project folder.
 2. Give those operating instructions to your AI along with your app files, repo, screenshots, exported code, or a written description.
 3. Ask for the diagnostic first.
 
-### Path 3 — Optional local scan (no tokens)
+### Path 3 - Optional local scan
 
 Run the bundled scanner to detect your stack and obvious issues, then hand the generated context to your AI:
 
@@ -32,9 +32,9 @@ Run the bundled scanner to detect your stack and obvious issues, then hand the g
 python3 tools/checkyourself.py /path/to/your/project
 ```
 
-It writes `CHECKYOURSELF_PROJECT_CONTEXT.generated.md` so your assistant spends tokens on judgment, not discovery. The CLI is optional — every path above works without it.
+It writes `CHECKYOURSELF_PROJECT_CONTEXT.generated.md` so your assistant spends tokens on judgment, not discovery. Use `--format json --no-write` when an agent or CI needs machine-readable output. The CLI is optional; every path above works without it.
 
-### Keep context lean
+### Keep Context Lean
 
 Whichever path you use, tell the AI:
 
@@ -42,9 +42,9 @@ Whichever path you use, tell the AI:
 Use only the minimum CheckYourself context needed for the current step. Load advanced references only when a specific finding requires them.
 ```
 
-## Optional visual dashboard
+## Optional Dashboard
 
-The default report is Markdown to save tokens.
+The default report is Markdown because it is cheaper, easier to diff, and easier for agents to update.
 
 After the report exists, say:
 
@@ -52,7 +52,7 @@ After the report exists, say:
 dashboard yes
 ```
 
-The AI should create a self-contained HTML/CSS dashboard from the existing report. This is optional because some users prefer to save tokens.
+The AI should create a self-contained HTML/CSS dashboard from the existing report. It should not re-run the audit just to make the dashboard.
 
 If you want the lowest-token version, say:
 
@@ -62,23 +62,23 @@ dashboard inline
 
 The AI should return a compact Markdown dashboard instead of an HTML file.
 
-## What you should get back
+## What You Should Get Back
 
 A useful diagnostic includes:
 
 - a project map;
 - an inferred stack;
 - unknowns and assumptions;
-- a Production Reality Score;
+- a Production Reality Score with evidence and caps;
 - a coverage sweep across all production surfaces;
 - P0/P1/P2/P3 risks;
 - a complete ranked findings register;
 - a complete remediation backlog;
-- the safest first approval batch;
+- the safest first approval batch, not the whole fix scope;
 - a path for continuing until every issue is resolved;
 - a learning plan based on the findings and remediations.
 
-## The most important rule
+## The Most Important Rule
 
 Start read-only.
 

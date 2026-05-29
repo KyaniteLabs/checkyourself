@@ -1,18 +1,19 @@
-# 02 — Run Diagnostic
+# 02 - Run Diagnostic
 
-The diagnostic is read-only. Its job is to create a Production Reality Report.
+The diagnostic is read-only. Its job is to create a Production Reality Report:
+the honest pre-launch reality check before production does the grading.
 
 ## Diagnostic phases
 
-1. **Map the app** — purpose, users, data, stack, deployment path.
-2. **Map risk surfaces** — auth, data, API, frontend, deployment, observability, performance, AI.
-3. **Collect evidence** — files, configs, tests, docs, observed patterns.
-4. **Rank findings** — P0/P1/P2/P3.
-5. **Score readiness** — evidence-based, with caps for severe unresolved risks.
-6. **Create the complete findings register** — no artificial cap on findings; include every supported issue.
-7. **Create the complete remediation backlog** — every finding gets a proposed fix, verification method, rollback note, and status.
-8. **Select the safest first approval batch** — a small starting batch, never the full scope.
-9. **Generate learning-plan seeds** — concepts implied by the findings and fixes.
+1. **Map the app** - purpose, users, data, stack, deployment path.
+2. **Map risk surfaces** - auth, data, API, frontend, deployment, observability, performance, AI.
+3. **Collect evidence** - files, configs, tests, docs, observed patterns.
+4. **Rank findings** - P0/P1/P2/P3.
+5. **Score readiness** - evidence-based, with caps for severe unresolved risks.
+6. **Create the complete findings register** - no artificial cap on findings; include every supported issue.
+7. **Create the complete remediation backlog** - every finding gets a proposed fix, verification method, rollback note, and status.
+8. **Select the safest first approval batch** - a small starting batch, never the full scope.
+9. **Generate learning-plan seeds** - concepts implied by the findings and fixes.
 
 
 ## Completeness rule
@@ -75,14 +76,10 @@ Token-efficient default:
 
 Do not produce a dashboard by default.
 
-If the user requests one, use `../05_OUTPUT_TEMPLATES/dashboard-output.md`.
+If the user requests one, use the canonical dashboard guidance in
+[`../10_DASHBOARD/README.md`](../10_DASHBOARD/README.md).
 
 The dashboard must be derived from the complete report and backlog. It should not replace them.
-
-
-## Optional dashboard output
-
-The dashboard is a visual companion to the report. Do not generate it automatically. Offer it after the report, then use `../05_OUTPUT_TEMPLATES/dashboard-prompt.md` only if the user asks.
 
 The dashboard must visualize the complete backlog, not only the first approval batch.
 
