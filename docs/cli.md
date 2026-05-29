@@ -81,6 +81,10 @@ risk-surface path hints, and obvious deterministic risks:
 - missing CI;
 - payments dependencies without tests.
 
+Package scripts are redacted before they appear in JSON or Markdown output. If a
+script contains a credential-shaped value, the value is replaced with
+`[REDACTED]`.
+
 The scan is not a clean bill of health. It is cheap evidence for the full
 CheckYourself diagnostic.
 

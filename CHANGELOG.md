@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.6.1
+
+- Redacted credential-shaped package script values before scan JSON or Markdown
+  output, addressing the open PR review comment on script leakage.
+- Added security and support docs plus a redacted bug-report issue template.
+- Refreshed dogfood evidence to a 100/100 coverage-backed score for the current
+  CLI/MCP public repo state.
+
 ## 1.6.0
 
 - Promoted the CLI from scan-only helper to deterministic agent interface with
@@ -41,8 +49,8 @@
   Actions.
 - Updated the validation workflow to current GitHub action majors and made the
   remote gitleaks scan install/run deterministically.
-- Added the agent-access CLI plan and decision record: CLI first, MCP later as
-  a thin wrapper, no hosted API for the current open-source product.
+- Added the original agent-access CLI plan and decision record for the
+  open-source product.
 - Corrected the future scoring plan to be evidence-first instead of
   ready-until-proven-otherwise.
 

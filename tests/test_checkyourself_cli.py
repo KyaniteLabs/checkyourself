@@ -150,6 +150,32 @@ class CheckYourselfCliTests(unittest.TestCase):
         self.assertEqual(data["counts"]["P0"], 1)
         self.assertIn("value omitted", data["findings"][0]["evidence"][0])
 
+    def test_package_scripts_are_redacted_from_json_and_markdown(self) -> None:
+        token = "sk-" + ("y" * 32)
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "package.json").write_text(
+                json.dumps({
+                    "scripts": {
+                        "deploy": f"API_KEY={token} node deploy.js",
+                        "safe": "node safe.js",
+                    }
+                }),
+                encoding="utf-8",
+            )
+            json_result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+            self.assertEqual(json_result.returncode, 0, json_result.stderr)
+            self.assertNotIn(token, json_result.stdout)
+            data = json.loads(json_result.stdout)
+            self.assertIn("[REDACTED]", data["scripts"]["deploy"])
+
+            markdown_path = project / "context.md"
+            md_result = self.run_cli("scan", str(project), "--out", str(markdown_path), "--quiet")
+            self.assertEqual(md_result.returncode, 0, md_result.stderr)
+            markdown = markdown_path.read_text(encoding="utf-8")
+            self.assertNotIn(token, markdown)
+            self.assertIn("[REDACTED]", markdown)
+
     def test_mcp_stdio_exposes_thin_tools(self) -> None:
         messages = "\n".join([
             json.dumps({

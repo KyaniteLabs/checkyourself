@@ -226,6 +226,15 @@ def read_text(path: Path, max_chars: int = 200_000) -> str:
         return ""
 
 
+def redact_sensitive_text(value: str) -> str:
+    """Redact credential-shaped substrings before they can reach generated output."""
+    redacted = value
+    redacted = SECRET_VALUE_RE.sub(lambda m: f"{m.group(1)}=[REDACTED]", redacted)
+    for pattern in SECRET_SHAPE_RES:
+        redacted = pattern.sub("[REDACTED]", redacted)
+    return redacted
+
+
 def iter_files(root: Path, limit: int = 6000) -> List[Path]:
     files: List[Path] = []
     for dirpath, dirnames, filenames in os.walk(root):
@@ -260,7 +269,10 @@ def detect_stack(root: Path) -> Tuple[List[str], Dict[str, str], Dict[str, List[
         try:
             data = json.loads(read_text(package_json))
             if isinstance(data.get("scripts"), dict):
-                scripts = {str(k): str(v) for k, v in sorted(data["scripts"].items())}
+                scripts = {
+                    str(k): redact_sensitive_text(str(v))
+                    for k, v in sorted(data["scripts"].items())
+                }
             deps: Dict[str, str] = {}
             for section in ("dependencies", "devDependencies", "peerDependencies"):
                 if isinstance(data.get(section), dict):

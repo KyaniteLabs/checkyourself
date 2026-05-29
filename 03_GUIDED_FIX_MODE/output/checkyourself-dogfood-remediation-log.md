@@ -1,41 +1,36 @@
 # CheckYourself Dogfood Remediation Log
 
-Generated: 2026-05-29 00:49 PDT
+Generated: 2026-05-29 03:04 PDT
 
 ## Summary
 
-The dogfood audit found no P0 or P1 issues. All local P2/P3 findings were
-addressed, the public GitHub repository was created, `main` was pushed, and the
-remote GitHub Actions validation run passed.
+The final dogfood pass found one real code-review issue and one evidence gap.
+Both are resolved.
 
-## Completed fixes
+## Completed Fixes
 
 | ID | Severity | Status | Change |
 |---|---|---|---|
-| CY-P2-001 | P2 | Fixed | Added `CHECKYOURSELF_*.generated.md` to `.gitignore` so scanner output does not dirty the public repo. |
-| CY-P2-002 | P2 | Fixed | Aligned manifest dashboard metadata to one canonical HTML/CSS dashboard plus the inline Markdown fallback. |
-| CY-P2-003 | P2 | Fixed | Expanded GitHub Actions with whitespace, Python compile, unit tests, CLI smoke, and installed gitleaks checks. |
-| CY-P2-004 | P2 | Fixed | Created public repo `KyaniteLabs/checkyourself`, pushed `main`, and verified remote Actions run `26628784699` passed. |
-| CY-P3-001 | P3 | Fixed | Converted duplicate token-efficiency doc into a short pointer to the canonical context-control doc. |
-| CY-P3-002 | P3 | Fixed | Marked the private v1.3 Creator Kit release note as historical. |
-| CY-P3-003 | P3 | Fixed | Removed stale `scripts/checkyourself_scan.py` wording from scanner-generated text. |
-| CY-P3-004 | P3 | Fixed | Added a tiny intentionally-broken app fixture for dogfood/eval checks. |
-| CY-P3-005 | P3 | Fixed | Added dashboard smoke-check instructions. |
-| CY-P3-006 | P3 | Fixed | Reduced noisy manifest mode duplication. |
+| CY-REVIEW-001 | P1 | Fixed | Redacted credential-shaped package script values before scan JSON or Markdown output. |
+| CY-OPS-001 | P3 | Fixed | Added `SECURITY.md`, `SUPPORT.md`, and a redacted GitHub bug-report issue template. |
+| CY-EVIDENCE-001 | P3 | Fixed | Added coverage-backed dogfood evidence and rescored the public repo to 100/100. |
+| CY-DOCS-001 | P3 | Fixed | Updated README, CLI docs, manifest, changelog, and dogfood output to match v1.6.1 reality. |
 
-## Public launch proof
+## Public Launch Proof
 
 | Item | Evidence |
 |---|---|
 | Public repository | https://github.com/KyaniteLabs/checkyourself |
 | Remote | `origin` tracks `https://github.com/KyaniteLabs/checkyourself.git` |
-| GitHub Actions | `Validate CheckYourself` run `26628784699` completed with success |
+| Prior remote CI proof | `Validate CheckYourself` run `26630676966` completed with success |
+| Local final verification | Public validation, 10 unit tests, CLI contracts, MCP smoke, and gitleaks passed |
 
-## Verification used
+## Review Comment Addressed
 
-- Backlog assertion script: `DOGFOOD_BACKLOG_CHECK_OK`
-- Public validator: `OK: public CheckYourself validation passed`
-- CLI unit tests: `Ran 3 tests ... OK`
-- Product folder validator: `OK: product folder validated`
-- Release workspace validator: `OK: release workspace validated`
-- Scanner output behavior: generated context file is ignored by git
+GitHub PR #3 had one review comment:
+
+> Redact package scripts before generating context.
+
+Resolution: `tools/checkyourself.py` now applies `redact_sensitive_text()` to
+package scripts before adding them to generated Markdown or JSON. A regression
+test confirms the original token does not appear in either output.
