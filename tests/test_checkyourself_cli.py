@@ -174,6 +174,33 @@ class CheckYourselfCliTests(unittest.TestCase):
             data["findings"],
         )
 
+    def test_env_example_variants_and_commented_placeholders_do_not_create_secret_noise(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / ".env.dogfood.example").write_text(
+                "\n".join([
+                    "# LLM_API_KEY=your_llm_api_key_here",
+                    "MINIMAX_API_KEY=replace_me_with_your_key",
+                    "",
+                ]),
+                encoding="utf-8",
+            )
+            result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertIn(".env.dogfood.example", data["env_files"])
+        self.assertEqual(data["counts"]["P0"], 0)
+        self.assertEqual(data["counts"]["P2"], 1)  # no CI only
+        self.assertFalse(
+            any("secret-like field" in finding["finding"].lower() for finding in data["findings"]),
+            data["findings"],
+        )
+        self.assertFalse(
+            any("local .env present" in finding["finding"].lower() for finding in data["findings"]),
+            data["findings"],
+        )
+
     def test_checkyourself_yml_can_suppress_reviewed_finding_without_counting_it(self) -> None:
         token = "sk-" + ("s" * 32)
         with tempfile.TemporaryDirectory() as tmp:
