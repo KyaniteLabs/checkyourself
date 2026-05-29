@@ -1,0 +1,51 @@
+name: Bug report
+description: Report a CheckYourself bug with redacted evidence.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for checking the checker. Please redact secrets and private data.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Which CheckYourself version or commit did you use?
+      placeholder: "v1.6.1 or commit SHA"
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      options:
+        - Docs
+        - CLI
+        - MCP
+        - Dashboard
+        - Learning plan
+        - Agent instructions
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Redact secrets and private data.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Smallest reproduction
+      description: Include commands or steps. Redact sensitive values.
+    validations:
+      required: false

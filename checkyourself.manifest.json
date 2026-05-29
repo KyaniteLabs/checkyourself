@@ -1,7 +1,7 @@
 {
   "name": "checkyourself",
   "display_name": "CheckYourself",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "license": "MIT",
   "copyright": "Copyright (c) 2026 Simon Gonzalez De Cruz",
   "description": "Pre-launch reality check, guided hardening, and learning-plan system for AI-built apps.",
@@ -34,6 +34,8 @@
     "human": "START_HERE.md",
     "bootstrap": "PASTE_THIS_INTO_YOUR_AI.md",
     "agent": "AGENTS.md",
+    "support": "SUPPORT.md",
+    "security": "SECURITY.md",
     "cli": "tools/checkyourself.py",
     "mcp": "docs/mcp.md",
     "capabilities": "schemas/capabilities.schema.json",

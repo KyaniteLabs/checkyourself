@@ -158,6 +158,12 @@ It inspects, explains, ranks, and recommends before touching code. Fixes require
 
 For regulated, financial, health, legal, life-safety, security-critical, or high-volume systems, CheckYourself should recommend qualified expert review. It is a strong pre-launch pass, not a substitute for professional accountability.
 
+## Support And Security
+
+Use [SUPPORT.md](SUPPORT.md) for bugs, docs gaps, CLI/MCP problems, accessibility issues, and stale examples.
+
+Use [SECURITY.md](SECURITY.md) for vulnerability handling. Do not post live secrets, customer data, proprietary code, or unredacted `.env` values in public issues.
+
 ## FAQ
 
 ### Is CheckYourself a prompt?
