@@ -21,3 +21,19 @@ jobs:
 
       - name: Validate public repository shape
         run: python tools/validate_public.py
+
+      - name: Check committed whitespace
+        run: |
+          EMPTY_TREE="$(git hash-object -t tree /dev/null)"
+          git diff --check "$EMPTY_TREE"..HEAD
+
+      - name: Compile Python validation tools
+        run: python -m py_compile tools/validate_public.py
+
+      - name: Run gitleaks if available
+        run: |
+          if command -v gitleaks >/dev/null 2>&1; then
+            gitleaks dir . --no-banner --redact --exit-code 1
+          else
+            echo "::notice::gitleaks is not installed on this runner; run it locally before release."
+          fi

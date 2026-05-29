@@ -1,7 +1,7 @@
 {
   "name": "checkyourself",
   "display_name": "CheckYourself",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "license": "MIT",
   "copyright": "Copyright (c) 2026 Simon Gonzalez De Cruz",
   "description": "AI production-readiness diagnostic, guided fix, and learning-plan system for apps built by learning-by-doing.",
@@ -12,12 +12,9 @@
     "guided_fix_mode",
     "bespoke_learning_plan",
     "advanced_capability_stack",
-    "optional_dashboard",
-    "token_efficient_context",
-    "optional_visual_dashboard",
-    "context_budget_guard",
-    "optional_human_dashboard",
     "token_efficient_context_loading",
+    "context_budget_guard",
+    "optional_dashboard",
     "complete_remediation_loop"
   ],
   "risk_levels": [
@@ -37,7 +34,7 @@
     "diagnostic": "02_RUN_DIAGNOSTIC/README.md",
     "guided_fix": "03_GUIDED_FIX_MODE/README.md",
     "learning_plan": "04_LEARNING_PLAN/README.md",
-    "dashboard": "05_OUTPUT_TEMPLATES/dashboard-prompt.md",
+    "dashboard": "10_DASHBOARD/dashboard-prompt.md",
     "token_efficiency": "docs/token-efficiency-and-context-control.md",
     "user_workflow_diagram": "assets/checkyourself-user-workflow.png"
   },
@@ -56,7 +53,8 @@
     "enabled": true,
     "default": false,
     "trigger": "dashboard yes",
-    "template": "05_OUTPUT_TEMPLATES/optional-human-dashboard.html",
+    "template": "10_DASHBOARD/dashboard-template.html",
+    "advanced_data_template": "05_OUTPUT_TEMPLATES/checkyourself-dashboard.html",
     "token_policy": "Generate only on request; compact summary only."
   },
   "context_control": {
