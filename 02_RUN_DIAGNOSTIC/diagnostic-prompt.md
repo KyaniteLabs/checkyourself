@@ -15,6 +15,7 @@ Requirements:
 - Apply the scoring method in 02_RUN_DIAGNOSTIC/scoring-method.md.
 - Explain each issue in plain English first.
 - Detect the user's primary language and any candidate second language from prompts, docs, UI strings, locale files, audience, and region hints. If the user did not explicitly request the second language, ask before making learning/dashboard outputs bilingual.
+- If the audit covers multiple public repositories or a GitHub namespace, name the exact owner namespace, repository count, verification timestamp, fork exclusion policy, and live evidence surfaces before any "all clean" or "100%" claim.
 - Keep explanations accessible for ADHD, autism, and dyslexia: short sections, concrete next actions, stable labels, and no dense walls of text.
 - Build a complete findings register and remediation backlog for every finding and blocking unknown.
 - Recommend a safest first approval batch from that backlog. Do not imply the first batch is the whole fix scope.
