@@ -1,21 +1,22 @@
 # 00 — Start Here
 
-CheckYourself has four user-facing layers:
+CheckYourself has these user-facing layers:
 
-1. **Lightweight prompt** — fastest, for beginners and non-repo workflows.
-2. **Folder diagnostic** — best default, using this folder as project context.
-3. **Optional dashboard** — a human-readable HTML/CSS view generated only when requested.
-4. **Advanced capability stack** — deeper production-hardening workflows in `90_ADVANCED/`.
+1. **Folder diagnostic** — best default, using this folder as your AI's operating context.
+2. **Chat bootstrap** — operating instructions in `PASTE_THIS_INTO_YOUR_AI.md` for chat-only tools and non-repo workflows.
+3. **Optional local scanner** — `tools/checkyourself.py` detects your stack and obvious issues with zero tokens.
+4. **Optional dashboard** — a human-readable HTML/CSS view generated only when requested.
+5. **Advanced capability stack** — deeper production-hardening workflows in `90_ADVANCED/`.
 
 Use the simplest layer that gets you a useful answer.
 
 ## Success criteria
 
-A stranger should be able to clone the repo, paste one prompt, and get value in under five minutes.
+A stranger should be able to clone the repo, point their AI assistant at it, and get value in under five minutes.
 
 ## Recommended first action
 
-Use [`../PASTE_THIS_INTO_YOUR_AI.md`](../PASTE_THIS_INTO_YOUR_AI.md).
+Point your AI assistant at [`../CONTEXT.md`](../CONTEXT.md). For chat-only tools, use the bootstrap in [`../PASTE_THIS_INTO_YOUR_AI.md`](../PASTE_THIS_INTO_YOUR_AI.md).
 
 ## Important
 
