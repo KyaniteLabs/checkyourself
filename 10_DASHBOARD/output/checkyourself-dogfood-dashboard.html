@@ -34,7 +34,7 @@
   .stack{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 0;padding:0;list-style:none}
   .badge,.status{display:inline-flex;align-items:center;gap:8px;min-height:32px;border:1px solid var(--line);border-radius:var(--radius);padding:5px 9px;background:#06131e;color:var(--text);font-size:.78rem}
   .score-panel{display:grid;align-content:space-between;gap:16px}.score{font-family:var(--mono-font);font-size:4.8rem;line-height:1;font-weight:800;color:var(--text)}.score small{color:var(--muted);font-size:1rem;font-weight:700}
-  .score-bar{height:14px;border:1px solid var(--line);border-radius:var(--radius);background:#030a12;overflow:hidden}.score-bar>div{height:100%;width:88%;background:linear-gradient(90deg,var(--red),var(--amber),var(--cyan),var(--green))}
+  .score-bar{height:14px;border:1px solid var(--line);border-radius:var(--radius);background:#030a12;overflow:hidden}.score-bar>div{height:100%;width:92%;background:linear-gradient(90deg,var(--red),var(--amber),var(--cyan),var(--green))}
   .risk-grid,.two-col,.three-col{display:grid;gap:12px}.risk-grid{grid-template-columns:repeat(5,1fr)}.two-col{grid-template-columns:repeat(2,minmax(0,1fr))}.three-col{grid-template-columns:repeat(3,minmax(0,1fr))}
   .metric{min-height:112px;border:1px solid var(--line);border-radius:var(--radius);padding:14px;background:#06131e}.metric strong{display:block;font-family:var(--mono-font);font-size:2.15rem;line-height:1}.metric-label{display:block;margin-top:10px;color:var(--muted);font-size:.76rem;text-transform:uppercase;letter-spacing:.08em}
   .p0{color:#ffd0d7;border-color:rgba(255,92,112,.48)}.p1{color:#ffe8a6;border-color:rgba(233,201,96,.54)}.p2{color:#c8f7ff;border-color:rgba(94,220,232,.48)}.p3{color:#d2ffe3;border-color:rgba(126,219,165,.45)}.unknown{color:#e7d3ff;border-color:rgba(232,86,130,.5)}.pass{color:#d2ffe3;border-color:rgba(126,219,165,.45)}.finding{color:#ffe8a6;border-color:rgba(233,201,96,.54)}.neutral{color:var(--text-2);border-color:var(--line)}
@@ -55,7 +55,7 @@
       <div>
         <p class="eyebrow">CheckYourself // Production Reality</p>
         <h1 id="dashboard-title">CheckYourself Dogfood Self-Audit</h1>
-        <p>CheckYourself audited itself as a public, file-first diagnostic system. Local P2/P3 findings have been remediated; the remaining launch gate is public GitHub remote and Actions proof.</p>
+        <p>CheckYourself audited itself as a public, file-first diagnostic system. Local P2/P3 findings are remediated, the public GitHub repo is live, and remote Actions proof passed.</p>
         <p class="language-note">Language mode: English first with Spanish support. Modo de idioma: inglés primero con apoyo en español.</p>
         <ul class="stack" aria-label="Detected stack">
           <li class="badge">Markdown-first workspace</li>
@@ -66,8 +66,8 @@
         </ul>
       </div>
       <div class="callout">
-        <p><strong>Ship status / Estado:</strong> Local package is ready for public push; external GitHub Actions proof is still pending.</p>
-        <p><strong>Next decision / Próxima decisión:</strong> Approve creating and pushing the public KyaniteLabs/checkyourself remote when ready.</p>
+        <p><strong>Ship status / Estado:</strong> Public repository is live and GitHub Actions passed.</p>
+        <p><strong>Next decision / Próxima decisión:</strong> Decide whether to tag a release or collect first user feedback.</p>
       </div>
     </section>
 
@@ -75,26 +75,26 @@
       <div>
         <p class="eyebrow">Score / Puntaje</p>
         <h2 id="score-title">Production Reality Score</h2>
-        <div class="score">88<small>/100</small></div>
-        <div class="score-bar" role="meter" aria-label="Score 88 out of 100" aria-valuemin="0" aria-valuemax="100" aria-valuenow="88"><div></div></div>
+        <div class="score">92<small>/100</small></div>
+        <div class="score-bar" role="meter" aria-label="Score 92 out of 100" aria-valuemin="0" aria-valuemax="100" aria-valuenow="92"><div></div></div>
       </div>
       <p><strong>Confidence / Confianza:</strong> medium-high</p>
-      <p>Score remains below 90 until the public GitHub remote and Actions run are proven.</p>
+      <p>No P0/P1/P2 launch blockers remain. The remaining score gap is first-user feedback and deeper cross-agent eval proof.</p>
     </aside>
   </header>
 
   <section class="risk-grid" aria-label="Risk counts / Conteo de riesgos">
     <div class="metric p0"><strong>0</strong><span class="metric-label">P0 Do-not-ship</span></div>
     <div class="metric p1"><strong>0</strong><span class="metric-label">P1 Serious</span></div>
-    <div class="metric p2"><strong>4</strong><span class="metric-label">P2 Hardening</span></div>
-    <div class="metric p3"><strong>6</strong><span class="metric-label">P3 Improve</span></div>
+    <div class="metric p2"><strong>0</strong><span class="metric-label">P2 Hardening</span></div>
+    <div class="metric p3"><strong>0</strong><span class="metric-label">P3 Improve</span></div>
     <div class="metric unknown"><strong>1</strong><span class="metric-label">Unknown</span></div>
   </section>
 
   <section class="two-col">
     <div class="panel">
       <h2>Do-not-ship / No lanzar todavía</h2>
-      <div class="callout"><p>No P0/P1 do-not-ship blockers remain locally. The only launch gate is external public proof after push.</p></div>
+      <div class="callout"><p>No P0/P1/P2 launch blockers remain after public repo and remote Actions proof.</p></div>
     </div>
     <div class="panel">
       <h2>Accessible Reading Mode / Modo accesible</h2>
@@ -125,8 +125,8 @@
           <tr><td>Security and threat model</td><td><span class="status pass">Pass</span></td><td>Secret scan passed and CI includes gitleaks when available.</td><td>CY-P2-003</td></tr>
           <tr><td>Privacy and data governance</td><td><span class="status pass">Pass</span></td><td>Public product collects no data and warns against secret/private output.</td><td></td></tr>
           <tr><td>Tests and quality gates</td><td><span class="status pass">Pass</span></td><td>Validator, release validators, syntax checks, link checks, schema checks, and dashboard smoke guidance exist.</td><td>CY-P2-003, CY-P3-004</td></tr>
-          <tr><td>CI/CD and supply chain</td><td><span class="status finding">Finding</span></td><td>Local workflow is stronger, but remote GitHub Actions is not proven until push.</td><td>CY-P2-004</td></tr>
-          <tr><td>Hosting, deployment, rollback</td><td><span class="status finding">Finding</span></td><td>No remote is configured yet; public release proof remains external.</td><td>CY-P2-004</td></tr>
+          <tr><td>CI/CD and supply chain</td><td><span class="status pass">Pass</span></td><td>Remote GitHub Actions passed on KyaniteLabs/checkyourself run 26625079272.</td><td>CY-P2-004</td></tr>
+          <tr><td>Hosting, deployment, rollback</td><td><span class="status pass">Pass</span></td><td>Public repository is live at https://github.com/KyaniteLabs/checkyourself.</td><td>CY-P2-004</td></tr>
           <tr><td>Cloud infrastructure/IaC</td><td><span class="status neutral">N/A</span></td><td>No cloud runtime or IaC.</td><td></td></tr>
           <tr><td>Performance, caching, rate limits</td><td><span class="status pass">Pass</span></td><td>Progressive context-loading and token-efficiency rules are documented.</td><td>CY-P3-001</td></tr>
           <tr><td>Scaling and resilience</td><td><span class="status neutral">N/A</span></td><td>No service workload; resilience is context-size control.</td><td></td></tr>
@@ -148,8 +148,8 @@
         <tbody>
           <tr><td>1</td><td>CY-P2-001</td><td><span class="status p2">P2</span></td><td>Scanner-generated context could dirty repo root.</td><td><span class="status pass">fixed</span></td><td>Keep ignore pattern covered by validator.</td></tr>
           <tr><td>2</td><td>CY-P2-002</td><td><span class="status p2">P2</span></td><td>Manifest dashboard paths drifted from docs.</td><td><span class="status pass">fixed</span></td><td>Keep manifest and dashboard docs validated together.</td></tr>
-          <tr><td>3</td><td>CY-P2-003</td><td><span class="status p2">P2</span></td><td>CI was narrower than dogfood verification.</td><td><span class="status pass">fixed</span></td><td>Confirm remote Actions after push.</td></tr>
-          <tr><td>4</td><td>CY-P2-004</td><td><span class="status p2">P2</span></td><td>Public GitHub launch is not proven.</td><td><span class="status finding">pending external launch</span></td><td>Create KyaniteLabs/checkyourself, push main, verify Actions.</td></tr>
+          <tr><td>3</td><td>CY-P2-003</td><td><span class="status p2">P2</span></td><td>CI was narrower than dogfood verification.</td><td><span class="status pass">fixed</span></td><td>Keep remote Actions green after changes.</td></tr>
+          <tr><td>4</td><td>CY-P2-004</td><td><span class="status p2">P2</span></td><td>Public GitHub launch was not proven.</td><td><span class="status pass">fixed</span></td><td>Optional: tag a release when launch copy is final.</td></tr>
           <tr><td>5</td><td>CY-P3-001</td><td><span class="status p3">P3</span></td><td>Duplicate token-efficiency docs.</td><td><span class="status pass">fixed</span></td><td>Keep the short doc as a pointer.</td></tr>
           <tr><td>6</td><td>CY-P3-002</td><td><span class="status p3">P3</span></td><td>Private v1.3 release note looked current.</td><td><span class="status pass">fixed</span></td><td>Use root changelog for current release truth.</td></tr>
           <tr><td>7</td><td>CY-P3-003</td><td><span class="status p3">P3</span></td><td>Scanner header referenced old path.</td><td><span class="status pass">fixed</span></td><td>Keep script output path-neutral.</td></tr>
@@ -170,7 +170,7 @@
     </div>
     <div class="panel">
       <h2>Current Approval Batch / Aprobación actual</h2>
-      <p>Approve creating and pushing the public KyaniteLabs/checkyourself remote when ready. This is the only remaining external launch gate.</p>
+      <p>Public repo and Actions proof are complete. Next decision: tag a release or collect first user feedback.</p>
     </div>
   </section>
 

@@ -1,7 +1,7 @@
 # Production Reality Report
 
 Project: CheckYourself dogfood self-audit
-Generated: 2026-05-28 23:14:44 PDT
+Generated: 2026-05-29 00:49 PDT
 Scope: Public CheckYourself repo plus private Creator Kit boundary and maintainer utilities.
 
 ## 1. Executive Summary
@@ -10,7 +10,7 @@ CheckYourself is in strong public-launch shape as a folder-based diagnostic syst
 
 The dogfood run found no P0 or P1 issues. The first remediation pass fixed the local launch-hygiene and self-validation gaps: scanner output is ignored, dashboard metadata is aligned, CI is broader, duplicate docs are removed, and real dashboard/output examples exist.
 
-Plain English: the local package is in strong shape. The remaining launch gate is external: create the public GitHub remote, push `main`, and confirm Actions pass after publication.
+Plain English: the public package is launch-ready. The public GitHub remote exists, `main` is pushed, and the remote Actions validation run passed.
 
 ## 2. What this app appears to do
 
@@ -23,30 +23,29 @@ CheckYourself is a model-agnostic production-readiness diagnostic, guided remedi
 | Product type | Markdown-first AI diagnostic context workspace | High |
 | Runtime app | None required for public product | High |
 | Validation | Standard-library Python validator plus GitHub Actions | High |
-| Dashboard | Static HTML/CSS default, optional advanced inline-JS data template | High |
+| Dashboard | Single static HTML/CSS dashboard plus inline Markdown fallback | High |
 | Schemas | JSON schemas and dashboard data examples | High |
 | Advanced guidance | Markdown capability pack under `90_ADVANCED/` | High |
 | Private maintainer kit | Ignored sidecar `checkyourself-creator-launch-kit copy/` | High |
-| Public host | Not configured yet; no remote in local git | High |
+| Public host | Public GitHub repo at `https://github.com/KyaniteLabs/checkyourself`; remote Actions passed | High |
 
 ## 4. Unknowns and assumptions
 
 | Unknown | Why it matters | Current treatment |
 |---|---|---|
-| Remote GitHub Actions result | Local validation is not the same as public CI proof | Launch gating unknown |
-| GitHub org/repo settings | Branch protection, Actions permissions, topics, description, and visibility are external | Launch task |
+| GitHub org/repo settings | Visibility, default branch, and description are verified; branch protection/topics/releases are optional next launch polish | Product operations gap |
 | Real beginner usability | Docs are clear, but no observed novice test session is present | Product research gap |
 | Cross-agent fidelity | A dogfood fixture now exists, but no multi-agent run has been captured yet | Product research gap |
 | Dashboard visual rendering | Browser smoke screenshot exists for the generated dogfood dashboard, but no automated visual regression suite exists | Low-risk UX gap |
 
 ## 5. Production Reality Score
 
-**Score:** 88 / 100
+**Score:** 92 / 100
 **Confidence:** Medium-high
 
 ### Score rationale
 
-The score improved after local remediation because the public package now has coherent docs, safety rules, staged contexts, a full coverage matrix, report templates, validation tooling, stronger CI coverage, real dashboard examples, and a cleaner public/private boundary. It remains below 90 because remote GitHub Actions has not been proven after push.
+The score improved after local remediation and public proof because the package now has coherent docs, safety rules, staged contexts, a full coverage matrix, report templates, validation tooling, stronger CI coverage, real dashboard examples, a cleaner public/private boundary, a public GitHub remote, and a passing remote Actions run. It stays below 100 because first-user feedback, release tagging, and deeper cross-agent eval proof are still future improvements.
 
 ### Score breakdown
 
@@ -58,13 +57,13 @@ The score improved after local remediation because the public package now has co
 | ICM-style context routing | 11 / 12 | Root and stage contexts are present and validated. |
 | Dashboard and output consistency | 9 / 9 | Dashboard docs, manifest metadata, real data JSON, and rendered examples are aligned. |
 | Public/private boundary | 12 / 12 | Private sidecar and generated scanner output are ignored. |
-| Validation, CI, and supply chain | 14 / 16 | Local validators pass and CI now includes additional quality gates. |
+| Validation, CI, and supply chain | 16 / 16 | Local validators pass and remote GitHub Actions passed after push. |
 | Creator Kit maintainability | 9 / 10 | Useful and private; stale scanner/release-note wording was cleaned. |
-| Launch/distribution proof | 6 / 12 | Local commit exists; no remote or public CI run yet. |
+| Launch/distribution proof | 10 / 12 | Public repo exists and Actions passed; release tagging and branch-protection polish can follow. |
 
 ### Score cap applied
 
-Missing external launch evidence keeps the score below 90. A score above 90 should wait until the public GitHub repo exists and Actions passes there.
+No P0/P1/P2 launch blocker remains after public repo creation and remote Actions proof. The remaining score gap is product research and optional release-operations polish.
 
 ## 6. Coverage Sweep
 
@@ -81,8 +80,8 @@ Missing external launch evidence keeps the score below 90. A score above 90 shou
 | 9 | Security and threat model | Pass | Local secret scan passed and CI includes a gitleaks-if-available step. |
 | 10 | Privacy and data governance | Pass | Public product collects no data; prompts warn against secret/private output. |
 | 11 | Tests and quality gates | Pass | Validators, syntax checks, link checks, schema checks, and dogfood backlog assertions pass locally. |
-| 12 | CI/CD and supply chain | Finding | Workflow is broader now, but no remote GitHub Actions run exists yet. |
-| 13 | Hosting, deployment, rollback | Finding | Local git commit exists; no GitHub remote or pushed release proof. |
+| 12 | CI/CD and supply chain | Pass | Remote GitHub Actions run `26625079272` passed after push. |
+| 13 | Hosting, deployment, rollback | Pass | Public GitHub repo is live at `https://github.com/KyaniteLabs/checkyourself`. |
 | 14 | Cloud infrastructure/IaC | Not applicable | No cloud runtime or IaC. |
 | 15 | Performance, caching, rate limits | Pass | Token-efficiency docs and progressive loading rules exist. |
 | 16 | Scaling and resilience | Not applicable | No service workload; resilience is mostly context-size control. |
@@ -106,7 +105,7 @@ None found.
 | CY-P2-001 | Private scanner writes an unignored generated file at repo root by default | A maintainer can accidentally create and commit generated local context during launch prep | `CHECKYOURSELF_*.generated.md` is now ignored; scanner output was tested as ignored | Fixed |
 | CY-P2-002 | Manifest dashboard paths conflict with canonical dashboard docs | Agents and maintainers may pick the wrong dashboard path when multiple dashboard templates exist | Manifest now points to one rich dashboard template plus one inline Markdown fallback | Fixed |
 | CY-P2-003 | GitHub Actions gate is narrower than the dogfood verification suite | Public regressions could pass CI even if local checks would catch them | Workflow now includes public validation, whitespace check, Python compile, and gitleaks-if-available | Fixed locally |
-| CY-P2-004 | Public remote launch is not proven | The repo is locally ready but not yet public-launch verified | `git remote -v` returned no remote; no Actions result exists yet | Pending external launch |
+| CY-P2-004 | Public remote launch was not proven | The repo was locally ready but not yet public-launch verified | Public repo `KyaniteLabs/checkyourself` exists and Actions run `26625079272` passed | Fixed |
 
 ## 10. P3 findings - improvements
 
@@ -161,7 +160,7 @@ None found.
 | 1 | CY-P2-001 | P2 | Add `CHECKYOURSELF_PROJECT_CONTEXT.generated.md` or `CHECKYOURSELF_*.generated.md` to `.gitignore`, or change scanner default output into a private/output folder. | Run scanner; confirm `git status --short` stays clean. | Revert `.gitignore` or scanner default. |
 | 2 | CY-P2-002 | P2 | Align manifest dashboard fields with the single canonical HTML/CSS dashboard and inline Markdown fallback. | Run `python3 tools/validate_public.py`; inspect manifest entrypoints. | Revert manifest changes. |
 | 3 | CY-P2-003 | P2 | Expand GitHub Actions to include `git diff --check`, py_compile, optional gitleaks if available, schema validation when `jsonschema` is installed, and maybe release-boundary checks. | Run CI locally or after push; confirm failure on known bad cases if practical. | Restore single validator workflow. |
-| 4 | CY-P2-004 | P2 | Create remote `KyaniteLabs/checkyourself`, push `main`, and verify Actions pass. | `git remote -v`, `git push -u origin main`, Actions green. | Remove remote or keep local-only. |
+| 4 | CY-P2-004 | P2 | Create remote `KyaniteLabs/checkyourself`, push `main`, and verify Actions pass. | `origin` tracks `https://github.com/KyaniteLabs/checkyourself.git`; Actions run `26625079272` passed. | Keep the public repo; revert only with an explicit unpublish decision. |
 | 5 | CY-P3-001 | P3 | Keep one token-efficiency doc as canonical and turn the other into a short pointer, or remove duplicate from manifest. | Duplicate-hash check shows no duplicate docs. | Restore duplicate file. |
 | 6 | CY-P3-002 | P3 | Rename or update private `v1.3` release notes to `v1.4` or mark it historical. | Search Creator Kit for stale version phrasing. | Revert private note. |
 | 7 | CY-P3-003 | P3 | Update scanner generated header to current script location or neutral wording. | Run scanner to temp path and inspect first lines. | Revert header text. |
@@ -217,7 +216,7 @@ This batch is small, reversible, and directly tied to dogfood findings.
 
 **Files likely touched:** `.github/workflows/validate.yml`.
 
-**Verification plan:** Run the commands locally and then confirm remote Actions after push.
+**Verification plan:** Run the commands locally and then confirm remote Actions after push. Completed: Actions run `26625079272` passed.
 
 **Rollback plan:** Restore the current single-command workflow.
 
@@ -228,7 +227,7 @@ This batch is small, reversible, and directly tied to dogfood findings.
 | Wave | Goal | Items |
 |---|---|---|
 | 1 | Safe launch hygiene | CY-P2-001, CY-P2-002, CY-P2-003 |
-| 2 | Public release proof | CY-P2-004 |
+| 2 | Public release proof | CY-P2-004 completed |
 | 3 | Maintainer clarity | CY-P3-001, CY-P3-002, CY-P3-003, CY-P3-006 |
 | 4 | Stronger product proof | CY-P3-004, CY-P3-005 |
 | 5 | Recheck and rescore | Re-run validators, gitleaks, link check, schema check, dashboard parse, and remote Actions. |
@@ -237,7 +236,7 @@ This batch is small, reversible, and directly tied to dogfood findings.
 
 | Item | Can wait? | Reason |
 |---|---|---|
-| Public GitHub push and Actions proof | No for launch, yes for local cleanup | This is the only remaining launch gate outside the local workspace. |
+| Release tag and branch-protection polish | Yes | Public repo and Actions proof are complete; tagging and branch rules can follow after first launch copy is final. |
 | Multi-agent eval run | Yes | The fixture exists; running several tools against it can happen after first public release. |
 | Automated visual regression | Yes | A smoke screenshot exists; heavier browser regression can wait unless the dashboard becomes a primary surface. |
 
@@ -253,14 +252,14 @@ This batch is small, reversible, and directly tied to dogfood findings.
 Recommended next approval:
 
 ```text
-approve public GitHub publish
+choose release tag or first-user feedback pass
 ```
 
 That would authorize:
 
-1. creating or using the public `KyaniteLabs/checkyourself` remote;
-2. pushing `main`;
-3. verifying GitHub Actions and README rendering after push.
+1. optionally creating a first public release tag;
+2. optionally adding repo topics/branch-protection polish;
+3. collecting first-user feedback on the README, dashboard, and learning plan.
 
 ## 18. Bespoke learning plan seeds
 
