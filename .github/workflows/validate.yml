@@ -12,10 +12,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: "3.x"
 
@@ -39,7 +41,11 @@ jobs:
           python tools/checkyourself.py validate --kind capabilities /tmp/checkyourself-capabilities.json
           python tools/checkyourself.py scan . --format json --no-write > /tmp/checkyourself-scan.json
           python tools/checkyourself.py validate --kind scan /tmp/checkyourself-scan.json
-          python tools/checkyourself.py score --findings /tmp/checkyourself-scan.json --format json > /tmp/checkyourself-score.json
+          python tools/checkyourself.py diagnostic . --format json --no-write > /tmp/checkyourself-diagnostic.json
+          python tools/checkyourself.py validate --kind scan /tmp/checkyourself-diagnostic.json
+          python tools/checkyourself.py scan . --deep --format json --no-write > /tmp/checkyourself-deep-scan.json
+          python tools/checkyourself.py validate --kind scan /tmp/checkyourself-deep-scan.json
+          python tools/checkyourself.py score --findings /tmp/checkyourself-scan.json --format json --no-history > /tmp/checkyourself-score.json
           python tools/checkyourself.py validate --kind score /tmp/checkyourself-score.json
           python tools/checkyourself.py backlog --findings /tmp/checkyourself-scan.json --format json > /tmp/checkyourself-backlog.json
           python tools/checkyourself.py validate --kind backlog /tmp/checkyourself-backlog.json

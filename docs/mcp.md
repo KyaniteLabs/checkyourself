@@ -33,10 +33,10 @@ and [`Tools`](https://modelcontextprotocol.io/specification/2025-06-18/server/to
 | MCP tool | Same CLI behavior |
 | --- | --- |
 | `describe` | `checkyourself describe --format json` |
-| `scan` | `checkyourself scan PROJECT --format json --no-write` |
+| `scan` | `checkyourself scan PROJECT [--deep] --format json --no-write` |
 | `coverage_emit` | `checkyourself coverage --emit --format json` |
 | `coverage_check` | `checkyourself coverage --check FILE` logic, with an inline object |
-| `score` | `checkyourself score --findings FILE [--coverage FILE]` logic, with inline objects |
+| `score` | `checkyourself score --findings FILE [--coverage FILE]` logic, with inline objects and no history write |
 | `backlog` | `checkyourself backlog --findings FILE` logic |
 | `next` | `checkyourself next --findings FILE` logic |
 | `validate` | `checkyourself validate --kind KIND FILE` logic, with an inline object |
@@ -63,11 +63,11 @@ Use this shape in MCP clients that accept a local stdio server command:
 ## Expected Agent Flow
 
 1. Call `describe`.
-2. Call `scan` on the project folder.
+2. Call `scan` on the project folder. Use `deep: true` when the agent needs CI/supply-chain validation evidence.
 3. Run the full CheckYourself diagnostic in the coding agent.
 4. Fill coverage evidence.
 5. Call `coverage_check`.
-6. Call `score`.
+6. Call `score`. Without coverage, treat the result as a low-confidence estimate and read `manual_evidence_needed`.
 7. Call `backlog`.
 8. Call `next`.
 9. Ask before making any fix.

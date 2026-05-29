@@ -84,19 +84,21 @@ Global conventions:
 ### 3.2 `scan` — deterministic discovery (built, to extend)
 
 - **Purpose:** detect stack, dependencies, scripts, env files, tests, CI, risk-surface path
-  hints; raise deterministic findings (possible secrets, committed `.env`, missing
-  `.env.example`, no tests, no CI) ranked P0–P3.
+  hints; raise deterministic findings (credential shapes, lower-confidence secret-like
+  assignments, committed `.env`, missing `.env.example`, no tests, no CI) ranked P0-P3.
 - **Extend with:** `--format json` returning a `checkyourself-scan/1` object that already
   carries `findings[]` and `counts` so it can pipe straight into `score` and `backlog`.
-- **Output:** context Markdown + scan JSON (today); add `--format json` and stable `--json -`
-  stdout modes.
+- **Output:** context Markdown + scan JSON with suppression status. `diagnostic` is an alias
+  for `scan`, and `scan --deep` adds conservative CI/supply-chain validation checks.
 
 ### 3.3 `coverage` — the 20-surface matrix (usable)
 
 - **Purpose:** operationalize `coverage-matrix.md`.
 - **Modes:**
-  - `coverage --emit` → JSON skeleton: all 20 surfaces with `status` unset, ready for the agent
-    to fill (`Pass|Finding|Unknown|NotApplicable`) plus `evidence_reviewed[]` / `missing_evidence[]`.
+  - `coverage --emit` → writes `CHECKYOURSELF_COVERAGE.generated.json` by default in text
+    mode; `--format json` prints the skeleton to stdout for pipelines. The skeleton has all
+    20 surfaces with `status` unset, ready for the agent to fill
+    (`Pass|Finding|Unknown|NotApplicable`) plus `evidence_reviewed[]` / `missing_evidence[]`.
   - `coverage --check FILE` → validate a filled-in coverage doc against the **completeness rule**
     (every surface represented; criticals not silently skipped). Non-zero exit if incomplete.
 - **Output:** conforms to a new `schemas/coverage.schema.json` (see §4).
@@ -106,9 +108,11 @@ Global conventions:
 - **Purpose:** deterministically compute the 0–100 score from findings + coverage, applying the
   weights and caps in `scoring-method.md`.
 - **Input:** `score --findings findings.json [--coverage coverage.json]`.
-- **Algorithm (proposed, see §5).**
+- **Algorithm:** coverage-backed scores apply the full evidence caps. Without coverage, scan
+  JSON produces a low-confidence `scan-derived-estimate` and lists `manual_evidence_needed`.
 - **Output:** `{ score, confidence, per_category:[{category, weight, raw, penalties[], awarded}],
-  caps_applied:[...], reasoning, counts }` conforming to a new `schemas/score-result.schema.json`.
+  caps_applied:[...], score_mode, manual_evidence_needed, counts }` conforming to
+  `schemas/score-result.schema.json`.
 - **Why it matters:** the score stops being a vibe. Same evidence → same number, every time.
 
 ### 3.5 `backlog` / `next` — ranking and the safe batch (usable)

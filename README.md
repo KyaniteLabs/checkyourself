@@ -123,18 +123,26 @@ The folder workflow is the main product. The CLI is the deterministic engine for
 python3 tools/checkyourself.py /path/to/your/project
 ```
 
-It detects stack signals, flags obvious deterministic risks, writes a prefilled context file, emits schemas, checks coverage, computes the score, ranks the backlog, and exposes a thin MCP wrapper:
+It detects stack signals, flags obvious deterministic risks, writes a prefilled context file, emits schemas, checks coverage, computes the score, records score history, ranks the backlog, and exposes a thin MCP wrapper:
 
 ```bash
 python3 tools/checkyourself.py describe --format json
-python3 tools/checkyourself.py . --format json --no-write
-python3 tools/checkyourself.py coverage --emit --format json
+python3 tools/checkyourself.py scan . --format json --no-write
+python3 tools/checkyourself.py diagnostic . --format json --no-write
+python3 tools/checkyourself.py scan . --deep --format json --no-write
+python3 tools/checkyourself.py coverage --emit
 python3 tools/checkyourself.py score --findings CHECKYOURSELF_SCAN.generated.json --format json
-python3 tools/checkyourself.py . --ci
+python3 tools/checkyourself.py scan . --ci
 python3 tools/checkyourself.py mcp
 ```
 
-The CLI does not replace the full diagnostic. It handles deterministic work so your AI can spend its attention on judgment.
+The CLI does not replace the full diagnostic. It handles deterministic work so your AI can spend its attention on judgment. Scan-only scores are clearly marked as low-confidence estimates; coverage-backed scores require filled evidence.
+
+Reviewed false positives can be suppressed in `.checkyourself.yml`, and suppressed findings remain visible in JSON without counting against caps. That means the tool can learn from real projects without forcing cosmetic renames just to appease a regex with an attitude problem.
+
+For CI, use the included composite action at
+`.github/actions/checkyourself`. It runs the scan, validates the JSON contract,
+and can fail pull requests on unresolved P0 findings.
 
 Read [`docs/cli.md`](docs/cli.md) for the command reference and [`docs/mcp.md`](docs/mcp.md) for MCP setup. There is no hosted API unless CheckYourself becomes a service product with accounts, shared history, hosted runs, or billing.
 
