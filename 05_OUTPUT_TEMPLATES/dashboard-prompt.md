@@ -53,7 +53,8 @@ The dashboard must visualize:
 - fix progress/status;
 - bespoke learning plan with plain-English next actions and live source/video
   links for each priority.
-- bilingual labels/content when the user or codebase is not English-only.
+- bilingual labels/content only after the user explicitly requests a second
+  language or confirms an inferred candidate second language.
 - neurodivergence-accessible structure: short sections, predictable labels,
   high contrast, no flashing, and no information conveyed by color alone.
 

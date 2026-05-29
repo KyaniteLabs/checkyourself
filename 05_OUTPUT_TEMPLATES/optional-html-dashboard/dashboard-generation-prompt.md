@@ -14,8 +14,9 @@ Requirements:
 - No JavaScript.
 - Show score, ship status, severity counts, coverage status, complete findings register, complete remediation backlog, current approval batch, and learning-plan highlights.
 - Include every finding, but keep rows compact.
-- Use plain English labels.
-- Include the user's language when the prompt or codebase is not English-only.
+- Use primary-language labels.
+- Include second-language labels only when the user explicitly requested that
+  language or confirmed an inferred candidate.
 - Keep the layout accessible for ADHD, autism, and dyslexia.
 - Mark unresolved P0/P1 clearly.
 - Show resolution statuses: open, approved, fixed, deferred, accepted-risk, not-applicable.

@@ -14,7 +14,7 @@ Requirements:
 - Rank issues P0/P1/P2/P3.
 - Apply the scoring method in 02_RUN_DIAGNOSTIC/scoring-method.md.
 - Explain each issue in plain English first.
-- Detect the user's language and project language from prompts, docs, UI strings, and locale files. If the user or project is not English-only, make learning/dashboard outputs bilingual.
+- Detect the user's primary language and any candidate second language from prompts, docs, UI strings, locale files, audience, and region hints. If the user did not explicitly request the second language, ask before making learning/dashboard outputs bilingual.
 - Keep explanations accessible for ADHD, autism, and dyslexia: short sections, concrete next actions, stable labels, and no dense walls of text.
 - Build a complete findings register and remediation backlog for every finding and blocking unknown.
 - Recommend a safest first approval batch from that backlog. Do not imply the first batch is the whole fix scope.

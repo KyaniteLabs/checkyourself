@@ -37,7 +37,9 @@ dashboard yes
 - Keep evidence concise; link to paths instead of pasting long file contents.
 - Include every finding, but keep rows compact.
 - The dashboard is a visualization of the report, not a replacement for the report.
-- Make labels bilingual when the user or project is not English-only.
+- Detect the primary language and candidate second language at runtime. If the
+  second language is inferred rather than explicitly requested, ask before
+  making labels bilingual.
 - Preserve neurodivergent accessibility: stable sections, clear labels, high
   contrast, short paragraphs, and no motion-dependent meaning.
 

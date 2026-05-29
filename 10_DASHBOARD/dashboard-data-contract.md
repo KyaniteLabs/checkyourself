@@ -42,20 +42,28 @@ next_approval: ""
 learning_priorities:
   - concept: ""
     plain_english: ""
-    plain_other_language: ""
+    plain_secondary_language: ""
+    secondary_language: ""
     why: ""
     triggered_by: []
     do_this_next: ""
-    do_this_next_other_language: ""
+    do_this_next_secondary_language: ""
     success_signal: ""
     source_title: ""
     source_url: ""
+    source_type: ""
+    authority_level: "high|medium|supplemental"
+    why_this_source_is_trusted: ""
+    checked_at: "YYYY-MM-DD"
     youtube_title: ""
     youtube_url: ""
     video_trust_note: ""
+    video_authority_level: "high|medium|supplemental"
 ```
 
-Language fields should use the user's/project language when it is not
-English-only. For Spanish, use the `plain_other_language` and
-`do_this_next_other_language` fields for the Spanish version. For another
-language, use the same fields and state the language in the surrounding report.
+Language fields should be selected at runtime. Use
+`plain_secondary_language` and `do_this_next_secondary_language` only after the
+user explicitly requests a second language or confirms an inferred candidate.
+The older `plain_other_language` and `do_this_next_other_language` fields are
+accepted for compatibility, but new outputs should prefer the runtime-neutral
+field names above.

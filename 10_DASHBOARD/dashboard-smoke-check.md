@@ -14,8 +14,10 @@ Reality Report.
 7. Confirm the learning-plan snapshot is visible.
 8. Confirm no external scripts, fonts, trackers, or CDNs are loaded.
 9. Confirm the dashboard has text labels in addition to color.
-10. Confirm bilingual content appears when the user or project language is not English-only.
-11. Confirm links in learning priorities open to a written source and a trusted YouTube video.
+10. Confirm confirmed/requested second-language content appears when selected.
+11. Confirm inferred second-language content does not appear before user confirmation.
+12. Confirm the canonical templates do not hardcode Spanish, French, or any other second language.
+13. Confirm links in learning priorities open to a written source and a trusted YouTube video.
 
 ## Optional screenshot proof
 

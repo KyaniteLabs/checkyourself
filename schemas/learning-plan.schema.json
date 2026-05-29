@@ -41,6 +41,19 @@
           "source_url": {
             "type": "string"
           },
+          "source_type": {
+            "type": "string"
+          },
+          "authority_level": {
+            "type": "string",
+            "enum": ["high", "medium", "supplemental"]
+          },
+          "why_this_source_is_trusted": {
+            "type": "string"
+          },
+          "checked_at": {
+            "type": "string"
+          },
           "youtube_title": {
             "type": "string"
           },
@@ -48,6 +61,19 @@
             "type": "string"
           },
           "video_trust_note": {
+            "type": "string"
+          },
+          "video_authority_level": {
+            "type": "string",
+            "enum": ["high", "medium", "supplemental"]
+          },
+          "secondary_language": {
+            "type": "string"
+          },
+          "plain_secondary_language": {
+            "type": "string"
+          },
+          "do_this_next_secondary_language": {
             "type": "string"
           },
           "level": {
