@@ -4,12 +4,12 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Model-agnostic](https://img.shields.io/badge/AI-model--agnostic-blue.svg)](#works-with-every-ai-coding-tool)
-[![No CLI required](https://img.shields.io/badge/setup-copy--and--paste-orange.svg)](PASTE_THIS_INTO_YOUR_AI.md)
+[![Production-hardening engine](https://img.shields.io/badge/engine-19%20capabilities-blueviolet.svg)](90_ADVANCED/)
 [![Read-only by default](https://img.shields.io/badge/safety-read--only%20first-brightgreen.svg)](#is-it-safe-to-run-on-my-codebase)
 
-**CheckYourself is a free, open-source, model-agnostic production-readiness diagnostic for apps built with AI coding assistants.** It turns any AI assistant — Cursor, Claude, ChatGPT, Gemini, Copilot, Windsurf, Replit, Lovable, Bolt, Codex, or a local agent — into a pre-launch auditor that inspects your app, infers the stack, finds production gaps, explains every risk in plain English, proposes fixes for your approval, verifies them, and then writes a learning plan built from the exact gaps your own project had.
+**CheckYourself is a free, open-source, model-agnostic production-readiness system for apps built with AI coding assistants.** It turns any AI assistant — Cursor, Claude, ChatGPT, Gemini, Copilot, Windsurf, Replit, Lovable, Bolt, Codex, or a local agent — into a pre-launch auditor that inspects your app, infers the stack, finds production gaps, explains every risk in plain English, proposes fixes for your approval, verifies them, and then writes a learning plan built from the exact gaps your own project had.
 
-There is nothing to install, no cloud account, and no command line. You copy one prompt into your AI tool and review what it finds.
+Under the hood it is a complete, staged engineering system, not a single canned prompt: an ICM-style context workspace that routes the agent through each stage, an evidence-based 0–100 scoring method with severity caps, a 19-capability production-hardening engine spanning auth, data, secrets, CI/CD, observability, privacy, and AI governance, JSON output schemas, report and risk templates, and a public validation suite. You install it as your AI assistant's operating context — no SaaS, no account, no lock-in to any one model.
 
 ---
 
@@ -17,7 +17,7 @@ There is nothing to install, no cloud account, and no command line. You copy one
 
 - [What is CheckYourself?](#what-is-checkyourself)
 - [Why it exists](#why-it-exists)
-- [Quick start (60 seconds)](#quick-start-60-seconds)
+- [Get started](#get-started)
 - [What it produces](#what-it-produces)
 - [What it checks](#what-it-checks)
 - [Works with every AI coding tool](#works-with-every-ai-coding-tool)
@@ -33,7 +33,7 @@ There is nothing to install, no cloud account, and no command line. You copy one
 
 ## What is CheckYourself?
 
-CheckYourself is an open-source **production-readiness audit system** — a structured set of prompts and context files you hand to an AI coding assistant so it can grade an AI-built app the way real production would: honestly, completely, and before launch.
+CheckYourself is an open-source **production-readiness audit system** — a structured, staged engineering framework of context files, scoring logic, output schemas, templates, and a deep production-hardening capability stack that you load as an AI coding assistant's operating context, so it can grade an AI-built app the way real production would: honestly, completely, and before launch.
 
 It answers one question that matters to every "vibe coder," indie hacker, and AI-assisted builder: **"Is this app actually ready to ship, and if not, what exactly is wrong and how do I fix it?"**
 
@@ -51,25 +51,22 @@ CheckYourself gives you reality **before production does the grading** — a cal
 
 ---
 
-## Quick start (60 seconds)
+## Get started
 
 1. Download or clone this repository.
 2. Put the `checkyourself` folder in or next to your project.
-3. Open your AI coding assistant.
-4. Paste [`PASTE_THIS_INTO_YOUR_AI.md`](PASTE_THIS_INTO_YOUR_AI.md).
-5. Review the **Production Reality Report**.
-6. Approve fixes one at a time or in safe batches.
-7. Recheck and rescore after each batch.
-8. Continue until every finding is fixed, deferred with a reason, accepted as risk, blocked by missing context, or proven not applicable.
-9. Get a custom learning plan based on the actual gaps.
+3. Point your AI coding assistant at the folder as its **operating context**. Start at [`CONTEXT.md`](CONTEXT.md) — it routes the agent through each stage without loading the whole repo. New to the system? Read [`START_HERE.md`](START_HERE.md) first.
+4. Run a read-only diagnostic and review the **Production Reality Report**.
+5. Approve fixes one at a time or in safe, reversible batches.
+6. Recheck and rescore after each batch.
+7. Continue until every finding is fixed, deferred with a reason, accepted as risk, blocked by missing context, or proven not applicable.
+8. Get a custom learning plan based on the actual gaps.
 
 > **No model lock-in. No required cloud account. No command line.**
 
-For the absolute simplest version, use [`BEGINNER_PROMPT_ONLY.md`](BEGINNER_PROMPT_ONLY.md). If your AI tool understands folder context, start at [`CONTEXT.md`](CONTEXT.md) — it routes the tool to the right stage without loading the whole repo. New here? Begin with [`START_HERE.md`](START_HERE.md).
+### Direct your assistant
 
-### Folder-aware prompt
-
-If your AI coding tool can read project files, drop this folder in your repo and say:
+Once the folder is in place, tell your AI assistant how to operate within it:
 
 ```text
 Use the checkyourself folder as your operating context.
@@ -173,7 +170,7 @@ CheckYourself runs as a staged workflow, each stage with its own context file so
 4. **Learning plan** — the agent writes a plan from the real gaps it found.
 5. **Dashboard (optional)** — a self-contained HTML or inline Markdown view of everything.
 
-Open [`PASTE_THIS_INTO_YOUR_AI.md`](PASTE_THIS_INTO_YOUR_AI.md), copy the prompt, and give it to your AI assistant with your project. That is the whole setup.
+Each stage is defined by its own context files, scoring rules, schemas, and templates — so the agent always knows what to read, what to do, and what to produce. The advanced engine in [`90_ADVANCED/`](90_ADVANCED/) deepens any stage when a domain warrants it.
 
 ---
 
@@ -209,7 +206,7 @@ Dashboard files:
 
 CheckYourself uses progressive context loading so audits stay affordable even on large projects:
 
-- Start with the short prompt and coverage matrix.
+- Start with the stage context and coverage matrix.
 - Load advanced files only when a domain is relevant.
 - Keep the complete findings register compact.
 - Expand details for P0/P1 items and the next approval batch.
@@ -229,10 +226,10 @@ See [`docs/token-efficiency.md`](docs/token-efficiency.md).
 ## FAQ
 
 ### What is CheckYourself in one sentence?
-CheckYourself is a free, open-source, model-agnostic prompt system that turns any AI coding assistant into a production-readiness auditor for apps built with AI — it finds every gap, explains the risks, fixes them with your approval, and teaches you what you missed.
+CheckYourself is a free, open-source, model-agnostic production-readiness system that turns any AI coding assistant into a pre-launch auditor for apps built with AI — a staged diagnostic workspace, an evidence-based score, a complete findings register and remediation backlog, approval-based guided fixes, and a 19-capability hardening engine that finds every gap, explains the risks, fixes them with your approval, and teaches you what you missed.
 
-### Do I need to install anything or use the command line?
-No. CheckYourself is plain Markdown. You copy [`PASTE_THIS_INTO_YOUR_AI.md`](PASTE_THIS_INTO_YOUR_AI.md) into your AI assistant. There is no install step, no dependency, and no CLI.
+### Do I need to install a toolchain or use the command line?
+No build step, no dependencies, no CLI, and no cloud account. You load CheckYourself as your AI assistant's operating context and it works through the stages with you. (It does ship a small optional Python validator for maintainers, but you never need it to run an audit.)
 
 ### Which AI tools does it work with?
 Any model-agnostic assistant that reads text or files, including Cursor, Windsurf, GitHub Copilot, Codex, ChatGPT, Claude, Gemini, Replit, Lovable, Bolt, and local agents.
