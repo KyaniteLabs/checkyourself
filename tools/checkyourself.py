@@ -496,6 +496,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                         help="Markdown context output path (default: CHECKYOURSELF_PROJECT_CONTEXT.generated.md)")
     parser.add_argument("--json", nargs="?", const="CHECKYOURSELF_SCAN.generated.json", default=None,
                         help="Also write a JSON summary (default path: CHECKYOURSELF_SCAN.generated.json)")
+    parser.add_argument("--format", choices=("text", "json"), default="text",
+                        help="Console output format. Use json for machine-readable stdout.")
     parser.add_argument("--ci", action="store_true",
                         help="Exit non-zero if any P0 finding is detected (lightweight CI gate).")
     parser.add_argument("--no-write", action="store_true", help="Print the summary only; write no files.")
@@ -508,23 +510,26 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 2
 
     data = scan(root)
+    json_stdout = args.format == "json" or args.json == "-" or (args.no_write and args.json is not None)
 
     if not args.no_write:
         out = Path(args.out)
         if not out.is_absolute():
             out = Path.cwd() / out
         out.write_text(render_markdown(root, data), encoding="utf-8")
-        if not args.quiet:
+        if not args.quiet and not json_stdout:
             print(f"Wrote context: {out}")
-        if args.json is not None:
+        if args.json is not None and args.json != "-":
             jout = Path(args.json)
             if not jout.is_absolute():
                 jout = Path.cwd() / jout
             jout.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-            if not args.quiet:
+            if not args.quiet and not json_stdout:
                 print(f"Wrote JSON:    {jout}")
 
-    if not args.quiet:
+    if json_stdout:
+        print(json.dumps(data, indent=2))
+    elif not args.quiet:
         c = data["counts"]
         print(f"Scanned {data['files_scanned']} files. "
               f"Findings — P0: {c['P0']}, P1: {c['P1']}, P2: {c['P2']}, P3: {c['P3']}")

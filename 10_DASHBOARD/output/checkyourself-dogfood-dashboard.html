@@ -46,6 +46,66 @@
   @media(max-width:560px){body{font-size:16px}main{width:min(100% - 20px,var(--max));padding-top:16px}.panel{padding:16px}.risk-grid{grid-template-columns:1fr}table{min-width:680px}}
   @media print{body{background:#fff;color:#000}body:before{display:none}.panel,.metric,.learning-item,.table-wrap{box-shadow:none;background:#fff;color:#000;border-color:#999}p,td,.language-note{color:#222}a{color:#0645ad}}
 </style>
+<style id="checkyourself-refinements">
+  /* Tasteful, static fine touches layered over the base instrument design.
+     No motion is introduced, in keeping with the dashboard's accessibility promise. */
+  body { background: #05070b; font-variant-numeric: tabular-nums; }
+  body::before {
+    display: none;
+  }
+  ::selection { background: rgba(94, 220, 232, 0.32); color: #fff; }
+  .panel {
+    background: var(--panel);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.07),
+      0 1px 0 rgba(0, 0, 0, 0.4),
+      0 26px 60px -30px rgba(0, 0, 0, 0.75);
+  }
+  .eyebrow { display: inline-flex; align-items: center; gap: 9px; }
+  .eyebrow::before { content: ""; width: 14px; height: 2px; background: var(--amber); }
+  .panel > h2 { position: relative; padding-bottom: 11px; }
+  .panel > h2::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 34px;
+    height: 2px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--cyan), var(--magenta));
+  }
+  .score { font-variant-numeric: tabular-nums; letter-spacing: -0.01em; text-shadow: 0 0 28px rgba(94, 220, 232, 0.28); }
+  .score-bar { box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6); }
+  .score-bar > div { box-shadow: 0 0 14px rgba(94, 220, 232, 0.45); }
+  .metric strong { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .metric.p0 { box-shadow: inset 0 3px 0 var(--red); }
+  .metric.p1 { box-shadow: inset 0 3px 0 var(--amber); }
+  .metric.p2 { box-shadow: inset 0 3px 0 var(--cyan); }
+  .metric.p3 { box-shadow: inset 0 3px 0 var(--green); }
+  .metric.unknown { box-shadow: inset 0 3px 0 var(--magenta); }
+  thead th { position: sticky; top: 0; z-index: 1; background: #07151f; }
+  .status { position: relative; }
+  .status::before {
+    content: "";
+    flex: 0 0 auto;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 8px currentColor;
+  }
+  .resources a::after { content: " \2197"; opacity: 0.7; }
+  footer { border-top: 1px solid var(--line); padding-top: 14px; }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+  @media print {
+    body { background: #fff !important; }
+    body::before { display: none !important; }
+    .score-bar > div { box-shadow: none; }
+    .panel > h2::after { background: #999; }
+  }
+</style>
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to dashboard / Saltar al tablero</a>
@@ -124,7 +184,7 @@
           <tr><td>Secrets and environment config</td><td><span class="status pass">Pass</span></td><td>Gitleaks passed; local/generated/private paths are ignored.</td><td>CY-P2-001</td></tr>
           <tr><td>Security and threat model</td><td><span class="status pass">Pass</span></td><td>Secret scan passed and CI includes gitleaks when available.</td><td>CY-P2-003</td></tr>
           <tr><td>Privacy and data governance</td><td><span class="status pass">Pass</span></td><td>Public product collects no data and warns against secret/private output.</td><td></td></tr>
-          <tr><td>Tests and quality gates</td><td><span class="status pass">Pass</span></td><td>Validator, release validators, syntax checks, link checks, schema checks, and dashboard smoke guidance exist.</td><td>CY-P2-003, CY-P3-004</td></tr>
+          <tr><td>Tests and quality gates</td><td><span class="status pass">Pass</span></td><td>Public validator, CLI unit tests, syntax checks, link checks, schema checks, and dashboard smoke guidance exist.</td><td>CY-P2-003, CY-P3-004</td></tr>
           <tr><td>CI/CD and supply chain</td><td><span class="status pass">Pass</span></td><td>Remote GitHub Actions passed on KyaniteLabs/checkyourself run 26625079272.</td><td>CY-P2-004</td></tr>
           <tr><td>Hosting, deployment, rollback</td><td><span class="status pass">Pass</span></td><td>Public repository is live at https://github.com/KyaniteLabs/checkyourself.</td><td>CY-P2-004</td></tr>
           <tr><td>Cloud infrastructure/IaC</td><td><span class="status neutral">N/A</span></td><td>No cloud runtime or IaC.</td><td></td></tr>

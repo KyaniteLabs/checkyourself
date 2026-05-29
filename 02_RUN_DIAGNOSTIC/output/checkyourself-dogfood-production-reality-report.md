@@ -79,7 +79,7 @@ No P0/P1/P2 launch blocker remains after public repo creation and remote Actions
 | 8 | Secrets and environment config | Pass | Gitleaks passed; `.gitignore` excludes private/local surfaces. |
 | 9 | Security and threat model | Pass | Local secret scan passed and CI includes a gitleaks-if-available step. |
 | 10 | Privacy and data governance | Pass | Public product collects no data; prompts warn against secret/private output. |
-| 11 | Tests and quality gates | Pass | Validators, syntax checks, link checks, schema checks, and dogfood backlog assertions pass locally. |
+| 11 | Tests and quality gates | Pass | Public validator, CLI unit tests, syntax checks, link checks, schema checks, and dogfood backlog assertions pass locally. |
 | 12 | CI/CD and supply chain | Pass | Remote GitHub Actions run `26625079272` passed after push. |
 | 13 | Hosting, deployment, rollback | Pass | Public GitHub repo is live at `https://github.com/KyaniteLabs/checkyourself`. |
 | 14 | Cloud infrastructure/IaC | Not applicable | No cloud runtime or IaC. |

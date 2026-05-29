@@ -42,7 +42,7 @@
     {"surface": "Secrets and environment config", "status": "Pass", "evidence": "Gitleaks passed; local/generated/private paths are ignored.", "finding_ids": ["CY-P2-001"]},
     {"surface": "Security and threat model", "status": "Pass", "evidence": "Secret scan passed and CI includes gitleaks when available.", "finding_ids": ["CY-P2-003"]},
     {"surface": "Privacy and data governance", "status": "Pass", "evidence": "Public product collects no data and warns against secret/private output.", "finding_ids": []},
-    {"surface": "Tests and quality gates", "status": "Pass", "evidence": "Public validator, release validators, syntax checks, link checks, schema checks, and dashboard smoke guidance are present.", "finding_ids": ["CY-P2-003", "CY-P3-004"]},
+    {"surface": "Tests and quality gates", "status": "Pass", "evidence": "Public validator, CLI unit tests, syntax checks, link checks, schema checks, and dashboard smoke guidance are present.", "finding_ids": ["CY-P2-003", "CY-P3-004"]},
     {"surface": "CI/CD and supply chain", "status": "Pass", "evidence": "Remote GitHub Actions passed on KyaniteLabs/checkyourself run 26625079272.", "finding_ids": ["CY-P2-004"]},
     {"surface": "Hosting, deployment, rollback", "status": "Pass", "evidence": "Public repository is live at https://github.com/KyaniteLabs/checkyourself.", "finding_ids": ["CY-P2-004"]},
     {"surface": "Cloud infrastructure/IaC", "status": "Not applicable", "evidence": "No cloud runtime or IaC.", "finding_ids": []},

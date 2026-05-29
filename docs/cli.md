@@ -35,6 +35,9 @@ python3 tools/checkyourself.py /path/to/your/project
 # Also emit a JSON summary
 python3 tools/checkyourself.py /path/to/your/project --json
 
+# Print machine-readable JSON to stdout
+python3 tools/checkyourself.py /path/to/your/project --format json --no-write
+
 # Print findings only, write nothing
 python3 tools/checkyourself.py . --no-write
 
@@ -48,7 +51,8 @@ python3 tools/checkyourself.py . --ci
 | --- | --- |
 | `project` | Project root to scan (default `.`). |
 | `--out PATH` | Markdown context output path (default `CHECKYOURSELF_PROJECT_CONTEXT.generated.md`). |
-| `--json [PATH]` | Also write a JSON summary (default `CHECKYOURSELF_SCAN.generated.json`). |
+| `--json [PATH]` | Also write a JSON summary (default `CHECKYOURSELF_SCAN.generated.json`). Use `--json -` for stdout. |
+| `--format text|json` | Console output format. Use `json` for machine-readable stdout. |
 | `--ci` | Exit non-zero if any P0 finding is detected. |
 | `--no-write` | Print the summary only; write no files. |
 | `--quiet` | Suppress the console summary. |

@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.5.1
+
+- Added the real dogfood dashboard screenshot to the README and refreshed the
+  canonical dashboard styling with static, WCAG-friendly refinements.
+- Added JSON stdout support for the optional local CLI via `--format json`,
+  `--json -`, and `--json --no-write`.
+- Added a small stdlib unit test suite for the CLI and wired it into GitHub
+  Actions.
+- Added the agent-access CLI plan and decision record: CLI first, MCP later as
+  a thin wrapper, no hosted API for the current open-source product.
+- Corrected the future scoring plan to be evidence-first instead of
+  ready-until-proven-otherwise.
+
 ## 1.5.0
 
 - Removed the beginner one-prompt-only path (`BEGINNER_PROMPT_ONLY.md`) and the

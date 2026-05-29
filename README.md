@@ -183,13 +183,19 @@ For a zero-token head start, CheckYourself ships a small **optional** scan & sca
 python3 tools/checkyourself.py /path/to/your/project
 ```
 
-It detects your stack, flags obvious deterministic risks (possible hardcoded secrets, a committed `.env`, missing `.env.example`, absent tests or CI) ranked P0–P3, and writes a pre-filled context file your AI can build on. Add `--json` for a machine-readable summary, or `--ci` to use it as a lightweight pipeline gate (non-zero exit on a P0). The CLI is a scaffold, not a substitute — the AI still runs the full diagnostic. See [`docs/cli.md`](docs/cli.md).
+It detects your stack, flags obvious deterministic risks (possible hardcoded secrets, a committed `.env`, missing `.env.example`, absent tests or CI) ranked P0–P3, and writes a pre-filled context file your AI can build on. Add `--json` for a machine-readable summary, `--format json --no-write` for JSON stdout, or `--ci` to use it as a lightweight pipeline gate (non-zero exit on a P0). The CLI is a scaffold, not a substitute — the AI still runs the full diagnostic. See [`docs/cli.md`](docs/cli.md).
+
+The agent-access roadmap is CLI-first: no hosted API for the current open-source product, with MCP planned later as a thin native-agent wrapper. See [`docs/agent-access-cli-plan.md`](docs/agent-access-cli-plan.md).
 
 ---
 
 ## Optional visual dashboard
 
 The Markdown report is the default output because it is cheaper, faster, and easier for most AI tools to produce.
+
+This repository includes a real dogfood dashboard screenshot from CheckYourself auditing itself:
+
+![CheckYourself dogfood dashboard showing the self-audit score, launch status, risk counts, and coverage sweep](10_DASHBOARD/output/checkyourself-dogfood-dashboard-screenshot.png)
 
 After the report exists, say:
 
