@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CheckYourself Dashboard — CheckYourself Dogfood Self-Audit</title>
+<style>
+:root{--bg:#0d1117;--panel:#161b22;--panel2:#1f2937;--text:#f8fafc;--muted:#cbd5e1;--line:#30363d;--blue:#58a6ff;--green:#3fb950;--yellow:#d29922;--red:#f85149;--purple:#a371f7}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.45} .wrap{max-width:1180px;margin:0 auto;padding:36px 22px 56px}.hero{display:grid;grid-template-columns:1.2fr .8fr;gap:22px;align-items:stretch}.card{background:linear-gradient(180deg,var(--panel),#101826);border:1px solid var(--line);border-radius:22px;padding:24px;box-shadow:0 14px 40px rgba(0,0,0,.22)}h1{font-size:46px;line-height:1;margin:0 0 12px}h2{font-size:23px;margin:0 0 14px}.muted{color:var(--muted)}.score{font-size:84px;font-weight:800;letter-spacing:-4px}.score small{font-size:28px;color:var(--muted);letter-spacing:0}.tags{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}.tag,.pill{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:999px;padding:5px 10px;font-size:13px;color:var(--muted);background:#0f172a}.counts{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:18px}.count{border:1px solid var(--line);border-radius:16px;padding:14px;background:#0f172a}.count span{display:block;color:var(--muted);font-size:13px}.count strong{display:block;font-size:31px}.p0{border-color:rgba(248,81,73,.75)!important;color:#fecaca!important}.p1{border-color:rgba(210,153,34,.75)!important;color:#fde68a!important}.p2{border-color:rgba(88,166,255,.75)!important;color:#bfdbfe!important}.p3{border-color:rgba(163,113,247,.75)!important;color:#ddd6fe!important}.pass{border-color:rgba(63,185,80,.75)!important;color:#bbf7d0!important}.finding{border-color:rgba(210,153,34,.75)!important;color:#fde68a!important}.unknown{border-color:rgba(148,163,184,.75)!important;color:#e2e8f0!important}.grid{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:22px}.surface{display:flex;justify-content:space-between;gap:12px;align-items:center;border-bottom:1px solid var(--line);padding:9px 0}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:18px}table{width:100%;border-collapse:collapse;min-width:900px}th,td{text-align:left;border-bottom:1px solid var(--line);padding:12px;vertical-align:top}th{font-size:13px;color:var(--muted);background:#111827}td{font-size:14px}.callout{border:1px solid rgba(88,166,255,.45);background:rgba(88,166,255,.08);border-radius:18px;padding:18px;margin-top:18px}ol,ul{padding-left:20px}.footer{margin-top:22px;color:#94a3b8;font-size:13px}@media(max-width:850px){.hero,.grid{grid-template-columns:1fr}.counts{grid-template-columns:repeat(2,1fr)}h1{font-size:34px}.score{font-size:62px}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <section class="hero">
+    <div class="card">
+      <h1>CheckYourself Dashboard</h1>
+      <p class="muted">CheckYourself Dogfood Self-Audit</p>
+      <p>CheckYourself audited itself as a public, file-first diagnostic system. Local P2/P3 findings have been remediated; the remaining launch gate is public GitHub remote and Actions proof.</p>
+      <div class="tags"><span class="tag">Markdown-first AI diagnostic workspace</span><span class="tag">ICM-style context routing</span><span class="tag">Python standard-library validation</span><span class="tag">Static HTML/CSS dashboard output</span><span class="tag">Private Creator Kit sidecar</span></div>
+      <div class="callout"><b>Next approval:</b> Approve creating and pushing the public KyaniteLabs/checkyourself remote when ready.</div>
+    </div>
+    <div class="card">
+      <h2>Production Reality Score</h2>
+      <div class="score">88<small>/100</small></div>
+      <p class="muted">Confidence: medium-high</p>
+      <div class="counts"><div class="count p0"><span>P0</span><strong>0</strong></div><div class="count p1"><span>P1</span><strong>0</strong></div><div class="count p2"><span>P2</span><strong>4</strong></div><div class="count p3"><span>P3</span><strong>6</strong></div><div class="count unknown"><span>Unknown</span><strong>1</strong></div></div>
+    </div>
+  </section>
+
+  <section class="grid">
+    <div class="card">
+      <h2>Coverage sweep</h2>
+      <div class="surface"><span>Product purpose and users</span><b class="pill pass">Pass</b></div>
+<div class="surface"><span>Stack and architecture</span><b class="pill pass">Pass</b></div>
+<div class="surface"><span>Frontend UX and client safety</span><b class="pill pass">Pass</b></div>
+<div class="surface"><span>API and backend services</span><b class="pill neutral">Not applicable</b></div>
+<div class="surface"><span>Auth and permissions</span><b class="pill neutral">Not applicable</b></div>
+<div class="surface"><span>Data storage and migrations</span><b class="pill neutral">Not applicable</b></div>
+<div class="surface"><span>User/tenant isolation</span><b class="pill neutral">Not applicable</b></div>
+<div class="surface"><span>Secrets and environment config</span><b class="pill pass">Pass</b></div>
+<div class="surface"><span>Security and threat model</span><b class="pill pass">Pass</b></div>
+<div class="surface"><span>Privacy and data governance</span><b class="pill pass">Pass</b></div>
+<div class="surface"><span>Tests and quality gates</span><b class="pill pass">Pass</b></div>
+<div class="surface"><span>CI/CD and supply chain</span><b class="pill finding">Finding</b></div>
+<div class="surface"><span>Hosting, deployment, rollback</span><b class="pill finding">Finding</b></div>
+<div class="surface"><span>Cloud infrastructure/IaC</span><b class="pill neutral">Not applicable</b></div>
+<div class="surface"><span>Performance, caching, rate limits</span><b class="pill pass">Pass</b></div>
+<div class="surface"><span>Scaling and resilience</span><b class="pill neutral">Not applicable</b></div>
+<div class="surface"><span>Observability and incident response</span><b class="pill unknown">Unknown</b></div>
+<div class="surface"><span>Availability and recovery</span><b class="pill neutral">Not applicable</b></div>
+<div class="surface"><span>AI/RAG/agent governance</span><b class="pill pass">Pass</b></div>
+<div class="surface"><span>Learning needs</span><b class="pill pass">Pass</b></div>
+    </div>
+    <div class="card">
+      <h2>Remediation waves</h2>
+      <ol><li><b>Wave 1</b>: Local launch hygiene<br><span class="muted">Items: CY-P2-001, CY-P2-002, CY-P2-003</span></li>
+<li><b>Wave 2</b>: Product polish and eval surface<br><span class="muted">Items: CY-P3-001, CY-P3-002, CY-P3-003, CY-P3-004, CY-P3-005, CY-P3-006</span></li>
+<li><b>Wave 3</b>: External public proof<br><span class="muted">Items: CY-P2-004</span></li></ol>
+      <h2>Learning priorities</h2>
+      <ul><li><b>Generated artifact boundaries</b><br><span class="muted">Maintainer tools need safe defaults so launch prep does not pollute public commits.</span></li>
+<li><b>Metadata as agent instructions</b><br><span class="muted">Agents treat manifests and context files as routing truth.</span></li>
+<li><b>CI parity</b><br><span class="muted">Checks used to call a repo ready should be represented in CI or documented as manual gates.</span></li>
+<li><b>Public launch proof</b><br><span class="muted">Local green status is not the same as GitHub Actions passing after push.</span></li>
+<li><b>Agent eval fixtures</b><br><span class="muted">Prompt systems need small known-bad inputs to catch shallow diagnostic behavior.</span></li></ul>
+    </div>
+  </section>
+
+  <section class="card" style="margin-top:22px">
+    <h2>Complete findings table</h2>
+    <p class="muted">This table summarizes every supplied finding. The full Production Reality Report remains the source of truth.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>Severity</th><th>Finding</th><th>Plain-English risk</th><th>Status</th><th>Next step</th></tr></thead>
+        <tbody><tr><td><b>CY-P2-001</b></td><td><span class="pill p2">P2</span></td><td>Scanner-generated context could dirty repo root</td><td>Maintainers could accidentally commit local generated context.</td><td><span class="pill pass">fixed</span></td><td>Keep ignore pattern covered by validator.</td></tr>
+<tr><td><b>CY-P2-002</b></td><td><span class="pill p2">P2</span></td><td>Manifest dashboard paths drifted from docs</td><td>Agents could choose the wrong dashboard mode.</td><td><span class="pill pass">fixed</span></td><td>Keep manifest and dashboard docs validated together.</td></tr>
+<tr><td><b>CY-P2-003</b></td><td><span class="pill p2">P2</span></td><td>CI was narrower than dogfood verification</td><td>Public regressions could pass a weaker CI gate.</td><td><span class="pill pass">fixed</span></td><td>Confirm remote Actions after push.</td></tr>
+<tr><td><b>CY-P2-004</b></td><td><span class="pill p2">P2</span></td><td>Public GitHub launch is not proven</td><td>The local repo is ready, but the public repo and Actions run do not exist yet.</td><td><span class="pill neutral">pending external launch</span></td><td>Create KyaniteLabs/checkyourself, push main, verify Actions.</td></tr>
+<tr><td><b>CY-P3-001</b></td><td><span class="pill p3">P3</span></td><td>Duplicate token-efficiency docs</td><td>Duplicate docs can drift over time.</td><td><span class="pill pass">fixed</span></td><td>Keep the short doc as a pointer.</td></tr>
+<tr><td><b>CY-P3-002</b></td><td><span class="pill p3">P3</span></td><td>Private v1.3 release note looked current</td><td>Private launch materials could confuse future packaging.</td><td><span class="pill pass">fixed</span></td><td>Use root changelog for current release truth.</td></tr>
+<tr><td><b>CY-P3-003</b></td><td><span class="pill p3">P3</span></td><td>Scanner header referenced old path</td><td>Maintainers could chase stale script locations.</td><td><span class="pill pass">fixed</span></td><td>Keep script output path-neutral.</td></tr>
+<tr><td><b>CY-P3-004</b></td><td><span class="pill p3">P3</span></td><td>No agent eval fixture</td><td>Prompt regressions are harder to notice.</td><td><span class="pill pass">fixed</span></td><td>Run the broken-app fixture through target agents.</td></tr>
+<tr><td><b>CY-P3-005</b></td><td><span class="pill p3">P3</span></td><td>No dashboard smoke check guidance</td><td>A dashboard could parse but still be visually wrong.</td><td><span class="pill pass">fixed</span></td><td>Use the smoke checklist for generated dashboards.</td></tr>
+<tr><td><b>CY-P3-006</b></td><td><span class="pill p3">P3</span></td><td>Manifest modes were noisy</td><td>Downstream agents may over-index on duplicate dashboard modes.</td><td><span class="pill pass">fixed</span></td><td>Keep manifest concise.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+  <p class="footer">Generated by CheckYourself. No code changes are implied by this dashboard. Approve fixes explicitly before changing files. 2026-05-28 23:24 PDT</p>
+</main>
+</body>
+</html>

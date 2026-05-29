@@ -41,6 +41,7 @@ REQUIRED = [
     "05_OUTPUT_TEMPLATES/bespoke-learning-plan.md",
     "10_DASHBOARD/CONTEXT.md",
     "10_DASHBOARD/README.md",
+    "10_DASHBOARD/dashboard-smoke-check.md",
     "10_DASHBOARD/dashboard-template.html",
     "10_DASHBOARD/output/.gitkeep",
     "90_ADVANCED/CONTEXT.md",
@@ -49,6 +50,7 @@ REQUIRED = [
     "assets/checkyourself-user-workflow.svg",
     "checkyourself.manifest.json",
     "CHANGELOG.md",
+    "samples/dogfood-fixture-broken-app.md",
     "schemas/dashboard-data.schema.json",
 ]
 
@@ -126,6 +128,10 @@ def validate_release_boundary(root: Path, errors: list[str]) -> None:
         if (root / rel).exists() and not is_ignored(patterns, rel):
             errors.append(f"private/local path exists and is not ignored: {rel}")
 
+    generated_patterns = {"CHECKYOURSELF_PROJECT_CONTEXT.generated.md", "CHECKYOURSELF_*.generated.md"}
+    if not generated_patterns & patterns:
+        errors.append("scanner-generated project context output is not ignored")
+
 
 def validate_icm_context(root: Path, errors: list[str]) -> None:
     root_context = text(root / "CONTEXT.md") if (root / "CONTEXT.md").exists() else ""
@@ -178,6 +184,24 @@ def validate_manifest(root: Path, errors: list[str]) -> None:
         if not (root / rel).exists():
             errors.append(f"manifest entrypoint is missing: {name} -> {rel}")
 
+    modes = manifest.get("modes", [])
+    if len(modes) != len(set(modes)):
+        errors.append("manifest modes contain duplicates")
+
+    dashboard_modes = [mode for mode in modes if "dashboard" in mode]
+    if len(dashboard_modes) > 3:
+        errors.append("manifest modes contain too many dashboard variants")
+
+    optional_dashboard = manifest.get("optional_dashboard", {})
+    if optional_dashboard.get("template") != "10_DASHBOARD/dashboard-template.html":
+        errors.append("manifest optional dashboard template must be the CSS-only default")
+
+    if optional_dashboard.get("advanced_data_template") != "05_OUTPUT_TEMPLATES/checkyourself-dashboard.html":
+        errors.append("manifest optional dashboard advanced data template is missing or wrong")
+
+    if manifest.get("html_dashboard_template") != "05_OUTPUT_TEMPLATES/checkyourself-dashboard.html":
+        errors.append("manifest html dashboard template must identify the advanced data-template path")
+
 
 def validate_markdown_links(root: Path, errors: list[str]) -> None:
     link_re = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
@@ -219,6 +243,13 @@ def validate_assets(root: Path, errors: list[str]) -> None:
             errors.append(f"duplicate asset files: {', '.join(paths)}")
 
 
+def validate_doc_drift(root: Path, errors: list[str]) -> None:
+    canonical = root / "docs/token-efficiency-and-context-control.md"
+    shortcut = root / "docs/token-efficiency.md"
+    if canonical.exists() and shortcut.exists() and canonical.read_bytes() == shortcut.read_bytes():
+        errors.append("token-efficiency docs are exact duplicates")
+
+
 def validate_public_text(root: Path, errors: list[str]) -> None:
     for path in public_files(root):
         if path.suffix.lower() not in {".md", ".json", ".html", ".txt", ".yml", ".yaml"}:
@@ -248,6 +279,7 @@ def main() -> int:
     validate_manifest(root, errors)
     validate_markdown_links(root, errors)
     validate_assets(root, errors)
+    validate_doc_drift(root, errors)
     validate_public_text(root, errors)
 
     if errors:

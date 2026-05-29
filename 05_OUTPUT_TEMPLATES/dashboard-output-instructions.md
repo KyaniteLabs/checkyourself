@@ -8,7 +8,10 @@ Generate the HTML/CSS dashboard only when the user explicitly asks for it, or wh
 dashboard yes
 ```
 
-Use `05_OUTPUT_TEMPLATES/optional-human-dashboard.html`.
+Use `10_DASHBOARD/dashboard-template.html` for the default CSS-only dashboard.
+Use `05_OUTPUT_TEMPLATES/checkyourself-dashboard.html` only for the advanced
+data-template path when the user asks for dashboard data mode or approves
+JavaScript.
 
 ## Rules
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.4.1
+
+- Added a real CheckYourself dogfood report, recheck report, remediation log,
+  learning-plan output, dashboard data, rendered dashboards, and dashboard
+  screenshot proof.
+- Fixed scanner-generated project-context output so it is ignored by default.
+- Aligned manifest dashboard metadata with the CSS-only default dashboard path
+  and advanced data-template path.
+- Expanded GitHub Actions with whitespace, Python compile, and
+  gitleaks-if-available checks.
+- Added a dogfood fixture for shallow-diagnostic regression checks.
+- Added dashboard smoke-check guidance and cleaned Creator Kit path/version
+  drift found by dogfooding.
+
 ## 1.4.0
 
 - Added public repository validation with `tools/validate_public.py`.
