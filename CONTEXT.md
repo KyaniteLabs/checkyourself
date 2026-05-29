@@ -16,6 +16,8 @@ when the user asks for files or when a handoff artifact is useful.
 5. Keep the Markdown report as the source of truth.
 6. Generate the dashboard only when the user explicitly asks for it.
 7. Keep the Creator Kit and local agent state out of public releases.
+8. Detect language from the user and project; keep learning/dashboard outputs bilingual when language signals are mixed or non-English.
+9. Keep output structure accessible for ADHD, autism, and dyslexia.
 
 ## Stage Router
 
@@ -26,7 +28,7 @@ when the user asks for files or when a handoff artifact is useful.
 | "Run a diagnostic" | `02_RUN_DIAGNOSTIC/CONTEXT.md` | `rules.md`, coverage and scoring files | Production Reality Report |
 | "Fix approved issues" | `03_GUIDED_FIX_MODE/CONTEXT.md` | Diagnostic report, fix template | Approval-gated fixes |
 | "Create a learning plan" | `04_LEARNING_PLAN/CONTEXT.md` | Diagnostic/remediation history | Bespoke Learning Plan |
-| "Make a dashboard" | `10_DASHBOARD/CONTEXT.md` | Existing report only | Optional HTML dashboard |
+| "Make a dashboard" | `10_DASHBOARD/CONTEXT.md` | Existing report only | Optional HTML dashboard or inline Markdown fallback |
 | "Use advanced guidance" | `90_ADVANCED/CONTEXT.md` | Relevant capability only | Specialist checklist or plan |
 
 ## Output Handoffs

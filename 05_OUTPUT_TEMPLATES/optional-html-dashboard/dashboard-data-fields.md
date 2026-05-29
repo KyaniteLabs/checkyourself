@@ -48,4 +48,16 @@ learning_plan:
     - concept:
       why_it_matters:
       practice_task:
+      source_title:
+      source_url:
+      youtube_title:
+      youtube_url:
+language:
+  primary:
+  secondary:
+  bilingual_required:
+accessibility:
+  - short sections
+  - text labels plus color
+  - no motion-dependent meaning
 ```

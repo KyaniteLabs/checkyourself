@@ -41,6 +41,7 @@ REQUIRED = [
     "05_OUTPUT_TEMPLATES/bespoke-learning-plan.md",
     "10_DASHBOARD/CONTEXT.md",
     "10_DASHBOARD/README.md",
+    "10_DASHBOARD/inline-dashboard.md",
     "10_DASHBOARD/dashboard-smoke-check.md",
     "10_DASHBOARD/dashboard-template.html",
     "10_DASHBOARD/output/.gitkeep",
@@ -68,6 +69,8 @@ STALE_PUBLIC_PHRASES = [
     "07_PUBLISHING",
     "scripts/validate_pack",
     "Skool post and YouTube",
+    "advanced data-template path",
+    "05_OUTPUT_TEMPLATES/checkyourself-dashboard.html",
 ]
 
 STAGE_CONTEXTS = [
@@ -189,18 +192,18 @@ def validate_manifest(root: Path, errors: list[str]) -> None:
         errors.append("manifest modes contain duplicates")
 
     dashboard_modes = [mode for mode in modes if "dashboard" in mode]
-    if len(dashboard_modes) > 3:
+    if len(dashboard_modes) > 2:
         errors.append("manifest modes contain too many dashboard variants")
 
     optional_dashboard = manifest.get("optional_dashboard", {})
     if optional_dashboard.get("template") != "10_DASHBOARD/dashboard-template.html":
-        errors.append("manifest optional dashboard template must be the CSS-only default")
-
-    if optional_dashboard.get("advanced_data_template") != "05_OUTPUT_TEMPLATES/checkyourself-dashboard.html":
-        errors.append("manifest optional dashboard advanced data template is missing or wrong")
-
-    if manifest.get("html_dashboard_template") != "05_OUTPUT_TEMPLATES/checkyourself-dashboard.html":
-        errors.append("manifest html dashboard template must identify the advanced data-template path")
+        errors.append("manifest optional dashboard template must be the canonical HTML/CSS dashboard")
+    if optional_dashboard.get("inline_fallback") != "10_DASHBOARD/inline-dashboard.md":
+        errors.append("manifest optional dashboard inline fallback is missing or wrong")
+    if "advanced_data_template" in optional_dashboard:
+        errors.append("manifest optional dashboard must not advertise a second JS/data-template dashboard")
+    if "html_dashboard_template" in manifest:
+        errors.append("manifest must use optional_dashboard.template as the only rich dashboard template")
 
 
 def validate_markdown_links(root: Path, errors: list[str]) -> None:
@@ -260,11 +263,15 @@ def validate_public_text(root: Path, errors: list[str]) -> None:
                 errors.append(f"stale public phrase in {path.relative_to(root)}: {phrase}")
 
     dashboard_context = text(root / "10_DASHBOARD/CONTEXT.md") if (root / "10_DASHBOARD/CONTEXT.md").exists() else ""
-    if "CSS-only default" not in dashboard_context:
-        errors.append("10_DASHBOARD/CONTEXT.md must identify the CSS-only default dashboard path")
+    if "canonical HTML/CSS dashboard" not in dashboard_context:
+        errors.append("10_DASHBOARD/CONTEXT.md must identify the canonical HTML/CSS dashboard path")
+    if "inline Markdown fallback" not in dashboard_context:
+        errors.append("10_DASHBOARD/CONTEXT.md must identify the inline Markdown fallback")
     dashboard_prompt = text(root / "05_OUTPUT_TEMPLATES/dashboard-prompt.md") if (root / "05_OUTPUT_TEMPLATES/dashboard-prompt.md").exists() else ""
-    if "advanced data-template path" not in dashboard_prompt:
-        errors.append("05_OUTPUT_TEMPLATES/dashboard-prompt.md must label the JS/data-template path as advanced")
+    if "single canonical HTML/CSS dashboard" not in dashboard_prompt:
+        errors.append("05_OUTPUT_TEMPLATES/dashboard-prompt.md must identify the single canonical dashboard")
+    if "inline Markdown fallback" not in dashboard_prompt:
+        errors.append("05_OUTPUT_TEMPLATES/dashboard-prompt.md must identify the inline Markdown fallback")
 
 
 def main() -> int:

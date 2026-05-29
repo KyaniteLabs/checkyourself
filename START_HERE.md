@@ -47,6 +47,14 @@ dashboard yes
 
 The AI should create a self-contained HTML/CSS dashboard from the existing report. This is optional because some users prefer to save tokens.
 
+If you want the lowest-token version, say:
+
+```text
+dashboard inline
+```
+
+The AI should return a compact Markdown dashboard instead of an HTML file.
+
 ## What you should get back
 
 A useful diagnostic includes:

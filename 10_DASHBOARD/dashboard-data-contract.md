@@ -42,10 +42,20 @@ next_approval: ""
 learning_priorities:
   - concept: ""
     plain_english: ""
+    plain_other_language: ""
     why: ""
     triggered_by: []
     do_this_next: ""
+    do_this_next_other_language: ""
     success_signal: ""
-    resource_title: ""
-    resource_url: ""
+    source_title: ""
+    source_url: ""
+    youtube_title: ""
+    youtube_url: ""
+    video_trust_note: ""
 ```
+
+Language fields should use the user's/project language when it is not
+English-only. For Spanish, use the `plain_other_language` and
+`do_this_next_other_language` fields for the Spanish version. For another
+language, use the same fields and state the language in the surrounding report.

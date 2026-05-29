@@ -1,7 +1,7 @@
 {
   "name": "checkyourself",
   "display_name": "CheckYourself",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "license": "MIT",
   "copyright": "Copyright (c) 2026 Simon Gonzalez De Cruz",
   "description": "AI production-readiness diagnostic, guided fix, and learning-plan system for apps built by learning-by-doing.",
@@ -15,6 +15,7 @@
     "token_efficient_context_loading",
     "context_budget_guard",
     "optional_dashboard",
+    "inline_dashboard_fallback",
     "complete_remediation_loop"
   ],
   "risk_levels": [
@@ -54,8 +55,8 @@
     "default": false,
     "trigger": "dashboard yes",
     "template": "10_DASHBOARD/dashboard-template.html",
-    "advanced_data_template": "05_OUTPUT_TEMPLATES/checkyourself-dashboard.html",
-    "token_policy": "Generate only on request; compact summary only."
+    "inline_fallback": "10_DASHBOARD/inline-dashboard.md",
+    "token_policy": "Generate rich HTML/CSS only on request; otherwise use compact Markdown/inline summary."
   },
   "context_control": {
     "default_output": "compact_markdown",
@@ -70,9 +71,8 @@
   "token_efficiency_policy": "progressive-context-loading",
   "dashboard_modes": [
     "off",
-    "data",
+    "inline_markdown",
     "html"
   ],
-  "complete_findings_remain_source_of_truth": true,
-  "html_dashboard_template": "05_OUTPUT_TEMPLATES/checkyourself-dashboard.html"
+  "complete_findings_remain_source_of_truth": true
 }

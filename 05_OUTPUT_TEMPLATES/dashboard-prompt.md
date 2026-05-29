@@ -11,34 +11,35 @@ During the default diagnostic, produce:
 1. the Markdown Production Reality Report;
 2. the complete remediation backlog;
 3. the learning-plan seeds;
-4. a short offer: “I can also generate the optional HTML dashboard.”
+4. a short offer: “I can also generate the optional HTML dashboard or a compact inline dashboard.”
 
 ## When the user asks for the dashboard
 
-Prefer the lowest-token path that works in the current environment:
+Prefer the lowest-token path that matches the user's request:
 
-### Default CSS-only path
+Use the single canonical HTML/CSS dashboard for rich visual output. Use the
+inline Markdown fallback when the user wants dashboard-shaped output without an
+HTML file.
+
+### Single canonical HTML/CSS dashboard
 
 1. Copy `10_DASHBOARD/dashboard-template.html` to `10_DASHBOARD/output/CHECKYOURSELF_DASHBOARD.html` or another user-approved output path.
 2. Replace the placeholders from the existing Production Reality Report.
 3. Do not add JavaScript.
+4. Use this when the user asks for `dashboard yes`, a visual dashboard, or an HTML report.
 
-### Advanced data-template path when files can be edited
+### Inline Markdown fallback
 
-This is the advanced data-template path.
-
-1. Copy `05_OUTPUT_TEMPLATES/checkyourself-dashboard.html` to `CHECKYOURSELF_DASHBOARD.html`.
-2. Replace only the JSON inside `<script id="checkyourself-data" type="application/json">`.
-3. Use this path only when the user asks for dashboard data mode, wants an
-   editable local template, or explicitly approves JavaScript.
-4. Do not rewrite the whole HTML template unless necessary.
+1. Use `10_DASHBOARD/inline-dashboard.md`.
+2. Return it in chat or write it to `10_DASHBOARD/output/CHECKYOURSELF_DASHBOARD.md`.
+3. Use this when the user asks for `dashboard inline`, declines HTML/CSS, or needs the most token-efficient dashboard-shaped output.
 
 ### Best path in chat-only mode
 
 Return either:
 
-1. a compact JSON object matching `dashboard-data.example.json`, if the user has the template; or
-2. one self-contained HTML file if the user specifically asks for the full dashboard file.
+1. the inline Markdown dashboard if the user wants compact output; or
+2. one self-contained HTML/CSS file if the user specifically asks for the full dashboard file.
 
 ## Dashboard data rules
 
@@ -52,6 +53,9 @@ The dashboard must visualize:
 - fix progress/status;
 - bespoke learning plan with plain-English next actions and live source/video
   links for each priority.
+- bilingual labels/content when the user or codebase is not English-only.
+- neurodivergence-accessible structure: short sections, predictable labels,
+  high contrast, no flashing, and no information conveyed by color alone.
 
 The dashboard must not replace the full report. It is a visual companion.
 

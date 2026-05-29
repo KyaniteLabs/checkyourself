@@ -1,13 +1,25 @@
 # Changelog
 
+## 1.4.2
+
+- Collapsed dashboard guidance to one canonical self-contained HTML/CSS
+  dashboard and one compact inline Markdown fallback.
+- Removed the older JavaScript/data-template dashboard fork and duplicate
+  sample dashboard files.
+- Redesigned the real dogfood dashboard using the KyaniteLabs black mineral
+  instrument style, with cyan/magenta/amber signal roles.
+- Added bilingual and neurodivergence-accessibility requirements for dashboard
+  and learning-plan outputs.
+- Added trusted YouTube video recommendations to learning priorities alongside
+  written source links.
+
 ## 1.4.1
 
 - Added a real CheckYourself dogfood report, recheck report, remediation log,
   learning-plan output, dashboard data, rendered dashboards, and dashboard
   screenshot proof.
 - Fixed scanner-generated project-context output so it is ignored by default.
-- Aligned manifest dashboard metadata with the CSS-only default dashboard path
-  and advanced data-template path.
+- Aligned manifest dashboard metadata with the dashboard docs.
 - Expanded GitHub Actions with whitespace, Python compile, and
   gitleaks-if-available checks.
 - Added a dogfood fixture for shallow-diagnostic regression checks.
@@ -18,7 +30,7 @@
 
 - Added public repository validation with `tools/validate_public.py`.
 - Added GitHub Actions validation for public repo health.
-- Made the dashboard path explicit: CSS-only by default, advanced data-template only when requested or approved.
+- Made the dashboard path explicit.
 - Aligned the release boundary around the root public product plus private Creator Kit sidecar.
 - Updated manifest and launch metadata for the public-ready repo shape.
 

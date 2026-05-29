@@ -43,6 +43,15 @@ create a visual dashboard
 
 The dashboard should summarize the existing report. It should not trigger a new audit.
 
+If the user wants a dashboard-shaped summary without the HTML file, use:
+
+```text
+dashboard inline
+DASHBOARD=inline
+```
+
+That path returns the compact Markdown dashboard fallback.
+
 ## Never hide findings to save tokens
 
 Token efficiency means compact representation, not incomplete auditing.

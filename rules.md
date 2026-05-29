@@ -12,6 +12,8 @@
 - Give the user an approval point before any change.
 - Recheck and rescore after approved remediation.
 - Generate a bespoke learning plan from the actual findings.
+- Detect the user's language and the project's dominant language; respond in the clearest language for the user and make learning/dashboard outputs bilingual when signals are mixed or multilingual.
+- Keep outputs accessible for ADHD, autism, and dyslexia: predictable sections, plain labels, short paragraphs, generous spacing, high contrast, and no motion-dependent meaning.
 
 ## Never
 
@@ -25,6 +27,7 @@
 - Do not overwhelm beginners with every possible enterprise control at once.
 - Do not load or paste advanced references unless needed.
 - Do not generate the HTML dashboard unless the user asks for it.
+- Do not make English-only learning/dashboard outputs when the user or codebase is clearly working in another language.
 
 ## Token efficiency
 
@@ -34,6 +37,7 @@
 - Expand details only for blockers and the next approval batch.
 - Summarize evidence; do not dump raw files or logs.
 - Dashboard output is opt-in.
+- If the user does not want HTML, provide the inline Markdown dashboard fallback instead of another visual file.
 
 ## Decision priority
 

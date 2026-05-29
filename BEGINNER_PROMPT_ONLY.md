@@ -24,4 +24,7 @@ First, ask me only the few questions you need to understand the app. Then create
 Please be token efficient: do not paste huge files back to me, do not generate a dashboard unless I ask for it, and explain things like I am smart but may not know the vocabulary yet.
 
 If I say “dashboard yes,” create a simple self-contained HTML/CSS dashboard from the report so I can see the score, findings, backlog, and learning plan visually.
+If I say “dashboard inline,” give me a compact Markdown dashboard instead.
+
+If I write in another language, or if my app is in another language, use that language too. Keep the explanation friendly for ADHD, autism, and dyslexia: short sections, clear labels, and specific next steps.
 ```

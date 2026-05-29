@@ -8,10 +8,9 @@ Generate the HTML/CSS dashboard only when the user explicitly asks for it, or wh
 dashboard yes
 ```
 
-Use `10_DASHBOARD/dashboard-template.html` for the default CSS-only dashboard.
-Use `05_OUTPUT_TEMPLATES/checkyourself-dashboard.html` only for the advanced
-data-template path when the user asks for dashboard data mode or approves
-JavaScript.
+Use `10_DASHBOARD/dashboard-template.html` for the single canonical HTML/CSS
+dashboard. If the user does not want HTML/CSS, use
+`10_DASHBOARD/inline-dashboard.md`.
 
 ## Rules
 
@@ -23,4 +22,9 @@ JavaScript.
 - Show the safest next approval batch, but make clear the backlog continues after that batch.
 - Use one self-contained HTML file with inline CSS and no external assets.
 - Prefer short sentences and plain language.
+- Make labels and learning sections bilingual when the user or codebase is not
+  English-only.
+- Design for ADHD, autism, and dyslexia: predictable structure, generous
+  spacing, high contrast, no flashing, no dense walls of text, and text labels
+  in addition to color.
 - If the report is very large, summarize P2/P3 rows compactly and offer a second dashboard page only if the user asks.

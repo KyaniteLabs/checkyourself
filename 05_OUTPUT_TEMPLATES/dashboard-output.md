@@ -7,13 +7,11 @@ Use it only when the user asks for a visual dashboard, HTML output, or a more re
 ## Modes
 
 - `DASHBOARD=off` — default. Produce the Markdown report only.
-- `DASHBOARD=data` — produce compact dashboard JSON only.
+- `DASHBOARD=inline` — produce the compact Markdown dashboard fallback.
 - `DASHBOARD=html` — produce one self-contained HTML/CSS dashboard after the report. Use this only if the user explicitly wants the AI to write the HTML.
 
-For HTML output, default to the CSS-only template in `10_DASHBOARD/`. Use
-`05_OUTPUT_TEMPLATES/checkyourself-dashboard.html` only as the advanced local
-data-template path when the user asks for dashboard data mode, wants an editable
-template, or explicitly approves JavaScript.
+For HTML output, use the single canonical template in `10_DASHBOARD/`. Do not
+create a second JavaScript/data-template dashboard.
 
 ## Dashboard rule
 
@@ -32,15 +30,18 @@ A useful dashboard should show:
 5. coverage status by production surface;
 6. complete findings table, using compact finding IDs;
 7. remediation waves and current next approval request;
-8. learning-plan priorities.
+8. learning-plan priorities with source and YouTube links;
+9. bilingual labels/content when language signals call for it.
 
 ## Token-efficiency constraints
 
 - Do not generate HTML unless requested.
 - Do not duplicate every paragraph from the report.
 - Keep explanations short and link them to finding IDs.
-- If generating HTML directly, keep it self-contained, CSS-only, and concise.
+- If generating HTML directly, keep it self-contained, HTML/CSS-only, and concise.
 - No external scripts, no external fonts, no remote images, and no analytics.
+- If the user declines HTML/CSS, use `10_DASHBOARD/inline-dashboard.md`.
+- Keep structure accessible for ADHD, autism, and dyslexia.
 
 ## No process leak
 
