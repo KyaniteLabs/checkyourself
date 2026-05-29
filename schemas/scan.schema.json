@@ -19,7 +19,8 @@
     "findings",
     "counts",
     "suppression_count",
-    "tree"
+    "tree",
+    "public_repo_scope_guardrails"
   ],
   "properties": {
     "tool": { "type": "string" },
@@ -75,6 +76,11 @@
       }
     },
     "suppression_count": { "type": "integer", "minimum": 0 },
-    "tree": { "type": "array", "items": { "type": "string" } }
+    "tree": { "type": "array", "items": { "type": "string" } },
+    "public_repo_scope_guardrails": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    }
   }
 }

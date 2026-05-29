@@ -8,6 +8,7 @@
     "version",
     "generated_at",
     "commands",
+    "public_repo_scope_guardrails",
     "coverage_surfaces",
     "scoring",
     "schemas",
@@ -31,6 +32,11 @@
           "output_schema": { "type": "string" }
         }
       }
+    },
+    "public_repo_scope_guardrails": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
     },
     "coverage_surfaces": { "type": "array", "items": { "type": "object" } },
     "scoring": { "type": "object" },
