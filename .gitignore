@@ -1,5 +1,6 @@
 .DS_Store
 .omx/
+.omc/
 .git/
 __pycache__/
 *.py[cod]
@@ -13,3 +14,4 @@ CHECKYOURSELF_REPORT.md
 CHECKYOURSELF_LEARNING_PLAN.md
 CHECKYOURSELF_RECHECK.md
 CHECKYOURSELF_*.generated.md
+CHECKYOURSELF_*.generated.json
