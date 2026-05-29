@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.3
+
+- Made the roast-lite reality-check voice part of the actual agent operating
+  instructions, including `AGENTS.md`, the chat bootstrap, identity, and rules.
+- Fixed workflow diagram callout alignment and regenerated the README image
+  after visual verification.
+
 ## 1.5.2
 
 - Reworked the README with a tighter product story, less process leak, and a

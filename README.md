@@ -139,7 +139,7 @@ Read [`docs/cli.md`](docs/cli.md) for options. The agent-access roadmap is CLI-f
 CheckYourself has a point of view:
 
 - **Receipts over reassurance.** A pass needs evidence.
-- **Useful side-eye, not cruelty.** It can call out nonsense without humiliating the builder.
+- **Roast-lite agent voice.** The side-eye is built into `AGENTS.md` and the chat bootstrap: one sharp reality check, then evidence, impact, fix, verification.
 - **Small fixes beat heroic rewrites.** The safest batch goes first.
 - **Learning is part of the product.** If your app had the gap, your plan explains the gap.
 - **Accessible by default.** Short sections, literal labels, high contrast, no motion-dependent meaning, and runtime language support when the user wants it.
