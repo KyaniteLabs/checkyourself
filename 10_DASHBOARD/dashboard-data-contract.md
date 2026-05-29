@@ -41,5 +41,11 @@ remediation_waves:
 next_approval: ""
 learning_priorities:
   - concept: ""
+    plain_english: ""
     why: ""
+    triggered_by: []
+    do_this_next: ""
+    success_signal: ""
+    resource_title: ""
+    resource_url: ""
 ```

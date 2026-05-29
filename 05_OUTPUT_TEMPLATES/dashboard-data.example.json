@@ -62,8 +62,14 @@
   "learning_plan": [
     {
       "concept": "Authorization vs authentication",
+      "plain_english": "Logging in proves who someone is. Authorization proves what they are allowed to do after they log in.",
       "why": "Your app needs proof that logged-in users can only do allowed actions.",
-      "practice": "Write one negative test where User A tries to access User B's data."
+      "practice": "Write one negative test where User A tries to access User B's data.",
+      "triggered_by": ["CY-001"],
+      "do_this_next": "Find one protected action and describe who is allowed to perform it.",
+      "success_signal": "The app blocks a user from seeing or changing someone else's data.",
+      "resource_title": "OWASP: Authorization Cheat Sheet",
+      "resource_url": "https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html"
     }
   ]
 }

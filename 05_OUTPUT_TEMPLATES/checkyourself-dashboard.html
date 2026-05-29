@@ -147,8 +147,8 @@
     {"order": 3, "id": "CY-003", "severity": "P1", "fix": "Add rollback instructions for deployment", "status": "open", "verification": "Dry-run rollback plan"}
   ],
   "learning_plan": [
-    {"concept": "Authorization vs authentication", "why": "Your app needs proof that logged-in users can only do allowed actions.", "practice": "Write one negative test where User A tries to access User B's data."},
-    {"concept": "Secrets management", "why": "Your app needs clear boundaries between public config and private secrets.", "practice": "Create a safe .env.example and verify no secret values are committed."}
+    {"concept": "Authorization vs authentication", "plain_english": "Logging in proves who someone is. Authorization proves what they are allowed to do after they log in.", "why": "Your app needs proof that logged-in users can only do allowed actions.", "practice": "Write one negative test where User A tries to access User B's data.", "resource_title": "OWASP: Authorization Cheat Sheet", "resource_url": "https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html"},
+    {"concept": "Secrets management", "plain_english": "Secrets are private keys and passwords. They should not appear in public code, logs, screenshots, or dashboards.", "why": "Your app needs clear boundaries between public config and private secrets.", "practice": "Create a safe .env.example and verify no secret values are committed.", "resource_title": "GitHub Docs: Removing sensitive data", "resource_url": "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository"}
   ]
 }
 </script>
@@ -184,7 +184,8 @@
   byId('coverageTable').innerHTML = `<thead><tr><th>Surface</th><th>Status</th><th>Evidence</th><th>Findings</th></tr></thead><tbody>${coverage.map(x => `<tr><td>${esc(x.surface)}</td><td><span class="pill">${esc(x.status)}</span></td><td>${esc(x.evidence)}</td><td>${esc((x.finding_ids||[]).join(', '))}</td></tr>`).join('')}</tbody>`;
 
   const lp = data.learning_plan || [];
-  byId('learningPlan').innerHTML = lp.length ? lp.map(x => `<div class="item"><div class="item-title"><span>${esc(x.concept)}</span></div><p><strong>Why:</strong> ${esc(x.why)}</p><p><strong>Practice:</strong> ${esc(x.practice)}</p></div>`).join('') : '<p class="empty">No learning plan items yet.</p>';
+  const learningLink = (x) => x.resource_url ? `<p><strong>Learn from:</strong> <a href="${esc(x.resource_url)}">${esc(x.resource_title || 'Open resource')}</a></p>` : '';
+  byId('learningPlan').innerHTML = lp.length ? lp.map(x => `<div class="item"><div class="item-title"><span>${esc(x.concept)}</span></div><p>${esc(x.plain_english || '')}</p><p><strong>Why:</strong> ${esc(x.why)}</p><p><strong>Practice:</strong> ${esc(x.practice || x.do_this_next || '')}</p><p><strong>Success signal:</strong> ${esc(x.success_signal || '')}</p>${learningLink(x)}</div>`).join('') : '<p class="empty">No learning plan items yet.</p>';
 })();
 </script>
 </body>

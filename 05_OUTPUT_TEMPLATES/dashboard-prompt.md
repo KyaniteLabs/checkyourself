@@ -50,7 +50,8 @@ The dashboard must visualize:
 - coverage sweep;
 - complete remediation backlog;
 - fix progress/status;
-- bespoke learning plan.
+- bespoke learning plan with plain-English next actions and live source/video
+  links for each priority.
 
 The dashboard must not replace the full report. It is a visual companion.
 

@@ -38,6 +38,7 @@ The plan must include:
 - 7-day practical plan;
 - 30-day deeper plan;
 - project-based exercises;
+- one live source or video link for each top learning priority;
 - terms glossary;
 - what to ignore for now;
 - recommended next diagnostic after learning.
