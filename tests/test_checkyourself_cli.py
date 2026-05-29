@@ -148,7 +148,59 @@ class CheckYourselfCliTests(unittest.TestCase):
         self.assertNotIn(token, result.stdout)
         data = json.loads(result.stdout)
         self.assertEqual(data["counts"]["P0"], 1)
-        self.assertIn("value omitted", data["findings"][0]["evidence"][0])
+        self.assertIn("confidence: high", data["findings"][0]["evidence"][0])
+        self.assertIn("app.py:1", data["findings"][0]["evidence"][0])
+
+    def test_schema_token_field_does_not_create_p0_without_credential_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            src = project / "src" / "dispatcher"
+            src.mkdir(parents=True)
+            (src / "tool-registry.ts").write_text(
+                "\n".join([
+                    'const feedbackTokenField = { type: "string", description: "Token for recording actual hours" };',
+                    'const schema = { feedbackToken: "aaaaaaaaaaaaaaaaaaaaaaaa" };',
+                    "",
+                ]),
+                encoding="utf-8",
+            )
+            result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(data["counts"]["P0"], 0)
+        self.assertTrue(
+            any("secret-like field" in finding["finding"].lower() for finding in data["findings"]),
+            data["findings"],
+        )
+
+    def test_checkyourself_yml_can_suppress_reviewed_finding_without_counting_it(self) -> None:
+        token = "sk-" + ("s" * 32)
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "app.py").write_text(f'API_KEY = "{token}"\n', encoding="utf-8")
+            (project / ".checkyourself.yml").write_text(
+                "\n".join([
+                    "version: 1",
+                    "suppress:",
+                    "  - id: CY-001",
+                    "    reason: test fixture uses a fake credential shape",
+                    '    files: ["app.py"]',
+                    "    reviewed_by: unit-test",
+                    '    reviewed_at: "2026-05-29"',
+                    "",
+                ]),
+                encoding="utf-8",
+            )
+            result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn(token, result.stdout)
+        data = json.loads(result.stdout)
+        self.assertEqual(data["counts"]["P0"], 0)
+        suppressed = [finding for finding in data["findings"] if finding["status"] == "suppressed"]
+        self.assertEqual([finding["id"] for finding in suppressed], ["CY-001"])
+        self.assertEqual(data["suppression_count"], 1)
 
     def test_package_scripts_are_redacted_from_json_and_markdown(self) -> None:
         token = "sk-" + ("y" * 32)
@@ -213,6 +265,77 @@ class CheckYourselfCliTests(unittest.TestCase):
         self.assertIn("score", tool_names)
         structured = responses[2]["result"]["structuredContent"]
         self.assertEqual(structured["schema"], "checkyourself-capabilities/1")
+
+    def test_score_without_coverage_uses_scan_estimate_and_writes_history(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "app.py").write_text("print('hello')\n", encoding="utf-8")
+            (project / "test_app.py").write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+            workflow = project / ".github" / "workflows"
+            workflow.mkdir(parents=True)
+            (workflow / "ci.yml").write_text("name: ci\non: [push]\njobs: {}\n", encoding="utf-8")
+            scan_result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+            self.assertEqual(scan_result.returncode, 0, scan_result.stderr)
+            scan_path = project / "scan.json"
+            scan_path.write_text(scan_result.stdout, encoding="utf-8")
+
+            score_result = self.run_cli("score", "--findings", str(scan_path), "--format", "json")
+
+            self.assertEqual(score_result.returncode, 0, score_result.stderr)
+            score = json.loads(score_result.stdout)
+            self.assertEqual(score["score_mode"], "scan-derived-estimate")
+            self.assertGreaterEqual(score["score"], 90)
+            self.assertFalse(score["coverage_complete"])
+            self.assertEqual(score["confidence"], "low")
+            self.assertTrue(score["manual_evidence_needed"])
+            history = json.loads((project / ".checkyourself-score-history.json").read_text(encoding="utf-8"))
+            self.assertEqual(history[-1]["score"], score["score"])
+
+    def test_coverage_emit_writes_default_file_in_text_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            result = self.run_cli("coverage", "--emit", cwd=project)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("Wrote coverage skeleton", result.stdout)
+            coverage_path = project / "CHECKYOURSELF_COVERAGE.generated.json"
+            self.assertTrue(coverage_path.exists())
+            coverage = json.loads(coverage_path.read_text(encoding="utf-8"))
+            self.assertEqual(coverage["schema"], "checkyourself-coverage/1")
+
+    def test_diagnostic_alias_emits_scan_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "app.py").write_text("print('hello')\n", encoding="utf-8")
+            result = self.run_cli("diagnostic", str(project), "--format", "json", "--no-write")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["schema"], "checkyourself-scan/1")
+
+    def test_deep_scan_flags_mutable_github_actions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            workflow = project / ".github" / "workflows"
+            workflow.mkdir(parents=True)
+            (workflow / "ci.yml").write_text(
+                "name: ci\non: [push]\njobs:\n  test:\n    steps:\n      - uses: actions/checkout@v4\n",
+                encoding="utf-8",
+            )
+            result = self.run_cli("scan", str(project), "--deep", "--format", "json", "--no-write")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertTrue(
+            any("mutable github action" in finding["finding"].lower() for finding in data["findings"]),
+            data["findings"],
+        )
+
+    def test_repository_includes_composite_github_action(self) -> None:
+        action = ROOT / ".github" / "actions" / "checkyourself" / "action.yml"
+        self.assertTrue(action.exists())
+        text = action.read_text(encoding="utf-8")
+        self.assertIn("runs:", text)
+        self.assertIn("fail-on-p0", text)
 
 
 if __name__ == "__main__":

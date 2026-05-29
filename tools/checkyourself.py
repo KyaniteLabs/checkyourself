@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import fnmatch
 import json
 import os
 import re
@@ -32,6 +33,9 @@ SUPPORTED_MCP_PROTOCOLS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_DIR = ROOT / "schemas"
+DEFAULT_COVERAGE_PATH = "CHECKYOURSELF_COVERAGE.generated.json"
+DEFAULT_SCORE_HISTORY_PATH = ".checkyourself-score-history.json"
+CONFIG_NAMES = (".checkyourself.yml", ".checkyourself.yaml", ".checkyourself.json")
 
 IGNORED_DIRS = {
     ".git", "node_modules", ".next", "dist", "build", "coverage", ".venv", "venv",
@@ -121,7 +125,7 @@ RISK_PATH_HINTS = [
 
 ENV_EXAMPLE_NAMES = {".env.example", ".env.sample", ".env.template", "env.example"}
 SEVERITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
-RESOLVED_STATUSES = {"fixed", "accepted-risk", "deferred", "not-applicable"}
+RESOLVED_STATUSES = {"fixed", "accepted-risk", "deferred", "not-applicable", "suppressed"}
 
 COVERAGE_SURFACES = [
     ("S01", "Product purpose, users, and harm model", "context"),
@@ -235,6 +239,130 @@ def redact_sensitive_text(value: str) -> str:
     return redacted
 
 
+def compact_context(line: str, limit: int = 140) -> str:
+    context = " ".join(redact_sensitive_text(line).strip().split())
+    if len(context) > limit:
+        return context[: limit - 3] + "..."
+    return context
+
+
+def secret_evidence(
+    rp: str,
+    line_no: int,
+    tag: str,
+    match_type: str,
+    confidence: str,
+    line: str,
+) -> str:
+    return (
+        f"{rp}:{line_no} ({tag}; matched: {match_type}; "
+        f"confidence: {confidence}; context: \"{compact_context(line)}\")"
+    )
+
+
+def parse_scalar(value: str) -> Any:
+    value = value.strip()
+    if not value:
+        return ""
+    if value.startswith("[") and value.endswith("]"):
+        inner = value[1:-1].strip()
+        if not inner:
+            return []
+        return [str(parse_scalar(part)) for part in inner.split(",")]
+    if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+        return value[1:-1]
+    if value.lower() in {"true", "false"}:
+        return value.lower() == "true"
+    return value
+
+
+def parse_minimal_yaml_suppressions(text: str) -> List[dict]:
+    suppressions: List[dict] = []
+    current: Optional[dict] = None
+    in_suppress = False
+
+    for raw_line in text.splitlines():
+        line = raw_line.split("#", 1)[0].rstrip()
+        if not line.strip():
+            continue
+        stripped = line.strip()
+        if stripped == "suppress:":
+            in_suppress = True
+            continue
+        if not in_suppress:
+            continue
+        if stripped.startswith("- "):
+            if current:
+                suppressions.append(current)
+            current = {}
+            stripped = stripped[2:].strip()
+            if stripped and ":" in stripped:
+                key, value = stripped.split(":", 1)
+                current[key.strip()] = parse_scalar(value)
+            continue
+        if current is not None and ":" in stripped:
+            key, value = stripped.split(":", 1)
+            current[key.strip()] = parse_scalar(value)
+
+    if current:
+        suppressions.append(current)
+    return suppressions
+
+
+def load_checkyourself_config(root: Path) -> dict:
+    for name in CONFIG_NAMES:
+        path = root / name
+        if not path.exists():
+            continue
+        if path.suffix == ".json":
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                return data if isinstance(data, dict) else {"suppress": []}
+            except json.JSONDecodeError:
+                return {"suppress": [], "config_error": f"{name} could not be parsed as JSON"}
+        return {"suppress": parse_minimal_yaml_suppressions(path.read_text(encoding="utf-8"))}
+    return {"suppress": []}
+
+
+def evidence_path(evidence: str) -> str:
+    first = evidence.split(" (", 1)[0]
+    if ":" in first:
+        path, maybe_line = first.rsplit(":", 1)
+        if maybe_line.isdigit():
+            return path
+    return first
+
+
+def suppression_matches(finding: dict, suppression: dict) -> bool:
+    sid = str(suppression.get("id") or "").strip()
+    files = suppression.get("files") or suppression.get("paths") or []
+    if not sid and not files:
+        return False
+    if sid and sid not in {str(finding.get("id")), str(finding.get("finding")), str(finding.get("title"))}:
+        return False
+    if isinstance(files, str):
+        files = [files]
+    if files:
+        paths = [evidence_path(str(item)) for item in finding.get("evidence") or []]
+        if not any(fnmatch.fnmatch(path, pattern) or path == pattern for path in paths for pattern in files):
+            return False
+    return True
+
+
+def apply_suppressions(findings: List[dict], suppressions: List[dict]) -> List[dict]:
+    for finding in findings:
+        for suppression in suppressions:
+            if suppression_matches(finding, suppression):
+                finding["status"] = "suppressed"
+                finding["suppression"] = {
+                    "reason": str(suppression.get("reason") or "reviewed suppression"),
+                    "reviewed_by": str(suppression.get("reviewed_by") or ""),
+                    "reviewed_at": str(suppression.get("reviewed_at") or ""),
+                }
+                break
+    return findings
+
+
 def iter_files(root: Path, limit: int = 6000) -> List[Path]:
     files: List[Path] = []
     for dirpath, dirnames, filenames in os.walk(root):
@@ -297,10 +425,11 @@ def gitignore_entries(root: Path) -> str:
     return read_text(gi).lower() if gi.exists() else ""
 
 
-def scan_env_and_secrets(root: Path, files: List[Path]) -> Tuple[List[str], List[str], List[str]]:
+def scan_env_and_secrets(root: Path, files: List[Path]) -> Tuple[List[str], List[str], List[str], List[str]]:
     env_files: List[str] = []
     real_env_files: List[str] = []
-    suspicious: List[str] = []
+    suspicious_high: List[str] = []
+    suspicious_low: List[str] = []
     for p in files:
         rp = rel(root, p)
         name = p.name.lower()
@@ -312,12 +441,40 @@ def scan_env_and_secrets(root: Path, files: List[Path]) -> Tuple[List[str], List
             env_files.append(rp)
         if p.suffix.lower() in TEXT_EXTENSIONS or name.startswith(".env"):
             text = read_text(p, max_chars=60_000)
-            shaped = any(r.search(text) for r in SECRET_SHAPE_RES)
-            generic = bool(SECRET_NAME_RE.search(text) and SECRET_VALUE_RE.search(text))
-            if shaped or generic:
-                tag = "high-confidence credential shape" if shaped else "possible hardcoded secret"
-                suspicious.append(f"{rp} ({tag}; value omitted)")
-    return sorted(set(env_files)), sorted(set(real_env_files)), sorted(set(suspicious))[:50]
+            high_seen = False
+            low_seen = False
+            for line_no, line in enumerate(text.splitlines(), start=1):
+                shaped = any(r.search(line) for r in SECRET_SHAPE_RES)
+                value_match = SECRET_VALUE_RE.search(line)
+                name_match = SECRET_NAME_RE.search(line)
+                if shaped:
+                    suspicious_high.append(secret_evidence(
+                        rp,
+                        line_no,
+                        "high-confidence credential shape",
+                        "credential_shape",
+                        "high",
+                        line,
+                    ))
+                    high_seen = True
+                elif value_match and name_match:
+                    suspicious_low.append(secret_evidence(
+                        rp,
+                        line_no,
+                        "possible secret-like assignment",
+                        "secret_name_and_assignment",
+                        "low",
+                        line,
+                    ))
+                    low_seen = True
+                if high_seen and low_seen:
+                    break
+    return (
+        sorted(set(env_files)),
+        sorted(set(real_env_files)),
+        sorted(set(suspicious_high))[:50],
+        sorted(set(suspicious_low))[:50],
+    )
 
 
 def find_tests(root: Path, files: List[Path]) -> List[str]:
@@ -340,6 +497,64 @@ def find_ci(root: Path) -> List[str]:
         if (root / f).exists():
             ci.append(f)
     return sorted(set(ci))
+
+
+def run_deep_checks(root: Path, ci: List[str], gitignore: str) -> List[Finding]:
+    findings: List[Finding] = []
+    mutable_actions: List[str] = []
+    action_re = re.compile(r"uses:\s*['\"]?([^@\s'\"]+)@([^@\s'\"]+)", re.I)
+    pinned_sha_re = re.compile(r"^[0-9a-f]{40}$", re.I)
+
+    for workflow in ci:
+        if not workflow.startswith(".github/workflows/"):
+            continue
+        path = root / workflow
+        for line_no, line in enumerate(read_text(path).splitlines(), start=1):
+            match = action_re.search(line)
+            if not match:
+                continue
+            action, ref = match.groups()
+            if not pinned_sha_re.match(ref):
+                mutable_actions.append(
+                    f"{workflow}:{line_no} (uses {action}@{ref}; pin to a full commit SHA)"
+                )
+
+    if mutable_actions:
+        findings.append(Finding(
+            "CY-000",
+            "P2",
+            "Mutable GitHub Action references",
+            "One or more workflow steps use a version tag instead of an immutable commit SHA. "
+            "A compromised or moved tag can change your CI behavior without a code diff.",
+            mutable_actions[:50],
+            category="C6",
+            recommended_fix="Pin each third-party action to a full commit SHA and leave a version comment for readability.",
+        ))
+
+    if ci and not any((root / path).exists() for path in (".github/dependabot.yml", ".github/dependabot.yaml", "renovate.json")):
+        findings.append(Finding(
+            "CY-000",
+            "P3",
+            "No dependency update automation detected",
+            "CI exists, but no Dependabot or Renovate configuration was found. Dependency risk can silently age.",
+            [".github/dependabot.yml or renovate.json not found"],
+            category="C6",
+            recommended_fix="Add Dependabot or Renovate for the detected package ecosystems.",
+        ))
+
+    missing_gitignore = [pattern for pattern in (".env", "*.pem", "*.key") if pattern.lower() not in gitignore]
+    if missing_gitignore:
+        findings.append(Finding(
+            "CY-000",
+            "P3",
+            "Sensitive file patterns missing from .gitignore",
+            "Common local secret file patterns are not explicitly ignored.",
+            [f"missing gitignore pattern: {pattern}" for pattern in missing_gitignore],
+            category="C3",
+            recommended_fix="Add local secret file patterns to `.gitignore` and verify no matching files were previously committed.",
+        ))
+
+    return findings
 
 
 def path_hints(root: Path, files: List[Path]) -> Dict[str, List[str]]:
@@ -375,11 +590,13 @@ def tree_sample(root: Path, max_lines: int = 140) -> List[str]:
 def build_findings(
     real_env_files: List[str],
     env_files: List[str],
-    suspicious: List[str],
+    suspicious_high: List[str],
+    suspicious_low: List[str],
     tests: List[str],
     ci: List[str],
     gitignore: str,
     deps_found: Dict[str, List[str]],
+    deep_findings: Optional[List[Finding]] = None,
 ) -> List[Finding]:
     findings: List[Finding] = []
     n = 0
@@ -389,14 +606,24 @@ def build_findings(
         n += 1
         return f"CY-{n:03d}"
 
-    if suspicious:
+    if suspicious_high:
         findings.append(Finding(
-            nid(), "P0", "Possible hardcoded secrets in source",
-            "One or more files contain patterns that look like live credentials. "
+            nid(), "P0", "High-confidence credential shape in source",
+            "One or more files contain a credential-shaped value. "
             "Rotate anything real, move it to environment variables, and confirm it is gitignored.",
-            suspicious,
+            suspicious_high,
             category="C3",
             recommended_fix="Rotate anything real, remove it from source, load it from environment variables, and confirm history exposure.",
+        ))
+
+    if suspicious_low:
+        findings.append(Finding(
+            nid(), "P2", "Possible secret-like field without credential shape",
+            "A file contains a secret-like assignment, but no known credential shape was found. "
+            "Review it before renaming fields or accepting it as benign.",
+            suspicious_low,
+            category="C3",
+            recommended_fix="Verify whether the value is a credential. If it is benign, add a reviewed `.checkyourself.yml` suppression; if real, move it to environment variables.",
         ))
 
     env_ignored = ".env" in gitignore
@@ -457,30 +684,53 @@ def build_findings(
             recommended_fix="Add payment success, failure, idempotency, and webhook signature tests.",
         ))
 
+    for finding in deep_findings or []:
+        n += 1
+        finding.id = f"CY-{n:03d}"
+        findings.append(finding)
+
     findings.sort(key=lambda f: (SEVERITY_ORDER.get(f.severity, 9), f.id))
     return findings
 
 
-def scan(root: Path) -> dict:
+def scan(root: Path, deep: bool = False) -> dict:
     root = root.resolve()
     files = iter_files(root)
     stack_signals, scripts, deps_found = detect_stack(root)
-    env_files, real_env_files, suspicious = scan_env_and_secrets(root, files)
+    env_files, real_env_files, suspicious_high, suspicious_low = scan_env_and_secrets(root, files)
     tests = find_tests(root, files)
     ci = find_ci(root)
     hints = path_hints(root, files)
     gitignore = gitignore_entries(root)
-    findings = build_findings(real_env_files, env_files, suspicious, tests, ci, gitignore, deps_found)
+    deep_results = run_deep_checks(root, ci, gitignore) if deep else []
+    findings = build_findings(
+        real_env_files,
+        env_files,
+        suspicious_high,
+        suspicious_low,
+        tests,
+        ci,
+        gitignore,
+        deps_found,
+        deep_results,
+    )
+    config = load_checkyourself_config(root)
+    finding_dicts = apply_suppressions([f.to_dict() for f in findings], config.get("suppress") or [])
 
     counts = {sev: 0 for sev in ("P0", "P1", "P2", "P3")}
-    for f in findings:
-        counts[f.severity] = counts.get(f.severity, 0) + 1
+    suppression_count = 0
+    for f in finding_dicts:
+        if f.get("status") == "suppressed":
+            suppression_count += 1
+            continue
+        counts[f["severity"]] = counts.get(f["severity"], 0) + 1
 
     return {
         "tool": TOOL_NAME,
         "schema": SCAN_SCHEMA_ID,
         "generated_at": now_iso(),
         "project": str(root),
+        "deep": deep,
         "files_scanned": len(files),
         "stack_signals": stack_signals,
         "dependencies": {k: sorted(set(v)) for k, v in sorted(deps_found.items())},
@@ -489,8 +739,9 @@ def scan(root: Path) -> dict:
         "tests": tests,
         "ci": ci,
         "risk_surfaces": hints,
-        "findings": [f.to_dict() for f in findings],
+        "findings": finding_dicts,
         "counts": counts,
+        "suppression_count": suppression_count,
         "tree": tree_sample(root),
     }
 
@@ -771,6 +1022,60 @@ def category_coverage(coverage_data: Optional[dict]) -> Tuple[Dict[str, dict], b
     return category_state, complete
 
 
+def missing_manual_evidence(coverage_by_category: Dict[str, dict]) -> List[dict]:
+    needed: List[dict] = []
+    for cid, (name, _weight) in SCORE_CATEGORIES.items():
+        state = coverage_by_category[cid]
+        if state["status"] in {"MissingCoverage", "Unknown"}:
+            needed.append({
+                "category": cid,
+                "surface": name,
+                "needed": state["missing_evidence"] or ["manual coverage evidence"],
+            })
+    return needed
+
+
+def inferred_coverage_from_scan(scan_data: dict, findings: List[dict]) -> Dict[str, dict]:
+    category_state: Dict[str, dict] = {
+        cid: {
+            "status": "MissingCoverage",
+            "evidence_reviewed": [],
+            "missing_evidence": ["manual coverage evidence still needed"],
+            "surfaces": [],
+        }
+        for cid in SCORE_CATEGORIES
+    }
+    open_findings = [f for f in findings if f.get("status") not in RESOLVED_STATUSES]
+
+    def set_state(cid: str, status: str, evidence: List[str], missing: List[str], surfaces: List[str]) -> None:
+        category_state[cid] = {
+            "status": status,
+            "evidence_reviewed": evidence,
+            "missing_evidence": missing,
+            "surfaces": surfaces,
+        }
+
+    c3_findings = [f for f in open_findings if f.get("category") == "C3"]
+    if c3_findings:
+        set_state("C3", "Finding", [f["id"] for f in c3_findings], [], ["S08"])
+    else:
+        set_state("C3", "Pass", ["scan found no open secret/runtime-config findings"], [], ["S08"])
+
+    tests = scan_data.get("tests") if isinstance(scan_data.get("tests"), list) else []
+    if tests:
+        set_state("C5", "Pass", [f"detected test evidence: {item}" for item in tests[:10]], [], ["S11"])
+    else:
+        set_state("C5", "Finding", [], ["no automated tests detected by scan"], ["S11"])
+
+    ci = scan_data.get("ci") if isinstance(scan_data.get("ci"), list) else []
+    if ci:
+        set_state("C6", "Pass", [f"detected CI evidence: {item}" for item in ci[:10]], [], ["S12"])
+    else:
+        set_state("C6", "Finding", [], ["no CI workflow detected by scan"], ["S12"])
+
+    return category_state
+
+
 def score_from_inputs(findings_data: Any, coverage_data: Optional[dict] = None) -> dict:
     findings = normalize_findings(findings_data)
     counts = {sev: 0 for sev in ("P0", "P1", "P2", "P3")}
@@ -778,7 +1083,16 @@ def score_from_inputs(findings_data: Any, coverage_data: Optional[dict] = None) 
     for f in unresolved:
         counts[f["severity"]] = counts.get(f["severity"], 0) + 1
 
-    coverage_by_category, coverage_complete = category_coverage(coverage_data)
+    if coverage_data is not None:
+        coverage_by_category, coverage_complete = category_coverage(coverage_data)
+        score_mode = "coverage-backed"
+    elif isinstance(findings_data, dict) and findings_data.get("schema") == SCAN_SCHEMA_ID:
+        coverage_by_category = inferred_coverage_from_scan(findings_data, findings)
+        coverage_complete = False
+        score_mode = "scan-derived-estimate"
+    else:
+        coverage_by_category, coverage_complete = category_coverage(None)
+        score_mode = "finding-only-estimate"
     per_category: List[dict] = []
     raw_total = 0.0
 
@@ -837,10 +1151,11 @@ def score_from_inputs(findings_data: Any, coverage_data: Optional[dict] = None) 
 
     critical_gap = False
     high_score_gap = False
+    apply_missing_coverage_caps = coverage_data is not None
     for cid, state in coverage_by_category.items():
-        if state["status"] in {"Unknown", "MissingCoverage"} and cid in CRITICAL_CATEGORIES:
+        if apply_missing_coverage_caps and state["status"] in {"Unknown", "MissingCoverage"} and cid in CRITICAL_CATEGORIES:
             critical_gap = True
-        if state["status"] in {"Unknown", "MissingCoverage"} and cid in HIGH_SCORE_GATE_CATEGORIES:
+        if apply_missing_coverage_caps and state["status"] in {"Unknown", "MissingCoverage"} and cid in HIGH_SCORE_GATE_CATEGORIES:
             high_score_gap = True
     if critical_gap:
         cap_value = min(cap_value, 84)
@@ -850,7 +1165,9 @@ def score_from_inputs(findings_data: Any, coverage_data: Optional[dict] = None) 
         caps.append({"cap": 90, "reason": "score above 90 requires evidence for tests, secrets, deploy/rollback, observability, auth, and data boundaries"})
 
     score = min(raw_score, cap_value)
-    if coverage_complete and not critical_gap and not any(c["reason"].startswith("coverage") for c in caps):
+    if score_mode != "coverage-backed":
+        confidence = "low"
+    elif coverage_complete and not critical_gap and not any(c["reason"].startswith("coverage") for c in caps):
         confidence = "high"
     elif coverage_complete and not critical_gap:
         confidence = "medium"
@@ -863,12 +1180,14 @@ def score_from_inputs(findings_data: Any, coverage_data: Optional[dict] = None) 
         "generated_at": now_iso(),
         "score": int(score),
         "raw_score": int(raw_score),
+        "score_mode": score_mode,
         "confidence": confidence,
         "counts": counts,
         "caps_applied": caps,
         "per_category": per_category,
         "findings_scored": [f["id"] for f in unresolved],
         "coverage_complete": coverage_complete,
+        "manual_evidence_needed": [] if coverage_data is not None else missing_manual_evidence(coverage_by_category),
     }
 
 
@@ -963,10 +1282,11 @@ def describe_capabilities() -> dict:
     version = read_manifest_version()
     commands = [
         ("describe", "Emit this machine-readable capability manifest.", {}, CAPABILITIES_SCHEMA_ID),
-        ("scan", "Detect stack signals and deterministic local findings.", {"project": "path"}, SCAN_SCHEMA_ID),
-        ("coverage --emit", "Emit the 20-surface coverage skeleton.", {"project": "optional string"}, COVERAGE_SCHEMA_ID),
+        ("scan", "Detect stack signals and deterministic local findings.", {"project": "path", "deep": "optional boolean"}, SCAN_SCHEMA_ID),
+        ("diagnostic", "Alias for scan; use it when docs or agents ask to run a diagnostic.", {"project": "path", "deep": "optional boolean"}, SCAN_SCHEMA_ID),
+        ("coverage --emit", "Write the 20-surface coverage skeleton by default, or print JSON with --format json.", {"project": "optional string"}, COVERAGE_SCHEMA_ID),
         ("coverage --check", "Validate coverage completeness.", {"file": "coverage json path"}, "checkyourself-coverage-check/1"),
-        ("score", "Compute a deterministic Production Reality Score from findings and coverage.", {"findings": "json path", "coverage": "optional json path"}, SCORE_SCHEMA_ID),
+        ("score", "Compute a deterministic Production Reality Score from findings and optional coverage, with score history.", {"findings": "json path", "coverage": "optional json path", "history": "optional path"}, SCORE_SCHEMA_ID),
         ("backlog", "Rank remediation backlog and first approval batch.", {"findings": "json path"}, "checkyourself-backlog/1"),
         ("next", "Return the next safest unresolved approval batch.", {"findings": "json path"}, "checkyourself-next-batch/1"),
         ("validate", "Validate an artifact against a bundled JSON schema subset.", {"kind": "schema kind", "file": "json path"}, "checkyourself-validation/1"),
@@ -1176,11 +1496,46 @@ def write_text_result(data: dict) -> None:
         write_json(data)
 
 
+def resolve_history_path(findings_path: str, requested: Optional[str]) -> Optional[Path]:
+    if requested == "none":
+        return None
+    if requested:
+        return Path(requested)
+    if findings_path == "-":
+        return Path.cwd() / DEFAULT_SCORE_HISTORY_PATH
+    return Path(findings_path).resolve().parent / DEFAULT_SCORE_HISTORY_PATH
+
+
+def append_score_history(path: Optional[Path], result: dict, note: str = "") -> None:
+    if path is None:
+        return
+    entry = {
+        "timestamp": result["generated_at"],
+        "score": result["score"],
+        "raw_score": result["raw_score"],
+        "confidence": result["confidence"],
+        "score_mode": result.get("score_mode"),
+        "counts": result["counts"],
+        "findings": result["findings_scored"],
+        "note": note,
+    }
+    history: List[dict] = []
+    if path.exists():
+        try:
+            parsed = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(parsed, list):
+                history = [item for item in parsed if isinstance(item, dict)]
+        except json.JSONDecodeError:
+            history = []
+    history.append(entry)
+    path.write_text(json.dumps(history, indent=2) + "\n", encoding="utf-8")
+
+
 def command_scan(args: argparse.Namespace) -> int:
     root = Path(args.project).resolve()
     if not root.is_dir():
         raise CliError(f"project root not found: {root}")
-    data = scan(root)
+    data = scan(root, deep=getattr(args, "deep", False))
     json_stdout = args.format == "json" or args.json == "-" or (args.no_write and args.json is not None)
 
     if not args.no_write:
@@ -1238,13 +1593,16 @@ def command_coverage(args: argparse.Namespace) -> int:
                 print(f"- warning: {warning}")
         return 0 if result["complete"] else 1
     data = coverage_emit(args.project or "")
-    if args.out:
-        path = Path(args.out)
+    out_path = args.out
+    if not out_path and args.format == "text":
+        out_path = DEFAULT_COVERAGE_PATH
+    if out_path:
+        path = Path(out_path)
         path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-    if args.format == "json" or not args.out:
+    if args.format == "json":
         write_json(data)
     else:
-        print(f"Wrote coverage skeleton: {args.out}")
+        print(f"Wrote coverage skeleton: {out_path}")
     return 0
 
 
@@ -1252,10 +1610,14 @@ def command_score(args: argparse.Namespace) -> int:
     findings_data = load_json_arg(args.findings)
     coverage_data = load_json_arg(args.coverage) if args.coverage else None
     result = score_from_inputs(findings_data, coverage_data)
+    history_path = resolve_history_path(args.findings, None if not args.history else args.history)
+    append_score_history(history_path, result, args.note)
     if args.format == "json":
         write_json(result)
     else:
         write_text_result(result)
+        if history_path is not None:
+            print(f"History: {history_path}")
     return 0
 
 
@@ -1317,7 +1679,10 @@ def mcp_tools() -> List[dict]:
             "description": "Run deterministic local discovery and obvious-risk checks against a project path.",
             "inputSchema": {
                 "type": "object",
-                "properties": {"project": {"type": "string", "description": "Project root path. Defaults to current directory."}},
+                "properties": {
+                    "project": {"type": "string", "description": "Project root path. Defaults to current directory."},
+                    "deep": {"type": "boolean", "description": "Run slower validation checks for detected surfaces."},
+                },
             },
         },
         {
@@ -1377,7 +1742,7 @@ def call_mcp_tool(name: str, arguments: dict) -> dict:
     if name == "describe":
         return describe_capabilities()
     if name == "scan":
-        return scan(Path(arguments.get("project") or "."))
+        return scan(Path(arguments.get("project") or "."), deep=bool(arguments.get("deep")))
     if name == "coverage_emit":
         return coverage_emit(str(arguments.get("project") or ""))
     if name == "coverage_check":
@@ -1487,6 +1852,8 @@ def add_scan_args(parser: argparse.ArgumentParser) -> None:
                         help="Console output format. Use json for machine-readable stdout.")
     parser.add_argument("--ci", action="store_true",
                         help="Exit non-zero if any P0 finding is detected.")
+    parser.add_argument("--deep", action="store_true",
+                        help="Run slower validation checks for detected surfaces, such as mutable CI actions and dependency-update coverage.")
     parser.add_argument("--no-write", action="store_true", help="Print the summary only; write no files.")
     parser.add_argument("--quiet", action="store_true", help="Suppress the console summary.")
 
@@ -1506,6 +1873,10 @@ def build_parser() -> argparse.ArgumentParser:
     add_scan_args(p)
     p.set_defaults(func=command_scan)
 
+    p = sub.add_parser("diagnostic", help="Alias for scan; emits deterministic evidence for the manual diagnostic workflow.")
+    add_scan_args(p)
+    p.set_defaults(func=command_scan)
+
     p = sub.add_parser("schema", help="Print a bundled schema by name.")
     p.add_argument("name", choices=sorted(schema_registry().keys()))
     p.set_defaults(func=command_schema)
@@ -1516,12 +1887,17 @@ def build_parser() -> argparse.ArgumentParser:
     group.add_argument("--check", help="Validate a filled coverage JSON file.")
     p.add_argument("--project", default="", help="Optional project label for emitted coverage.")
     p.add_argument("--out", help="Write emitted coverage JSON to this path.")
-    p.add_argument("--format", choices=("text", "json"), default="json")
+    p.add_argument("--format", choices=("text", "json"), default="text")
     p.set_defaults(func=command_coverage)
 
     p = sub.add_parser("score", help="Compute deterministic Production Reality Score.")
     p.add_argument("--findings", required=True, help="JSON file containing findings, scan output, or report.")
     p.add_argument("--coverage", help="Optional coverage JSON file.")
+    p.add_argument("--history", nargs="?", const=DEFAULT_SCORE_HISTORY_PATH,
+                   help="Write score history to this path. Defaults to .checkyourself-score-history.json beside the findings file.")
+    p.add_argument("--no-history", dest="history", action="store_const", const="none",
+                   help="Do not append score history.")
+    p.add_argument("--note", default="", help="Optional note stored with the score history entry.")
     p.add_argument("--format", choices=("text", "json"), default="text")
     p.set_defaults(func=command_score)
 
@@ -1564,7 +1940,7 @@ def legacy_scan_main(argv: Sequence[str]) -> int:
 
 def main(argv: Optional[List[str]] = None) -> int:
     raw = list(sys.argv[1:] if argv is None else argv)
-    commands = {"describe", "scan", "schema", "coverage", "score", "backlog", "next", "validate", "init", "mcp"}
+    commands = {"describe", "scan", "diagnostic", "schema", "coverage", "score", "backlog", "next", "validate", "init", "mcp"}
     try:
         if not raw or raw[0] not in commands:
             return legacy_scan_main(raw)

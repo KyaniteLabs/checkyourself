@@ -1,0 +1,51 @@
+name: CheckYourself
+description: Run the CheckYourself deterministic scan in CI.
+
+inputs:
+  project:
+    description: Project path to scan.
+    required: false
+    default: .
+  fail-on-p0:
+    description: Fail the job when an unresolved P0 is detected.
+    required: false
+    default: "true"
+  deep:
+    description: Run deeper validation checks for detected surfaces.
+    required: false
+    default: "false"
+  output:
+    description: Path for the generated scan JSON artifact.
+    required: false
+    default: CHECKYOURSELF_SCAN.generated.json
+
+runs:
+  using: composite
+  steps:
+    - name: Run CheckYourself scan
+      shell: bash
+      run: |
+        set -euo pipefail
+        args=(scan "${{ inputs.project }}" --format json --no-write)
+        if [ "${{ inputs.deep }}" = "true" ]; then
+          args+=(--deep)
+        fi
+        python3 "${GITHUB_ACTION_PATH}/../../../tools/checkyourself.py" "${args[@]}" > "${{ inputs.output }}"
+
+    - name: Validate CheckYourself scan
+      shell: bash
+      run: python3 "${GITHUB_ACTION_PATH}/../../../tools/checkyourself.py" validate --kind scan "${{ inputs.output }}"
+
+    - name: Enforce P0 gate
+      if: ${{ inputs.fail-on-p0 == 'true' }}
+      shell: bash
+      run: |
+        python3 - <<'PY'
+        import json
+        from pathlib import Path
+
+        data = json.loads(Path("${{ inputs.output }}").read_text(encoding="utf-8"))
+        p0 = int(data.get("counts", {}).get("P0", 0))
+        if p0:
+            raise SystemExit(f"CheckYourself found {p0} unresolved P0 finding(s).")
+        PY

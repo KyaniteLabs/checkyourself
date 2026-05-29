@@ -7,6 +7,7 @@
     "schema",
     "generated_at",
     "project",
+    "deep",
     "files_scanned",
     "stack_signals",
     "dependencies",
@@ -17,6 +18,7 @@
     "risk_surfaces",
     "findings",
     "counts",
+    "suppression_count",
     "tree"
   ],
   "properties": {
@@ -24,6 +26,7 @@
     "schema": { "type": "string", "enum": ["checkyourself-scan/1"] },
     "generated_at": { "type": "string" },
     "project": { "type": "string" },
+    "deep": { "type": "boolean" },
     "files_scanned": { "type": "integer", "minimum": 0 },
     "stack_signals": { "type": "array", "items": { "type": "string" } },
     "dependencies": { "type": "object" },
@@ -56,7 +59,8 @@
           "plain_english_risk": { "type": "string" },
           "evidence": { "type": "array", "items": { "type": "string" } },
           "recommended_fix": { "type": "string" },
-          "status": { "type": "string" }
+          "status": { "type": "string" },
+          "suppression": { "type": "object" }
         }
       }
     },
@@ -70,6 +74,7 @@
         "P3": { "type": "integer", "minimum": 0 }
       }
     },
+    "suppression_count": { "type": "integer", "minimum": 0 },
     "tree": { "type": "array", "items": { "type": "string" } }
   }
 }
