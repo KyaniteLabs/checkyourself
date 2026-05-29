@@ -6,30 +6,37 @@ The goal is not to shame the project. The goal is to make the invisible parts vi
 
 ## Choose your path
 
-### Path 1 — Easiest
-
-Use this when you are new, in a hurry, or working in ChatGPT/Claude/Gemini without a coding agent.
-
-1. Open [`PASTE_THIS_INTO_YOUR_AI.md`](PASTE_THIS_INTO_YOUR_AI.md).
-2. Copy the prompt.
-3. Give it to your AI with your app files, repo, screenshots, exported code, or a written description.
-4. Ask for the diagnostic first.
-
-### Path 2 — Best for coding tools
+### Path 1 — Coding tools that read files (best default)
 
 Use this in Cursor, Windsurf, Claude Code, Codex, Replit, or any assistant that can read files.
 
 1. Put this folder inside or next to your project.
-2. Tell the AI: “Use the checkyourself folder as context. Start with `CONTEXT.md`.”
-3. Ask it to run the diagnostic.
+2. Tell the AI: “Use the checkyourself folder as your operating context. Start with `CONTEXT.md`.”
+3. Ask it to run the read-only diagnostic.
 4. Approve fixes one at a time or in safe batches.
 5. Recheck until every finding is resolved, deferred, accepted, blocked, or proven not applicable.
 
-### Path 3 — Lowest token path
+### Path 2 — Chat-only tools (ChatGPT, Claude, Gemini)
 
-Use the beginner prompt first, then ask the AI to load deeper files only when needed.
+Use this when your assistant cannot read a project folder.
 
-Suggested instruction:
+1. Open [`PASTE_THIS_INTO_YOUR_AI.md`](PASTE_THIS_INTO_YOUR_AI.md) — the CheckYourself bootstrap.
+2. Give those operating instructions to your AI along with your app files, repo, screenshots, exported code, or a written description.
+3. Ask for the diagnostic first.
+
+### Path 3 — Optional local scan (no tokens)
+
+Run the bundled scanner to detect your stack and obvious issues, then hand the generated context to your AI:
+
+```text
+python3 tools/checkyourself.py /path/to/your/project
+```
+
+It writes `CHECKYOURSELF_PROJECT_CONTEXT.generated.md` so your assistant spends tokens on judgment, not discovery. The CLI is optional — every path above works without it.
+
+### Keep context lean
+
+Whichever path you use, tell the AI:
 
 ```text
 Use only the minimum CheckYourself context needed for the current step. Load advanced references only when a specific finding requires them.

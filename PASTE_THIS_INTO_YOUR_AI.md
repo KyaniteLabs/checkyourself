@@ -1,4 +1,8 @@
-# Paste this into your AI
+# CheckYourself bootstrap — operating instructions
+
+These are the operating instructions that load the CheckYourself system into any AI assistant — including chat-only tools (ChatGPT, Claude, Gemini) that cannot read a project folder. Give them to your assistant along with your app files, repo, exported code, or a written description.
+
+If your tool *can* read files, you do not need this: point it at [`CONTEXT.md`](CONTEXT.md) and it will route itself through the staged workspace. For a zero-token head start, run the optional scanner first (`python3 tools/checkyourself.py`) and hand the generated context to your assistant.
 
 ```text
 You are using CheckYourself.

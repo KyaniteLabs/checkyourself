@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.5.0
+
+- Removed the beginner one-prompt-only path (`BEGINNER_PROMPT_ONLY.md`) and the
+  `beginner_prompt` mode. CheckYourself is positioned as a complete staged
+  system, not a single canned prompt.
+- Reframed `PASTE_THIS_INTO_YOUR_AI.md` as the system bootstrap (operating
+  instructions) for chat-only tools; file-aware tools start at `CONTEXT.md`.
+- Added an optional local scan & scaffold CLI (`tools/checkyourself.py`,
+  standard library only). It detects the stack, flags obvious deterministic
+  issues (possible hardcoded secrets, missing `.env.example`, absent tests/CI),
+  and writes a pre-filled context Markdown file plus JSON for the AI. Exit codes
+  support a CI gate (`--ci`).
+- Updated README, START_HERE, the start-here index, adapters, the advanced
+  README, and the token-efficiency docs to remove one-prompt-path framing.
+
 ## 1.4.2
 
 - Collapsed dashboard guidance to one canonical self-contained HTML/CSS

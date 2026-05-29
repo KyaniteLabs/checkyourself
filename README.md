@@ -23,6 +23,7 @@ Under the hood it is a complete, staged engineering system, not a single canned 
 - [Works with every AI coding tool](#works-with-every-ai-coding-tool)
 - [Who it is for](#who-it-is-for)
 - [How it works](#how-it-works)
+- [Optional local CLI](#optional-local-cli)
 - [Optional visual dashboard](#optional-visual-dashboard)
 - [Token efficiency by design](#token-efficiency-by-design)
 - [Safety model](#safety-model)
@@ -171,6 +172,18 @@ CheckYourself runs as a staged workflow, each stage with its own context file so
 5. **Dashboard (optional)** — a self-contained HTML or inline Markdown view of everything.
 
 Each stage is defined by its own context files, scoring rules, schemas, and templates — so the agent always knows what to read, what to do, and what to produce. The advanced engine in [`90_ADVANCED/`](90_ADVANCED/) deepens any stage when a domain warrants it.
+
+---
+
+## Optional local CLI
+
+For a zero-token head start, CheckYourself ships a small **optional** scan & scaffold CLI — standard library only, no network, no secret values printed:
+
+```bash
+python3 tools/checkyourself.py /path/to/your/project
+```
+
+It detects your stack, flags obvious deterministic risks (possible hardcoded secrets, a committed `.env`, missing `.env.example`, absent tests or CI) ranked P0–P3, and writes a pre-filled context file your AI can build on. Add `--json` for a machine-readable summary, or `--ci` to use it as a lightweight pipeline gate (non-zero exit on a P0). The CLI is a scaffold, not a substitute — the AI still runs the full diagnostic. See [`docs/cli.md`](docs/cli.md).
 
 ---
 

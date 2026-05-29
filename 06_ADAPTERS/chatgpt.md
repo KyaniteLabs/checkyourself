@@ -3,7 +3,7 @@
 ## Best path
 
 1. Upload the project files you can share, or paste key files and app context.
-2. Upload or paste the CheckYourself prompt.
+2. Load the CheckYourself bootstrap (`PASTE_THIS_INTO_YOUR_AI.md`) as your operating instructions.
 3. Ask for diagnostic mode first.
 4. Use guided fix mode only after reviewing the report.
 

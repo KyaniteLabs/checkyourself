@@ -27,8 +27,11 @@ jobs:
           EMPTY_TREE="$(git hash-object -t tree /dev/null)"
           git diff --check "$EMPTY_TREE"..HEAD
 
-      - name: Compile Python validation tools
-        run: python -m py_compile tools/validate_public.py
+      - name: Compile Python tools
+        run: python -m py_compile tools/validate_public.py tools/checkyourself.py
+
+      - name: Smoke-test the scan CLI
+        run: python tools/checkyourself.py . --no-write --quiet
 
       - name: Run gitleaks if available
         run: |

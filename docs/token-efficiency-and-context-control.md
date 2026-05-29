@@ -10,7 +10,7 @@ Load only what is needed for the current step.
 
 ## Recommended loading order
 
-1. `PASTE_THIS_INTO_YOUR_AI.md` or `BEGINNER_PROMPT_ONLY.md`
+1. `CONTEXT.md` (file-aware tools) or `PASTE_THIS_INTO_YOUR_AI.md` (chat-only bootstrap)
 2. `AGENTS.md`
 3. `rules.md`
 4. `02_RUN_DIAGNOSTIC/coverage-matrix.md`

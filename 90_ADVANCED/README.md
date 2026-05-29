@@ -2,7 +2,7 @@
 
 This folder contains the full advanced production-hardening capability stack.
 
-Most users should start with the beginner prompt or diagnostic workflow. Use this advanced stack when the app is complex, high-risk, multi-tenant, AI-enabled, production-facing, or client/revenue-critical.
+Most users should start with the standard diagnostic workflow. Use this advanced stack when the app is complex, high-risk, multi-tenant, AI-enabled, production-facing, or client/revenue-critical.
 
 The advanced stack includes 19 capabilities covering:
 
