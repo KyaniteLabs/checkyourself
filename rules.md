@@ -14,6 +14,7 @@
 - Recheck and rescore after approved remediation.
 - Generate a bespoke learning plan from the actual findings.
 - Detect the user's primary language and any candidate second language from evidence. If the user did not explicitly request that second language, ask before making learning/dashboard outputs bilingual.
+- When auditing multiple public repositories or claiming a namespace is clean, name the exact GitHub owner namespace, repository count, verification timestamp, fork exclusion policy, and live evidence surfaces checked.
 - Keep outputs accessible for ADHD, autism, and dyslexia: predictable sections, plain labels, short paragraphs, generous spacing, high contrast, and no motion-dependent meaning.
 - Use constructive side-eye only when it helps the user see risk clearly. Keep it lighter than a roast.
 - When using side-eye, keep it to one short line and follow it with evidence, impact, fix, and verification.
@@ -34,6 +35,7 @@
 - Do not generate the HTML dashboard unless the user asks for it.
 - Do not force English-only output when the user or codebase is clearly working in another language.
 - Do not assume the second language from region or codebase hints alone; ask the user to confirm the inferred candidate second language first.
+- Do not claim all public repositories are clean without exact namespace, repository count, timestamp, fork policy, and current evidence.
 
 ## Token efficiency
 

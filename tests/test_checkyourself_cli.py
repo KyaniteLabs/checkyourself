@@ -30,6 +30,11 @@ class CheckYourselfCliTests(unittest.TestCase):
         self.assertEqual(data["tool"], "checkyourself-cli")
         self.assertEqual(data["schema"], "checkyourself-scan/1")
         self.assertIn("counts", data)
+        guardrails = " ".join(data["public_repo_scope_guardrails"]).lower()
+        self.assertIn("owner namespace", guardrails)
+        self.assertIn("repository count", guardrails)
+        self.assertIn("fork", guardrails)
+        self.assertIn("verification timestamp", guardrails)
 
     def test_scan_subcommand_matches_machine_contract(self) -> None:
         result = self.run_cli("scan", ".", "--format", "json", "--no-write")
@@ -56,6 +61,10 @@ class CheckYourselfCliTests(unittest.TestCase):
         self.assertEqual(capabilities["schema"], "checkyourself-capabilities/1")
         self.assertIn("mcp", capabilities)
         self.assertIn("score", {cmd["name"] for cmd in capabilities["commands"]})
+        guardrails = " ".join(capabilities["public_repo_scope_guardrails"]).lower()
+        self.assertIn("owner namespace", guardrails)
+        self.assertIn("repository count", guardrails)
+        self.assertIn("fork", guardrails)
 
         schema = self.run_cli("schema", "scan")
         self.assertEqual(schema.returncode, 0, schema.stderr)
@@ -291,6 +300,9 @@ class CheckYourselfCliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         responses = [json.loads(line) for line in result.stdout.splitlines()]
         self.assertEqual([r["id"] for r in responses], [1, 2, 3])
+        instructions = responses[0]["result"]["instructions"].lower()
+        self.assertIn("owner namespaces", instructions)
+        self.assertIn("fork exclusions", instructions)
         tool_names = {tool["name"] for tool in responses[1]["result"]["tools"]}
         self.assertIn("score", tool_names)
         structured = responses[2]["result"]["structuredContent"]
