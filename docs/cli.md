@@ -1,77 +1,175 @@
-# Optional Local CLI: `tools/checkyourself.py`
+# Local CLI: `tools/checkyourself.py`
 
-CheckYourself is primarily a folder you load into an AI assistant. The CLI is an
-optional zero-token scout: it does cheap discovery locally so the assistant can
-spend its attention on judgment instead of file searching.
+CheckYourself is still a folder-first audit system, but the CLI is now the
+deterministic engine an agent can drive.
 
 It uses only the Python standard library, sends nothing over the network, and
-never prints secret values.
+never prints secret values. The AI still supplies judgment. The CLI supplies
+repeatable receipts: discovery, schemas, coverage checks, scoring, backlog
+ranking, validation, and the thin MCP wrapper.
 
-## What it does
-
-- Detects the stack: manifests, frameworks, ORM/database, auth, payments,
-  AI/RAG dependencies, tests, and CI.
-- Flags obvious deterministic risks and ranks them P0–P3:
-  - **P0** — possible hardcoded secrets / high-confidence credential shapes.
-  - **P0** — a real `.env` that is not gitignored (possible committed secret).
-  - **P1** — env vars used but no `.env.example`; no automated tests; payments
-    present with no tests.
-  - **P2** — no CI pipeline; a local `.env` present (verify it is untracked).
-- Writes a pre-filled context Markdown file for your assistant.
-- Optionally writes a machine-readable JSON summary.
-- Returns a non-zero exit code under `--ci` when a P0 is found, so it can act as
-  a lightweight CI gate.
-
-It is **not** a replacement for the full AI-driven diagnostic. It is the scout,
-not the judge. The AI still sweeps the entire production surface,
-explains and ranks every finding, and produces the remediation backlog and
-learning plan.
-
-## Usage
+## Fast Start
 
 ```bash
-# Scan a project and write CHECKYOURSELF_PROJECT_CONTEXT.generated.md
+# Backward-compatible scan path
 python3 tools/checkyourself.py /path/to/your/project
 
-# Also emit a JSON summary
-python3 tools/checkyourself.py /path/to/your/project --json
+# Explicit scan subcommand
+python3 tools/checkyourself.py scan /path/to/your/project
 
-# Print machine-readable JSON to stdout
-python3 tools/checkyourself.py /path/to/your/project --format json --no-write
+# Machine-readable scan
+python3 tools/checkyourself.py scan . --format json --no-write
 
-# Print findings only, write nothing
-python3 tools/checkyourself.py . --no-write
-
-# Use as a CI gate (exit 1 if any P0)
-python3 tools/checkyourself.py . --ci
+# Discover every command and schema
+python3 tools/checkyourself.py describe --format json
 ```
 
-### Options
+## Command Map
 
-| Flag | Meaning |
+| Command | Purpose |
 | --- | --- |
-| `project` | Project root to scan (default `.`). |
-| `--out PATH` | Markdown context output path (default `CHECKYOURSELF_PROJECT_CONTEXT.generated.md`). |
-| `--json [PATH]` | Also write a JSON summary (default `CHECKYOURSELF_SCAN.generated.json`). Use `--json -` for stdout. |
-| `--format text|json` | Console output format. Use `json` for machine-readable stdout. |
-| `--ci` | Exit non-zero if any P0 finding is detected. |
-| `--no-write` | Print the summary only; write no files. |
-| `--quiet` | Suppress the console summary. |
+| `describe` | Emits the full machine-readable capability manifest. |
+| `scan` | Detects stack signals and deterministic local findings. |
+| `coverage --emit` | Emits the 20-surface coverage skeleton for an agent to fill. |
+| `coverage --check FILE` | Checks a filled coverage artifact for completeness. |
+| `score --findings FILE [--coverage FILE]` | Computes the deterministic Production Reality Score. |
+| `backlog --findings FILE` | Ranks the complete remediation backlog. |
+| `next --findings FILE` | Returns the next safest unresolved approval batch. |
+| `validate --kind KIND FILE` | Validates JSON against bundled schema contracts. |
+| `schema NAME` | Prints a bundled JSON schema. |
+| `init [PROJECT]` | Creates starter generated context and coverage files. |
+| `mcp` | Runs the stdio MCP server over the same functions. |
 
-## Handing the output to your AI
+## Typical Agent Pipeline
 
-Give the generated `CHECKYOURSELF_PROJECT_CONTEXT.generated.md` to your assistant
-along with the CheckYourself folder (or the bootstrap in
-[`../PASTE_THIS_INTO_YOUR_AI.md`](../PASTE_THIS_INTO_YOUR_AI.md)) and ask it to run
-the full diagnostic. The deterministic findings become confirmed evidence the AI
-builds on.
+```bash
+python3 tools/checkyourself.py describe --format json > CHECKYOURSELF_CAPABILITIES.generated.json
+python3 tools/checkyourself.py scan . --format json --no-write > CHECKYOURSELF_SCAN.generated.json
+python3 tools/checkyourself.py coverage --emit --format json > CHECKYOURSELF_COVERAGE.generated.json
+```
 
-Generated files match the gitignored `CHECKYOURSELF_*.generated.*` patterns, so
-they stay out of commits by default.
+The agent then fills `CHECKYOURSELF_COVERAGE.generated.json` with evidence from
+the full diagnostic and can run:
 
-## Agent Access Roadmap
+```bash
+python3 tools/checkyourself.py coverage --check CHECKYOURSELF_COVERAGE.generated.json
+python3 tools/checkyourself.py score --findings CHECKYOURSELF_SCAN.generated.json --coverage CHECKYOURSELF_COVERAGE.generated.json --format json
+python3 tools/checkyourself.py backlog --findings CHECKYOURSELF_SCAN.generated.json --format json
+python3 tools/checkyourself.py next --findings CHECKYOURSELF_SCAN.generated.json --format json
+```
 
-The public product is CLI-first. A future MCP server should wrap the same CLI
-logic for native agent tools. A hosted API is not needed unless CheckYourself
-becomes a service product with accounts, hosted runs, shared history, or
-billing. See [`agent-access-cli-plan.md`](agent-access-cli-plan.md).
+That makes the score and first batch reproducible. Same evidence, same score.
+No vibes with a clipboard.
+
+## Scan
+
+```bash
+python3 tools/checkyourself.py scan /path/to/project
+python3 tools/checkyourself.py scan . --json
+python3 tools/checkyourself.py scan . --json -
+python3 tools/checkyourself.py scan . --format json --no-write
+python3 tools/checkyourself.py scan . --ci
+```
+
+`scan` detects stack signals, dependencies, scripts, env files, tests, CI,
+risk-surface path hints, and obvious deterministic risks:
+
+- possible hardcoded secrets or credential-shaped values;
+- real `.env` files that may be committed;
+- missing `.env.example`;
+- missing tests;
+- missing CI;
+- payments dependencies without tests.
+
+The scan is not a clean bill of health. It is cheap evidence for the full
+CheckYourself diagnostic.
+
+## Coverage
+
+```bash
+python3 tools/checkyourself.py coverage --emit --format json
+python3 tools/checkyourself.py coverage --check CHECKYOURSELF_COVERAGE.generated.json
+```
+
+Coverage has 20 surfaces. Each surface must be marked:
+
+- `Pass`;
+- `Finding`;
+- `Unknown`;
+- `NotApplicable`.
+
+`Pass` needs evidence. `Unknown` needs missing evidence. `NotApplicable` needs a
+reason.
+
+## Scoring
+
+```bash
+python3 tools/checkyourself.py score --findings findings.json --coverage coverage.json --format json
+```
+
+The score uses the weights and caps from
+[`02_RUN_DIAGNOSTIC/scoring-method.md`](../02_RUN_DIAGNOSTIC/scoring-method.md):
+
+- unresolved P0 caps the score at `49`;
+- unresolved P1 caps the score at `74`;
+- missing critical evidence caps at `84`;
+- scores above `90` require evidence for tests, secrets, deploy/rollback,
+  observability, auth, and data boundaries.
+
+The result includes `per_category` penalties, caps applied, confidence, and the
+finding IDs scored.
+
+## Validation
+
+```bash
+python3 tools/checkyourself.py schema scan
+python3 tools/checkyourself.py validate --kind scan CHECKYOURSELF_SCAN.generated.json
+python3 tools/checkyourself.py validate --kind score CHECKYOURSELF_SCORE.generated.json
+```
+
+Supported schema kinds:
+
+- `capabilities`;
+- `scan`;
+- `coverage`;
+- `score`;
+- `backlog`;
+- `next`;
+- `report`;
+- `dashboard`;
+- `dashboard-data`;
+- `dashboard-html`;
+- `learning-plan`.
+
+Validation uses a small standard-library JSON Schema subset: `required`, `type`,
+`enum`, `minimum`, `maximum`, `properties`, and `items`.
+
+## Exit Codes
+
+| Code | Meaning |
+| ---: | --- |
+| `0` | Success; no gating condition. |
+| `1` | Gating condition: `--ci` P0, invalid artifact, or incomplete coverage. |
+| `2` | Usage/input error. |
+
+## MCP
+
+The MCP wrapper is local stdio and thin by design:
+
+```bash
+python3 tools/checkyourself.py mcp
+```
+
+It exposes native tools for `describe`, `scan`, `coverage_emit`,
+`coverage_check`, `score`, `backlog`, `next`, `validate`, and `schema`.
+
+See [`mcp.md`](mcp.md).
+
+## API Decision
+
+There is no hosted API in this repo.
+
+The CLI is the canonical engine. MCP is a local convenience wrapper over that
+engine. A hosted API only makes sense if CheckYourself becomes a SaaS/team
+product with accounts, hosted runs, shared history, billing, or browser-only
+usage.

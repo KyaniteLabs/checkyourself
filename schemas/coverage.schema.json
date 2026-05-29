@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CheckYourself Coverage Matrix",
+  "type": "object",
+  "required": ["tool", "schema", "generated_at", "surfaces"],
+  "properties": {
+    "tool": { "type": "string" },
+    "schema": { "type": "string", "enum": ["checkyourself-coverage/1"] },
+    "generated_at": { "type": "string" },
+    "project": { "type": "string" },
+    "surfaces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "surface",
+          "category",
+          "status",
+          "evidence_reviewed",
+          "missing_evidence",
+          "not_applicable_reason"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "surface": { "type": "string" },
+          "category": { "type": "string" },
+          "status": {
+            "type": ["string", "null"],
+            "enum": ["Pass", "Finding", "Unknown", "NotApplicable", null]
+          },
+          "evidence_reviewed": { "type": "array", "items": { "type": "string" } },
+          "missing_evidence": { "type": "array", "items": { "type": "string" } },
+          "not_applicable_reason": { "type": "string" }
+        }
+      }
+    }
+  }
+}

@@ -1,24 +1,13 @@
 #!/usr/bin/env python3
-"""CheckYourself — optional local scan & scaffold CLI.
+"""CheckYourself local CLI and thin MCP wrapper.
 
-CheckYourself is primarily a model-agnostic system you load as an AI assistant's
-operating context. This CLI is an *optional* head start: it does the cheap,
-deterministic discovery locally — no tokens, no network, no data leaves your
-machine — so your AI can spend its budget on judgment instead of grep.
+CheckYourself is primarily a model-agnostic audit workspace that an AI assistant
+loads as operating context. This command is the deterministic machine interface:
+it discovers cheap local facts, emits schemas, validates artifacts, scores
+finding/coverage JSON, ranks the backlog, and exposes the same verbs through a
+small MCP stdio server.
 
-What it does:
-  - detects the stack (manifests, frameworks, hosting, ORM, AI/RAG, tests, CI);
-  - flags obvious deterministic risks (possible hardcoded secrets, a committed
-    .env, missing .env.example, no tests, no CI);
-  - writes a pre-filled context Markdown file you can hand to your assistant;
-  - optionally writes a machine-readable JSON summary;
-  - returns a non-zero exit code under --ci when a high-severity issue is found,
-    so it can act as a lightweight CI gate.
-
-It never prints secret values, and it is not a replacement for the full
-AI-driven CheckYourself diagnostic — it is the scaffold the diagnostic builds on.
-
-Standard library only. Works anywhere Python 3.8+ runs.
+Standard library only. No network. No telemetry. Secret values are never printed.
 """
 from __future__ import annotations
 
@@ -28,13 +17,31 @@ import json
 import os
 import re
 import sys
+import traceback
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+
+
+TOOL_NAME = "checkyourself-cli"
+SCAN_SCHEMA_ID = "checkyourself-scan/1"
+COVERAGE_SCHEMA_ID = "checkyourself-coverage/1"
+SCORE_SCHEMA_ID = "checkyourself-score/1"
+CAPABILITIES_SCHEMA_ID = "checkyourself-capabilities/1"
+MCP_PROTOCOL_VERSION = "2025-11-25"
+SUPPORTED_MCP_PROTOCOLS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
+
+ROOT = Path(__file__).resolve().parents[1]
+SCHEMA_DIR = ROOT / "schemas"
 
 IGNORED_DIRS = {
     ".git", "node_modules", ".next", "dist", "build", "coverage", ".venv", "venv",
     "__pycache__", ".turbo", ".cache", "target", ".idea", ".vscode", ".pytest_cache",
     ".svelte-kit", "out", ".output", "vendor",
+}
+
+TEXT_EXTENSIONS = {
+    ".js", ".jsx", ".ts", ".tsx", ".py", ".rb", ".go", ".java", ".cs", ".php",
+    ".env", ".yaml", ".yml", ".json", ".toml", ".sh", ".rs", ".md", ".txt",
 }
 
 SECRET_NAME_RE = re.compile(
@@ -45,14 +52,13 @@ SECRET_VALUE_RE = re.compile(
     r"(?i)(api[_-]?key|secret|token|password|private[_-]?key|access[_-]?key)\s*[:=]\s*['\"]?"
     r"([A-Za-z0-9_\-\./+=]{16,})"
 )
-# Well-known live-credential shapes (high confidence, value never printed).
 SECRET_SHAPE_RES = [
-    re.compile(r"sk-[A-Za-z0-9]{20,}"),            # OpenAI-style
-    re.compile(r"sk-ant-[A-Za-z0-9_\-]{20,}"),     # Anthropic-style
-    re.compile(r"AKIA[0-9A-Z]{16}"),               # AWS access key id
-    re.compile(r"AIza[0-9A-Za-z_\-]{30,}"),        # Google API key
-    re.compile(r"ghp_[A-Za-z0-9]{30,}"),           # GitHub PAT
-    re.compile(r"xox[baprs]-[A-Za-z0-9-]{10,}"),   # Slack token
+    re.compile(r"sk-[A-Za-z0-9]{20,}"),
+    re.compile(r"sk-ant-[A-Za-z0-9_\-]{20,}"),
+    re.compile(r"AKIA[0-9A-Z]{16}"),
+    re.compile(r"AIza[0-9A-Za-z_\-]{30,}"),
+    re.compile(r"ghp_[A-Za-z0-9]{30,}"),
+    re.compile(r"xox[baprs]-[A-Za-z0-9-]{10,}"),
     re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
 ]
 
@@ -115,44 +121,95 @@ RISK_PATH_HINTS = [
 
 ENV_EXAMPLE_NAMES = {".env.example", ".env.sample", ".env.template", "env.example"}
 SEVERITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
+RESOLVED_STATUSES = {"fixed", "accepted-risk", "deferred", "not-applicable"}
+
+COVERAGE_SURFACES = [
+    ("S01", "Product purpose, users, and harm model", "context"),
+    ("S02", "Stack, architecture, and dependency map", "context"),
+    ("S03", "Frontend UX, accessibility, and client safety", "C9"),
+    ("S04", "API/backend behavior, validation, uploads, and webhooks", "C4"),
+    ("S05", "Auth, permissions, sessions, roles, and admin paths", "C2"),
+    ("S06", "Data storage, migrations, backups, and retention", "C1"),
+    ("S07", "User, tenant, and role isolation", "C1"),
+    ("S08", "Secrets, environment, runtime configuration", "C3"),
+    ("S09", "Security and threat model", "C4"),
+    ("S10", "Privacy, consent, compliance, and data governance", "C1"),
+    ("S11", "Tests, quality gates, and regression coverage", "C5"),
+    ("S12", "CI/CD and supply chain", "C6"),
+    ("S13", "Hosting, deployment, release, and rollback", "C6"),
+    ("S14", "Cloud infrastructure and IaC", "C6"),
+    ("S15", "Performance, caching, and rate limits", "C8"),
+    ("S16", "Scaling, load, and resilience", "C8"),
+    ("S17", "Observability, logs, errors, and incident response", "C7"),
+    ("S18", "Availability, recovery, and continuity", "C1"),
+    ("S19", "AI/RAG/agent governance", "C10"),
+    ("S20", "Learning needs and remediation history", "learning"),
+]
+
+SCORE_CATEGORIES = {
+    "C1": ("Data, privacy, tenant/user isolation", 18),
+    "C2": ("Auth, permissions, session safety", 14),
+    "C3": ("Secrets, environment, runtime config", 10),
+    "C4": ("API, validation, uploads, business logic", 10),
+    "C5": ("Testing and quality gates", 10),
+    "C6": ("Deployment, release, rollback, CI/CD", 8),
+    "C7": ("Observability, logs, errors, incident response", 8),
+    "C8": ("Performance, scaling, caching, rate limits", 8),
+    "C9": ("Frontend UX, accessibility, client safety", 8),
+    "C10": ("AI/RAG/agent governance", 6),
+}
+
+SEVERITY_PENALTIES = {"P0": 1.0, "P1": 0.60, "P2": 0.25, "P3": 0.10}
+CRITICAL_CATEGORIES = {"C1", "C2", "C3"}
+HIGH_SCORE_GATE_CATEGORIES = {"C1", "C2", "C3", "C5", "C6", "C7"}
+
+
+class CliError(Exception):
+    """User-facing CLI error with a stable exit code."""
+
+    def __init__(self, message: str, code: int = 2):
+        super().__init__(message)
+        self.code = code
 
 
 class Finding:
-    def __init__(self, fid: str, severity: str, title: str, detail: str, evidence: List[str]):
+    def __init__(
+        self,
+        fid: str,
+        severity: str,
+        title: str,
+        detail: str,
+        evidence: List[str],
+        category: str = "C3",
+        recommended_fix: str = "",
+        status: str = "open",
+    ):
         self.id = fid
         self.severity = severity
         self.title = title
         self.detail = detail
         self.evidence = evidence
+        self.category = category
+        self.recommended_fix = recommended_fix
+        self.status = status
 
     def to_dict(self) -> dict:
         return {
             "id": self.id,
             "severity": self.severity,
+            "category": self.category,
             "title": self.title,
             "detail": self.detail,
+            "finding": self.title,
+            "plain_english_risk": self.detail,
             "evidence": self.evidence,
+            "recommended_fix": self.recommended_fix,
+            "status": self.status,
         }
 
 
-def iter_files(root: Path, limit: int = 6000) -> List[Path]:
-    files: List[Path] = []
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [
-            d for d in dirnames
-            if d not in IGNORED_DIRS and (not d.startswith(".") or d == ".github")
-        ]
-        for name in filenames:
-            if len(files) >= limit:
-                return files
-            p = Path(dirpath) / name
-            try:
-                if p.stat().st_size > 2_000_000:
-                    continue
-            except OSError:
-                continue
-            files.append(p)
-    return files
+def now_iso() -> str:
+    return _dt.datetime.now().astimezone().isoformat(timespec="seconds")
 
 
 def rel(root: Path, path: Path) -> str:
@@ -169,6 +226,26 @@ def read_text(path: Path, max_chars: int = 200_000) -> str:
         return ""
 
 
+def iter_files(root: Path, limit: int = 6000) -> List[Path]:
+    files: List[Path] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [
+            d for d in dirnames
+            if d not in IGNORED_DIRS and (not d.startswith(".") or d == ".github")
+        ]
+        for name in sorted(filenames):
+            if len(files) >= limit:
+                return files
+            p = Path(dirpath) / name
+            try:
+                if p.stat().st_size > 2_000_000:
+                    continue
+            except OSError:
+                continue
+            files.append(p)
+    return files
+
+
 def detect_stack(root: Path) -> Tuple[List[str], Dict[str, str], Dict[str, List[str]]]:
     signals: List[str] = []
     scripts: Dict[str, str] = {}
@@ -183,7 +260,7 @@ def detect_stack(root: Path) -> Tuple[List[str], Dict[str, str], Dict[str, List[
         try:
             data = json.loads(read_text(package_json))
             if isinstance(data.get("scripts"), dict):
-                scripts = data["scripts"]
+                scripts = {str(k): str(v) for k, v in sorted(data["scripts"].items())}
             deps: Dict[str, str] = {}
             for section in ("dependencies", "devDependencies", "peerDependencies"):
                 if isinstance(data.get(section), dict):
@@ -200,7 +277,7 @@ def detect_stack(root: Path) -> Tuple[List[str], Dict[str, str], Dict[str, List[
         if dep.lower() in py_text:
             deps_found.setdefault(label, []).append(dep)
 
-    return signals, scripts, deps_found
+    return sorted(signals), scripts, deps_found
 
 
 def gitignore_entries(root: Path) -> str:
@@ -221,17 +298,14 @@ def scan_env_and_secrets(root: Path, files: List[Path]) -> Tuple[List[str], List
             env_files.append(rp)
         elif is_example:
             env_files.append(rp)
-        if p.suffix.lower() in {
-            ".js", ".jsx", ".ts", ".tsx", ".py", ".rb", ".go", ".java", ".cs", ".php",
-            ".env", ".yaml", ".yml", ".json", ".toml", ".sh", ".rs",
-        } or name.startswith(".env"):
+        if p.suffix.lower() in TEXT_EXTENSIONS or name.startswith(".env"):
             text = read_text(p, max_chars=60_000)
             shaped = any(r.search(text) for r in SECRET_SHAPE_RES)
             generic = bool(SECRET_NAME_RE.search(text) and SECRET_VALUE_RE.search(text))
             if shaped or generic:
                 tag = "high-confidence credential shape" if shaped else "possible hardcoded secret"
                 suspicious.append(f"{rp} ({tag}; value omitted)")
-    return sorted(set(env_files)), sorted(set(real_env_files)), suspicious[:50]
+    return sorted(set(env_files)), sorted(set(real_env_files)), sorted(set(suspicious))[:50]
 
 
 def find_tests(root: Path, files: List[Path]) -> List[str]:
@@ -253,7 +327,7 @@ def find_ci(root: Path) -> List[str]:
     for f in (".gitlab-ci.yml", "azure-pipelines.yml", ".circleci/config.yml", "Jenkinsfile"):
         if (root / f).exists():
             ci.append(f)
-    return ci
+    return sorted(set(ci))
 
 
 def path_hints(root: Path, files: List[Path]) -> Dict[str, List[str]]:
@@ -264,7 +338,7 @@ def path_hints(root: Path, files: List[Path]) -> Dict[str, List[str]]:
         for needle, label in RISK_PATH_HINTS:
             if needle in lower:
                 hints.setdefault(label, []).append(rp)
-    return {k: v[:40] for k, v in sorted(hints.items())}
+    return {k: sorted(set(v))[:40] for k, v in sorted(hints.items())}
 
 
 def tree_sample(root: Path, max_lines: int = 140) -> List[str]:
@@ -309,6 +383,8 @@ def build_findings(
             "One or more files contain patterns that look like live credentials. "
             "Rotate anything real, move it to environment variables, and confirm it is gitignored.",
             suspicious,
+            category="C3",
+            recommended_fix="Rotate anything real, remove it from source, load it from environment variables, and confirm history exposure.",
         ))
 
     env_ignored = ".env" in gitignore
@@ -318,12 +394,16 @@ def build_findings(
             "A non-example .env file exists and `.env` is not in .gitignore. "
             "If this is tracked by git, secrets are in your history. Gitignore it and rotate.",
             real_env_files,
+            category="C3",
+            recommended_fix="Add `.env` patterns to `.gitignore`, remove tracked env files, and rotate exposed values.",
         ))
     elif real_env_files:
         findings.append(Finding(
             nid(), "P2", "Local .env present (verify it is not tracked)",
             "A non-example .env exists; `.env` is in .gitignore, but confirm it was never committed earlier.",
             real_env_files,
+            category="C3",
+            recommended_fix="Run git history/secret checks and keep only redacted `.env.example` files in the repo.",
         ))
 
     has_example = any(Path(e).name.lower() in ENV_EXAMPLE_NAMES for e in env_files)
@@ -333,6 +413,8 @@ def build_findings(
             "The app uses environment variables but ships no .env.example. New contributors and "
             "deploys can miss required config. Add a documented example with no real values.",
             real_env_files,
+            category="C3",
+            recommended_fix="Add `.env.example` with variable names, safe placeholders, and setup notes.",
         ))
 
     if not tests:
@@ -340,6 +422,8 @@ def build_findings(
             nid(), "P1", "No automated tests detected",
             "No test files were found. At minimum, add tests around auth, money, and data-loss paths.",
             [],
+            category="C5",
+            recommended_fix="Add the smallest regression tests around the highest-risk user paths.",
         ))
 
     if not ci:
@@ -347,18 +431,56 @@ def build_findings(
             nid(), "P2", "No CI pipeline detected",
             "No CI configuration found. A CI gate catches regressions before they reach users.",
             [],
+            category="C6",
+            recommended_fix="Add a minimal CI workflow that installs, builds, tests, and runs secret checks.",
         ))
 
-    if any(k in deps_found for k in ("Stripe/payments",)) and not tests:
+    if "Stripe/payments" in deps_found and not tests:
         findings.append(Finding(
             nid(), "P1", "Payments present but no tests",
             "A payments dependency was detected with no tests. Payment flows are high-blast-radius; "
             "add negative and webhook tests.",
             [],
+            category="C4",
+            recommended_fix="Add payment success, failure, idempotency, and webhook signature tests.",
         ))
 
-    findings.sort(key=lambda f: SEVERITY_ORDER.get(f.severity, 9))
+    findings.sort(key=lambda f: (SEVERITY_ORDER.get(f.severity, 9), f.id))
     return findings
+
+
+def scan(root: Path) -> dict:
+    root = root.resolve()
+    files = iter_files(root)
+    stack_signals, scripts, deps_found = detect_stack(root)
+    env_files, real_env_files, suspicious = scan_env_and_secrets(root, files)
+    tests = find_tests(root, files)
+    ci = find_ci(root)
+    hints = path_hints(root, files)
+    gitignore = gitignore_entries(root)
+    findings = build_findings(real_env_files, env_files, suspicious, tests, ci, gitignore, deps_found)
+
+    counts = {sev: 0 for sev in ("P0", "P1", "P2", "P3")}
+    for f in findings:
+        counts[f.severity] = counts.get(f.severity, 0) + 1
+
+    return {
+        "tool": TOOL_NAME,
+        "schema": SCAN_SCHEMA_ID,
+        "generated_at": now_iso(),
+        "project": str(root),
+        "files_scanned": len(files),
+        "stack_signals": stack_signals,
+        "dependencies": {k: sorted(set(v)) for k, v in sorted(deps_found.items())},
+        "scripts": scripts,
+        "env_files": env_files,
+        "tests": tests,
+        "ci": ci,
+        "risk_surfaces": hints,
+        "findings": [f.to_dict() for f in findings],
+        "counts": counts,
+        "tree": tree_sample(root),
+    }
 
 
 def render_markdown(root: Path, data: dict) -> str:
@@ -384,9 +506,12 @@ def render_markdown(root: Path, data: dict) -> str:
         add(f"Counts — P0: {c['P0']}, P1: {c['P1']}, P2: {c['P2']}, P3: {c['P3']}")
         add("")
         for f in data["findings"]:
-            add(f"### [{f['severity']}] {f['id']} — {f['title']}")
+            add(f"### [{f['severity']}] {f['id']} — {f['finding']}")
             add("")
-            add(f["detail"])
+            add(f["plain_english_risk"])
+            if f.get("recommended_fix"):
+                add("")
+                add(f"Recommended first move: {f['recommended_fix']}")
             if f["evidence"]:
                 add("")
                 for e in f["evidence"]:
@@ -399,9 +524,9 @@ def render_markdown(root: Path, data: dict) -> str:
     def section(title: str, items: Iterable[str], empty: str) -> None:
         add(f"## {title}")
         add("")
-        items = list(items)
-        if items:
-            for i in items:
+        values = list(items)
+        if values:
+            for i in values:
                 add(f"- {i}")
         else:
             add(f"- {empty}")
@@ -413,11 +538,7 @@ def render_markdown(root: Path, data: dict) -> str:
         (f"{label}: {', '.join(deps)}" for label, deps in data["dependencies"].items()),
         "No known dependency hints found.",
     )
-    section(
-        "Package scripts",
-        (f"`{k}`: `{v}`" for k, v in data["scripts"].items()),
-        "No package scripts detected.",
-    )
+    section("Package scripts", (f"`{k}`: `{v}`" for k, v in data["scripts"].items()), "No package scripts detected.")
     section("Environment files", (f"`{e}`" for e in data["env_files"]), "No .env-style files detected.")
     section("Test files/configs", (f"`{t}`" for t in data["tests"]), "No obvious test files detected.")
     section("CI workflows", (f"`{w}`" for w in data["ci"]), "No CI configuration detected.")
@@ -452,63 +573,601 @@ def render_markdown(root: Path, data: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def scan(root: Path) -> dict:
-    files = iter_files(root)
-    stack_signals, scripts, deps_found = detect_stack(root)
-    env_files, real_env_files, suspicious = scan_env_and_secrets(root, files)
-    tests = find_tests(root, files)
-    ci = find_ci(root)
-    hints = path_hints(root, files)
-    gitignore = gitignore_entries(root)
-    findings = build_findings(real_env_files, env_files, suspicious, tests, ci, gitignore, deps_found)
-
-    counts = {sev: 0 for sev in ("P0", "P1", "P2", "P3")}
-    for f in findings:
-        counts[f.severity] = counts.get(f.severity, 0) + 1
-
+def coverage_emit(project: str = "") -> dict:
     return {
-        "tool": "checkyourself-cli",
-        "schema": "checkyourself-scan/1",
-        "generated_at": _dt.datetime.now().astimezone().isoformat(timespec="seconds"),
-        "project": str(root),
-        "files_scanned": len(files),
-        "stack_signals": stack_signals,
-        "dependencies": {k: sorted(set(v)) for k, v in sorted(deps_found.items())},
-        "scripts": scripts,
-        "env_files": env_files,
-        "tests": tests,
-        "ci": ci,
-        "risk_surfaces": hints,
-        "findings": [f.to_dict() for f in findings],
-        "counts": counts,
-        "tree": tree_sample(root),
+        "tool": TOOL_NAME,
+        "schema": COVERAGE_SCHEMA_ID,
+        "generated_at": now_iso(),
+        "project": project,
+        "surfaces": [
+            {
+                "id": sid,
+                "surface": surface,
+                "category": category,
+                "status": None,
+                "evidence_reviewed": [],
+                "missing_evidence": [],
+                "not_applicable_reason": "",
+            }
+            for sid, surface, category in COVERAGE_SURFACES
+        ],
     }
 
 
-def main(argv: Optional[List[str]] = None) -> int:
-    parser = argparse.ArgumentParser(
-        prog="checkyourself",
-        description="Optional local scan & scaffold for CheckYourself. Detects the stack, flags "
-                    "obvious risks, and writes a pre-filled context file for your AI assistant.",
-    )
-    parser.add_argument("project", nargs="?", default=".", help="Project root to scan (default: .)")
-    parser.add_argument("--out", default="CHECKYOURSELF_PROJECT_CONTEXT.generated.md",
-                        help="Markdown context output path (default: CHECKYOURSELF_PROJECT_CONTEXT.generated.md)")
-    parser.add_argument("--json", nargs="?", const="CHECKYOURSELF_SCAN.generated.json", default=None,
-                        help="Also write a JSON summary (default path: CHECKYOURSELF_SCAN.generated.json)")
-    parser.add_argument("--format", choices=("text", "json"), default="text",
-                        help="Console output format. Use json for machine-readable stdout.")
-    parser.add_argument("--ci", action="store_true",
-                        help="Exit non-zero if any P0 finding is detected (lightweight CI gate).")
-    parser.add_argument("--no-write", action="store_true", help="Print the summary only; write no files.")
-    parser.add_argument("--quiet", action="store_true", help="Suppress the console summary.")
-    args = parser.parse_args(argv)
+def coverage_check(data: dict) -> dict:
+    errors: List[str] = []
+    warnings: List[str] = []
+    surfaces = data.get("surfaces") or data.get("coverage") or []
+    if not isinstance(surfaces, list):
+        raise CliError("coverage artifact must contain a surfaces array")
 
+    by_id = {str(item.get("id")): item for item in surfaces if isinstance(item, dict) and item.get("id")}
+    by_name = {str(item.get("surface") or item.get("category")): item for item in surfaces if isinstance(item, dict)}
+    valid_statuses = {"Pass", "Finding", "Unknown", "NotApplicable"}
+
+    for sid, surface, _category in COVERAGE_SURFACES:
+        item = by_id.get(sid) or by_name.get(surface)
+        if not item:
+            errors.append(f"{sid} missing: {surface}")
+            continue
+        status = item.get("status")
+        if status not in valid_statuses:
+            errors.append(f"{sid} has invalid or empty status: {status!r}")
+            continue
+        evidence = item.get("evidence_reviewed") or []
+        missing = item.get("missing_evidence") or []
+        if status == "Pass" and not evidence:
+            errors.append(f"{sid} is Pass but has no evidence_reviewed")
+        if status == "Unknown" and not missing:
+            warnings.append(f"{sid} is Unknown but missing_evidence is empty")
+        if status == "NotApplicable" and not item.get("not_applicable_reason"):
+            errors.append(f"{sid} is NotApplicable but has no not_applicable_reason")
+
+    return {
+        "tool": TOOL_NAME,
+        "schema": "checkyourself-coverage-check/1",
+        "complete": not errors,
+        "surface_count": len(surfaces),
+        "required_surface_count": len(COVERAGE_SURFACES),
+        "errors": errors,
+        "warnings": warnings,
+    }
+
+
+def normalize_findings(data: Any) -> List[dict]:
+    if isinstance(data, list):
+        findings = data
+    elif isinstance(data, dict):
+        if isinstance(data.get("findings"), list):
+            findings = data["findings"]
+        elif isinstance(data.get("remediation_backlog"), list):
+            findings = data["remediation_backlog"]
+        else:
+            findings = []
+    else:
+        findings = []
+
+    normalized: List[dict] = []
+    for i, raw in enumerate(findings, start=1):
+        if not isinstance(raw, dict):
+            continue
+        title = str(raw.get("finding") or raw.get("title") or raw.get("fix_summary") or "Untitled finding")
+        detail = str(raw.get("plain_english_risk") or raw.get("detail") or raw.get("why_this_order") or "")
+        severity = str(raw.get("severity") or "P3")
+        status = str(raw.get("status") or "open")
+        fid = str(raw.get("id") or raw.get("finding_id") or f"F-{i:03d}")
+        category = str(raw.get("category") or infer_category(title + " " + detail))
+        evidence = raw.get("evidence") if isinstance(raw.get("evidence"), list) else []
+        normalized.append({
+            "id": fid,
+            "finding_id": fid,
+            "severity": severity if severity in SEVERITY_ORDER else "P3",
+            "category": category,
+            "finding": title,
+            "title": title,
+            "plain_english_risk": detail,
+            "detail": detail,
+            "evidence": [str(e) for e in evidence],
+            "recommended_fix": str(raw.get("recommended_fix") or raw.get("fix_summary") or default_fix_for(title, category)),
+            "status": status,
+        })
+    normalized.sort(key=lambda f: (SEVERITY_ORDER.get(f["severity"], 9), f["category"], f["id"]))
+    return normalized
+
+
+def infer_category(text: str) -> str:
+    lower = text.lower()
+    if any(w in lower for w in ("secret", ".env", "token", "credential", "runtime config", "api key")):
+        return "C3"
+    if any(w in lower for w in ("auth", "permission", "session", "role", "admin")):
+        return "C2"
+    if any(w in lower for w in ("data", "tenant", "privacy", "backup", "retention", "isolation")):
+        return "C1"
+    if any(w in lower for w in ("api", "upload", "webhook", "validation", "payment", "stripe")):
+        return "C4"
+    if any(w in lower for w in ("test", "quality", "regression")):
+        return "C5"
+    if any(w in lower for w in ("ci", "deploy", "release", "rollback", "supply chain")):
+        return "C6"
+    if any(w in lower for w in ("observability", "log", "alert", "incident", "error")):
+        return "C7"
+    if any(w in lower for w in ("performance", "cache", "rate limit", "scaling", "load")):
+        return "C8"
+    if any(w in lower for w in ("frontend", "accessibility", "ux", "client")):
+        return "C9"
+    if any(w in lower for w in ("ai", "rag", "agent", "model", "prompt")):
+        return "C10"
+    return "C4"
+
+
+def default_fix_for(title: str, category: str) -> str:
+    if category == "C3":
+        return "Move configuration to safe environment handling and verify no secret values are committed."
+    if category == "C5":
+        return "Add the smallest regression test that proves this path stays fixed."
+    if category == "C6":
+        return "Add or tighten the release gate and document rollback."
+    return f"Make the smallest reversible fix for: {title}"
+
+
+def category_coverage(coverage_data: Optional[dict]) -> Tuple[Dict[str, dict], bool]:
+    category_state: Dict[str, dict] = {
+        cid: {
+            "status": "MissingCoverage",
+            "evidence_reviewed": [],
+            "missing_evidence": ["coverage artifact was not supplied"],
+            "surfaces": [],
+        }
+        for cid in SCORE_CATEGORIES
+    }
+    if not coverage_data:
+        return category_state, False
+
+    surfaces = coverage_data.get("surfaces") or coverage_data.get("coverage") or []
+    if not isinstance(surfaces, list):
+        return category_state, False
+
+    category_state = {
+        cid: {"status": "NotApplicable", "evidence_reviewed": [], "missing_evidence": [], "surfaces": []}
+        for cid in SCORE_CATEGORIES
+    }
+    represented = set()
+    status_rank = {"Finding": 3, "Unknown": 2, "Pass": 1, "NotApplicable": 0}
+
+    for item in surfaces:
+        if not isinstance(item, dict):
+            continue
+        category = str(item.get("category") or "")
+        if category not in SCORE_CATEGORIES:
+            continue
+        represented.add(str(item.get("id") or item.get("surface") or category))
+        state = category_state[category]
+        status = item.get("status") or "Unknown"
+        current = state["status"]
+        if status_rank.get(status, 2) > status_rank.get(current, 0):
+            state["status"] = status
+        state["surfaces"].append(str(item.get("id") or item.get("surface") or category))
+        state["evidence_reviewed"].extend(str(x) for x in item.get("evidence_reviewed") or [])
+        state["missing_evidence"].extend(str(x) for x in item.get("missing_evidence") or [])
+
+    complete = len({sid for sid, _, _ in COVERAGE_SURFACES}) <= len(
+        {str(item.get("id")) for item in surfaces if isinstance(item, dict) and item.get("id")}
+    )
+    for state in category_state.values():
+        state["evidence_reviewed"] = sorted(set(state["evidence_reviewed"]))
+        state["missing_evidence"] = sorted(set(state["missing_evidence"]))
+    return category_state, complete
+
+
+def score_from_inputs(findings_data: Any, coverage_data: Optional[dict] = None) -> dict:
+    findings = normalize_findings(findings_data)
+    counts = {sev: 0 for sev in ("P0", "P1", "P2", "P3")}
+    unresolved = [f for f in findings if f.get("status") not in RESOLVED_STATUSES]
+    for f in unresolved:
+        counts[f["severity"]] = counts.get(f["severity"], 0) + 1
+
+    coverage_by_category, coverage_complete = category_coverage(coverage_data)
+    per_category: List[dict] = []
+    raw_total = 0.0
+
+    for cid, (name, weight) in SCORE_CATEGORIES.items():
+        category_findings = [f for f in unresolved if f.get("category") == cid]
+        coverage_state = coverage_by_category[cid]
+        penalties: List[dict] = []
+        awarded = float(weight)
+
+        status = coverage_state["status"]
+        if status == "Unknown":
+            missing = coverage_state["missing_evidence"] or ["evidence missing for this category"]
+            if cid in CRITICAL_CATEGORIES:
+                awarded = 0.0
+                penalties.append({"reason": "critical coverage unknown", "points": weight, "missing_evidence": missing})
+            else:
+                reduction = weight * 0.50
+                awarded -= reduction
+                penalties.append({"reason": "coverage unknown", "points": round(reduction, 2), "missing_evidence": missing})
+        elif status == "MissingCoverage":
+            penalties.append({"reason": "coverage artifact not supplied", "points": 0, "missing_evidence": coverage_state["missing_evidence"]})
+
+        for f in category_findings:
+            fraction = SEVERITY_PENALTIES.get(f["severity"], 0.10)
+            points = weight * fraction
+            awarded -= points
+            penalties.append({
+                "finding_id": f["id"],
+                "severity": f["severity"],
+                "reason": f["finding"],
+                "points": round(points, 2),
+            })
+
+        awarded = max(0.0, min(float(weight), awarded))
+        raw_total += awarded
+        per_category.append({
+            "id": cid,
+            "category": name,
+            "weight": weight,
+            "coverage_status": status,
+            "evidence_reviewed": coverage_state["evidence_reviewed"],
+            "missing_evidence": coverage_state["missing_evidence"],
+            "penalties": penalties,
+            "awarded": round(awarded, 2),
+        })
+
+    raw_score = round(raw_total)
+    caps: List[dict] = []
+    cap_value = 100
+    if counts["P0"]:
+        cap_value = min(cap_value, 49)
+        caps.append({"cap": 49, "reason": "unresolved P0 finding"})
+    if counts["P1"]:
+        cap_value = min(cap_value, 74)
+        caps.append({"cap": 74, "reason": "unresolved P1 finding"})
+
+    critical_gap = False
+    high_score_gap = False
+    for cid, state in coverage_by_category.items():
+        if state["status"] in {"Unknown", "MissingCoverage"} and cid in CRITICAL_CATEGORIES:
+            critical_gap = True
+        if state["status"] in {"Unknown", "MissingCoverage"} and cid in HIGH_SCORE_GATE_CATEGORIES:
+            high_score_gap = True
+    if critical_gap:
+        cap_value = min(cap_value, 84)
+        caps.append({"cap": 84, "reason": "missing evidence in a critical category"})
+    if high_score_gap:
+        cap_value = min(cap_value, 90)
+        caps.append({"cap": 90, "reason": "score above 90 requires evidence for tests, secrets, deploy/rollback, observability, auth, and data boundaries"})
+
+    score = min(raw_score, cap_value)
+    if coverage_complete and not critical_gap and not any(c["reason"].startswith("coverage") for c in caps):
+        confidence = "high"
+    elif coverage_complete and not critical_gap:
+        confidence = "medium"
+    else:
+        confidence = "low"
+
+    return {
+        "tool": TOOL_NAME,
+        "schema": SCORE_SCHEMA_ID,
+        "generated_at": now_iso(),
+        "score": int(score),
+        "raw_score": int(raw_score),
+        "confidence": confidence,
+        "counts": counts,
+        "caps_applied": caps,
+        "per_category": per_category,
+        "findings_scored": [f["id"] for f in unresolved],
+        "coverage_complete": coverage_complete,
+    }
+
+
+def backlog_from_findings(findings_data: Any) -> dict:
+    findings = normalize_findings(findings_data)
+    backlog = []
+    for f in findings:
+        status = f.get("status", "open")
+        item = {
+            "finding_id": f["id"],
+            "severity": f["severity"],
+            "category": f["category"],
+            "fix_summary": f.get("recommended_fix") or default_fix_for(f["finding"], f["category"]),
+            "why_this_order": order_reason(f),
+            "verification": verification_for(f),
+            "rollback": rollback_for(f),
+            "learning_value": learning_for(f),
+            "status": status,
+        }
+        backlog.append(item)
+    backlog.sort(key=lambda item: (SEVERITY_ORDER.get(item["severity"], 9), item["category"], item["finding_id"]))
+    first = first_batch(backlog)
+    return {
+        "tool": TOOL_NAME,
+        "schema": "checkyourself-backlog/1",
+        "generated_at": now_iso(),
+        "remediation_backlog": backlog,
+        "first_approval_batch": [item["finding_id"] for item in first],
+    }
+
+
+def next_from_findings(findings_data: Any) -> dict:
+    backlog = backlog_from_findings(findings_data)["remediation_backlog"]
+    batch = first_batch(backlog)
+    return {
+        "tool": TOOL_NAME,
+        "schema": "checkyourself-next-batch/1",
+        "generated_at": now_iso(),
+        "next_approval_batch": batch,
+        "finding_ids": [item["finding_id"] for item in batch],
+    }
+
+
+def first_batch(backlog: List[dict]) -> List[dict]:
+    open_items = [b for b in backlog if b.get("status") not in RESOLVED_STATUSES]
+    if not open_items:
+        return []
+    first_severity = open_items[0]["severity"]
+    return [b for b in open_items if b["severity"] == first_severity][:3]
+
+
+def order_reason(finding: dict) -> str:
+    severity = finding["severity"]
+    if severity == "P0":
+        return "P0 risks can expose users, data, money, or secrets; handle before lower-risk polish."
+    if severity == "P1":
+        return "P1 risks can block a responsible launch and are usually fixable in small batches."
+    if severity == "P2":
+        return "P2 risks harden the launch path after immediate blockers are contained."
+    return "P3 work improves maintainability and learning once higher-risk issues are handled."
+
+
+def verification_for(finding: dict) -> str:
+    category = finding.get("category")
+    if category == "C3":
+        return "Run the scanner, gitleaks or equivalent secret scan, and confirm no real values are printed or tracked."
+    if category == "C5":
+        return "Run the new focused test plus the existing test suite."
+    if category == "C6":
+        return "Run CI locally where possible and verify the workflow passes remotely."
+    return "Run the smallest command or manual check that proves the specific risk changed."
+
+
+def rollback_for(finding: dict) -> str:
+    if finding.get("category") == "C3":
+        return "Revert config-file changes only after confirming no secret value is restored."
+    return "Revert the small patch or restore the previous config from version control."
+
+
+def learning_for(finding: dict) -> str:
+    category = finding.get("category")
+    if category == "C3":
+        return "Environment configuration, secret handling, and release safety."
+    if category == "C5":
+        return "Risk-based testing and regression gates."
+    if category == "C6":
+        return "CI/CD, deploy safety, and rollback discipline."
+    return "How this production surface fails and how to prove the fix."
+
+
+def describe_capabilities() -> dict:
+    version = read_manifest_version()
+    commands = [
+        ("describe", "Emit this machine-readable capability manifest.", {}, CAPABILITIES_SCHEMA_ID),
+        ("scan", "Detect stack signals and deterministic local findings.", {"project": "path"}, SCAN_SCHEMA_ID),
+        ("coverage --emit", "Emit the 20-surface coverage skeleton.", {"project": "optional string"}, COVERAGE_SCHEMA_ID),
+        ("coverage --check", "Validate coverage completeness.", {"file": "coverage json path"}, "checkyourself-coverage-check/1"),
+        ("score", "Compute a deterministic Production Reality Score from findings and coverage.", {"findings": "json path", "coverage": "optional json path"}, SCORE_SCHEMA_ID),
+        ("backlog", "Rank remediation backlog and first approval batch.", {"findings": "json path"}, "checkyourself-backlog/1"),
+        ("next", "Return the next safest unresolved approval batch.", {"findings": "json path"}, "checkyourself-next-batch/1"),
+        ("validate", "Validate an artifact against a bundled JSON schema subset.", {"kind": "schema kind", "file": "json path"}, "checkyourself-validation/1"),
+        ("schema", "Print a bundled schema by name.", {"name": "schema name"}, "json-schema"),
+        ("init", "Create starter generated coverage/context files without overwriting by default.", {"project": "path"}, "checkyourself-init/1"),
+        ("mcp", "Run the stdio MCP server that exposes the same verbs as native tools.", {}, "mcp-stdio"),
+    ]
+    return {
+        "tool": TOOL_NAME,
+        "schema": CAPABILITIES_SCHEMA_ID,
+        "version": version,
+        "generated_at": now_iso(),
+        "commands": [
+            {"name": name, "summary": summary, "inputs": inputs, "output_schema": output}
+            for name, summary, inputs, output in commands
+        ],
+        "coverage_surfaces": [
+            {"id": sid, "surface": surface, "category": category}
+            for sid, surface, category in COVERAGE_SURFACES
+        ],
+        "scoring": {
+            "categories": [
+                {"id": cid, "category": name, "weight": weight}
+                for cid, (name, weight) in SCORE_CATEGORIES.items()
+            ],
+            "severity_penalties": SEVERITY_PENALTIES,
+            "caps": [
+                {"cap": 49, "condition": "any unresolved P0"},
+                {"cap": 74, "condition": "any unresolved P1"},
+                {"cap": 84, "condition": "missing evidence in C1/C2/C3"},
+                {"cap": 90, "condition": "score above 90 without evidence for key launch gates"},
+            ],
+            "confidence_labels": ["high", "medium", "low"],
+        },
+        "schemas": sorted(schema_registry().keys()),
+        "exit_codes": {"0": "success", "1": "gating finding or validation failure", "2": "usage/input error"},
+        "mcp": {
+            "transport": "stdio",
+            "protocol_version": MCP_PROTOCOL_VERSION,
+            "command": "python3 tools/checkyourself.py mcp",
+        },
+    }
+
+
+def read_manifest_version() -> str:
+    manifest = ROOT / "checkyourself.manifest.json"
+    try:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        return str(data.get("version") or "unknown")
+    except Exception:
+        return "unknown"
+
+
+def schema_registry() -> Dict[str, str]:
+    return {
+        "report": "checkyourself-report.schema.json",
+        "dashboard": "dashboard-data.schema.json",
+        "dashboard-data": "dashboard-data.schema.json",
+        "dashboard-html": "checkyourself-dashboard.schema.json",
+        "learning-plan": "learning-plan.schema.json",
+        "scan": "scan.schema.json",
+        "coverage": "coverage.schema.json",
+        "score": "score-result.schema.json",
+        "backlog": "backlog.schema.json",
+        "next": "next-batch.schema.json",
+        "capabilities": "capabilities.schema.json",
+    }
+
+
+def load_schema(name: str) -> dict:
+    registry = schema_registry()
+    if name not in registry:
+        raise CliError(f"unknown schema kind: {name}. Known: {', '.join(sorted(registry))}")
+    path = SCHEMA_DIR / registry[name]
+    if not path.exists():
+        raise CliError(f"schema file missing: {path}")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def load_json_arg(path: str) -> Any:
+    if path == "-":
+        body = sys.stdin.read()
+    else:
+        p = Path(path)
+        if not p.exists():
+            raise CliError(f"JSON file not found: {path}")
+        body = p.read_text(encoding="utf-8")
+    try:
+        return json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise CliError(f"invalid JSON in {path}: {exc}") from exc
+
+
+def json_type_name(value: Any) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, dict):
+        return "object"
+    if isinstance(value, list):
+        return "array"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, int) and not isinstance(value, bool):
+        return "integer"
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return "number"
+    return type(value).__name__
+
+
+def type_matches(value: Any, expected: Any) -> bool:
+    if isinstance(expected, list):
+        return any(type_matches(value, item) for item in expected)
+    actual = json_type_name(value)
+    return actual == expected or (expected == "number" and actual == "integer")
+
+
+def validate_json_schema(data: Any, schema: dict, path: str = "$") -> List[str]:
+    errors: List[str] = []
+    if not isinstance(schema, dict):
+        return errors
+    if "type" in schema and not type_matches(data, schema["type"]):
+        errors.append(f"{path}: expected {schema['type']}, got {json_type_name(data)}")
+        return errors
+    if "enum" in schema and data not in schema["enum"]:
+        errors.append(f"{path}: value {data!r} not in enum {schema['enum']!r}")
+    if isinstance(data, dict):
+        for key in schema.get("required", []):
+            if key not in data:
+                errors.append(f"{path}: missing required key {key!r}")
+        props = schema.get("properties", {})
+        if isinstance(props, dict):
+            for key, subschema in props.items():
+                if key in data:
+                    errors.extend(validate_json_schema(data[key], subschema, f"{path}.{key}"))
+    if isinstance(data, list) and isinstance(schema.get("items"), dict):
+        for i, item in enumerate(data):
+            errors.extend(validate_json_schema(item, schema["items"], f"{path}[{i}]"))
+    if isinstance(data, (int, float)) and not isinstance(data, bool):
+        if "minimum" in schema and data < schema["minimum"]:
+            errors.append(f"{path}: {data} is below minimum {schema['minimum']}")
+        if "maximum" in schema and data > schema["maximum"]:
+            errors.append(f"{path}: {data} is above maximum {schema['maximum']}")
+    return errors
+
+
+def validate_artifact(kind: str, data: Any) -> dict:
+    schema = load_schema(kind)
+    errors = validate_json_schema(data, schema)
+    return {
+        "tool": TOOL_NAME,
+        "schema": "checkyourself-validation/1",
+        "kind": kind,
+        "valid": not errors,
+        "errors": errors,
+    }
+
+
+def init_project(project: Path, force: bool = False) -> dict:
+    project = project.resolve()
+    if not project.is_dir():
+        raise CliError(f"project root not found: {project}")
+    created: List[str] = []
+    skipped: List[str] = []
+    coverage_path = project / "CHECKYOURSELF_COVERAGE.generated.json"
+    context_path = project / "CHECKYOURSELF_PROJECT_CONTEXT.generated.md"
+    targets = [
+        (coverage_path, json.dumps(coverage_emit(str(project)), indent=2) + "\n"),
+        (context_path, render_markdown(project, scan(project))),
+    ]
+    for path, body in targets:
+        if path.exists() and not force:
+            skipped.append(str(path))
+            continue
+        path.write_text(body, encoding="utf-8")
+        created.append(str(path))
+    return {
+        "tool": TOOL_NAME,
+        "schema": "checkyourself-init/1",
+        "project": str(project),
+        "created": created,
+        "skipped": skipped,
+    }
+
+
+def write_json(data: Any) -> None:
+    print(json.dumps(data, indent=2, sort_keys=False))
+
+
+def write_text_result(data: dict) -> None:
+    schema = data.get("schema", "")
+    if schema == SCAN_SCHEMA_ID:
+        c = data["counts"]
+        print(f"Scanned {data['files_scanned']} files. Findings — P0: {c['P0']}, P1: {c['P1']}, P2: {c['P2']}, P3: {c['P3']}")
+        for f in data["findings"]:
+            print(f"  [{f['severity']}] {f['id']} {f['finding']}")
+        print("Next: run the full CheckYourself diagnostic, then use score/backlog/next for deterministic receipts.")
+    elif schema == SCORE_SCHEMA_ID:
+        print(f"Score: {data['score']} ({data['confidence']} confidence, raw {data['raw_score']})")
+        for cap in data["caps_applied"]:
+            print(f"  cap {cap['cap']}: {cap['reason']}")
+    elif schema in {"checkyourself-backlog/1", "checkyourself-next-batch/1"}:
+        ids = data.get("first_approval_batch") or data.get("finding_ids") or []
+        print("Next batch: " + (", ".join(ids) if ids else "none"))
+    else:
+        write_json(data)
+
+
+def command_scan(args: argparse.Namespace) -> int:
     root = Path(args.project).resolve()
     if not root.is_dir():
-        print(f"error: project root not found: {root}", file=sys.stderr)
-        return 2
-
+        raise CliError(f"project root not found: {root}")
     data = scan(root)
     json_stdout = args.format == "json" or args.json == "-" or (args.no_write and args.json is not None)
 
@@ -528,18 +1187,381 @@ def main(argv: Optional[List[str]] = None) -> int:
                 print(f"Wrote JSON:    {jout}")
 
     if json_stdout:
-        print(json.dumps(data, indent=2))
+        write_json(data)
     elif not args.quiet:
-        c = data["counts"]
-        print(f"Scanned {data['files_scanned']} files. "
-              f"Findings — P0: {c['P0']}, P1: {c['P1']}, P2: {c['P2']}, P3: {c['P3']}")
-        for f in data["findings"]:
-            print(f"  [{f['severity']}] {f['id']} {f['title']}")
-        print("Next: hand the generated context to your AI and run the full CheckYourself diagnostic.")
+        write_text_result(data)
 
     if args.ci and data["counts"].get("P0", 0) > 0:
         return 1
     return 0
+
+
+def command_describe(args: argparse.Namespace) -> int:
+    data = describe_capabilities()
+    if args.format == "json":
+        write_json(data)
+    else:
+        print(f"CheckYourself {data['version']} commands:")
+        for command in data["commands"]:
+            print(f"- {command['name']}: {command['summary']}")
+    return 0
+
+
+def command_schema(args: argparse.Namespace) -> int:
+    write_json(load_schema(args.name))
+    return 0
+
+
+def command_coverage(args: argparse.Namespace) -> int:
+    if args.check:
+        data = load_json_arg(args.check)
+        result = coverage_check(data)
+        if args.format == "json":
+            write_json(result)
+        else:
+            print("Coverage complete" if result["complete"] else "Coverage incomplete")
+            for error in result["errors"]:
+                print(f"- {error}")
+            for warning in result["warnings"]:
+                print(f"- warning: {warning}")
+        return 0 if result["complete"] else 1
+    data = coverage_emit(args.project or "")
+    if args.out:
+        path = Path(args.out)
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    if args.format == "json" or not args.out:
+        write_json(data)
+    else:
+        print(f"Wrote coverage skeleton: {args.out}")
+    return 0
+
+
+def command_score(args: argparse.Namespace) -> int:
+    findings_data = load_json_arg(args.findings)
+    coverage_data = load_json_arg(args.coverage) if args.coverage else None
+    result = score_from_inputs(findings_data, coverage_data)
+    if args.format == "json":
+        write_json(result)
+    else:
+        write_text_result(result)
+    return 0
+
+
+def command_backlog(args: argparse.Namespace) -> int:
+    data = load_json_arg(args.findings)
+    result = backlog_from_findings(data)
+    if args.format == "json":
+        write_json(result)
+    else:
+        write_text_result(result)
+    return 0
+
+
+def command_next(args: argparse.Namespace) -> int:
+    data = load_json_arg(args.findings)
+    result = next_from_findings(data)
+    if args.format == "json":
+        write_json(result)
+    else:
+        write_text_result(result)
+    return 0
+
+
+def command_validate(args: argparse.Namespace) -> int:
+    data = load_json_arg(args.file)
+    result = validate_artifact(args.kind, data)
+    if args.format == "json":
+        write_json(result)
+    else:
+        print("Valid" if result["valid"] else "Invalid")
+        for error in result["errors"]:
+            print(f"- {error}")
+    return 0 if result["valid"] else 1
+
+
+def command_init(args: argparse.Namespace) -> int:
+    result = init_project(Path(args.project), force=args.force)
+    if args.format == "json":
+        write_json(result)
+    else:
+        for path in result["created"]:
+            print(f"Created: {path}")
+        for path in result["skipped"]:
+            print(f"Skipped existing: {path}")
+    return 0
+
+
+def mcp_tools() -> List[dict]:
+    return [
+        {
+            "name": "describe",
+            "title": "Describe CheckYourself",
+            "description": "Return the CheckYourself command, schema, scoring, and MCP capability manifest.",
+            "inputSchema": {"type": "object", "properties": {}},
+        },
+        {
+            "name": "scan",
+            "title": "Scan Project",
+            "description": "Run deterministic local discovery and obvious-risk checks against a project path.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {"project": {"type": "string", "description": "Project root path. Defaults to current directory."}},
+            },
+        },
+        {
+            "name": "coverage_emit",
+            "title": "Emit Coverage Skeleton",
+            "description": "Return the 20-surface coverage skeleton for an agent to fill with evidence.",
+            "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}}},
+        },
+        {
+            "name": "coverage_check",
+            "title": "Check Coverage",
+            "description": "Check a coverage object for completeness and evidence requirements.",
+            "inputSchema": {"type": "object", "properties": {"coverage": {"type": "object"}}, "required": ["coverage"]},
+        },
+        {
+            "name": "score",
+            "title": "Score Findings",
+            "description": "Compute the deterministic Production Reality Score from findings and optional coverage.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {"findings": {"type": "object"}, "coverage": {"type": "object"}},
+                "required": ["findings"],
+            },
+        },
+        {
+            "name": "backlog",
+            "title": "Rank Backlog",
+            "description": "Rank findings into a complete remediation backlog and first approval batch.",
+            "inputSchema": {"type": "object", "properties": {"findings": {"type": "object"}}, "required": ["findings"]},
+        },
+        {
+            "name": "next",
+            "title": "Next Approval Batch",
+            "description": "Return the next safest unresolved approval batch from findings.",
+            "inputSchema": {"type": "object", "properties": {"findings": {"type": "object"}}, "required": ["findings"]},
+        },
+        {
+            "name": "validate",
+            "title": "Validate Artifact",
+            "description": "Validate a JSON artifact against a bundled CheckYourself schema subset.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {"kind": {"type": "string"}, "artifact": {"type": "object"}},
+                "required": ["kind", "artifact"],
+            },
+        },
+        {
+            "name": "schema",
+            "title": "Get Schema",
+            "description": "Return a bundled JSON schema by name.",
+            "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]},
+        },
+    ]
+
+
+def call_mcp_tool(name: str, arguments: dict) -> dict:
+    if name == "describe":
+        return describe_capabilities()
+    if name == "scan":
+        return scan(Path(arguments.get("project") or "."))
+    if name == "coverage_emit":
+        return coverage_emit(str(arguments.get("project") or ""))
+    if name == "coverage_check":
+        return coverage_check(arguments.get("coverage") or {})
+    if name == "score":
+        return score_from_inputs(arguments.get("findings") or {}, arguments.get("coverage"))
+    if name == "backlog":
+        return backlog_from_findings(arguments.get("findings") or {})
+    if name == "next":
+        return next_from_findings(arguments.get("findings") or {})
+    if name == "validate":
+        return validate_artifact(str(arguments.get("kind")), arguments.get("artifact"))
+    if name == "schema":
+        return load_schema(str(arguments.get("name")))
+    raise CliError(f"unknown MCP tool: {name}")
+
+
+def mcp_success(request_id: Any, result: dict) -> dict:
+    return {"jsonrpc": "2.0", "id": request_id, "result": result}
+
+
+def mcp_error(request_id: Any, code: int, message: str, data: Optional[dict] = None) -> dict:
+    error: Dict[str, Any] = {"code": code, "message": message}
+    if data is not None:
+        error["data"] = data
+    return {"jsonrpc": "2.0", "id": request_id, "error": error}
+
+
+def mcp_tool_result(data: dict, is_error: bool = False) -> dict:
+    text = json.dumps(data, indent=2)
+    return {
+        "content": [{"type": "text", "text": text}],
+        "structuredContent": data,
+        "isError": is_error,
+    }
+
+
+def handle_mcp_message(message: dict) -> Optional[dict]:
+    request_id = message.get("id")
+    method = message.get("method")
+    params = message.get("params") or {}
+    if method == "initialize":
+        requested = str(params.get("protocolVersion") or MCP_PROTOCOL_VERSION)
+        protocol = requested if requested in SUPPORTED_MCP_PROTOCOLS else MCP_PROTOCOL_VERSION
+        return mcp_success(request_id, {
+            "protocolVersion": protocol,
+            "capabilities": {"tools": {"listChanged": False}},
+            "serverInfo": {
+                "name": "checkyourself",
+                "title": "CheckYourself",
+                "version": read_manifest_version(),
+                "description": "Local-first production-readiness diagnostic tools.",
+            },
+            "instructions": "Use CheckYourself read-only first. Scan, fill coverage with evidence, score, rank backlog, ask before fixes.",
+        })
+    if method == "notifications/initialized":
+        return None
+    if method == "ping":
+        return mcp_success(request_id, {})
+    if method == "tools/list":
+        return mcp_success(request_id, {"tools": mcp_tools()})
+    if method == "tools/call":
+        name = str(params.get("name") or "")
+        arguments = params.get("arguments") or {}
+        if not isinstance(arguments, dict):
+            return mcp_error(request_id, -32602, "tools/call arguments must be an object")
+        try:
+            data = call_mcp_tool(name, arguments)
+            return mcp_success(request_id, mcp_tool_result(data))
+        except CliError as exc:
+            return mcp_success(request_id, mcp_tool_result({"error": str(exc), "code": exc.code}, is_error=True))
+        except Exception as exc:  # pragma: no cover - defensive protocol boundary.
+            return mcp_success(request_id, mcp_tool_result({"error": str(exc)}, is_error=True))
+    if request_id is None:
+        return None
+    return mcp_error(request_id, -32601, f"method not found: {method}")
+
+
+def run_mcp_server() -> int:
+    for raw in sys.stdin:
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            message = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            response = mcp_error(None, -32700, f"parse error: {exc}")
+        else:
+            try:
+                response = handle_mcp_message(message)
+            except Exception as exc:  # pragma: no cover - defensive protocol boundary.
+                traceback.print_exc(file=sys.stderr)
+                response = mcp_error(message.get("id"), -32603, str(exc))
+        if response is not None:
+            sys.stdout.write(json.dumps(response, separators=(",", ":")) + "\n")
+            sys.stdout.flush()
+    return 0
+
+
+def add_scan_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("project", nargs="?", default=".", help="Project root to scan (default: .)")
+    parser.add_argument("--out", default="CHECKYOURSELF_PROJECT_CONTEXT.generated.md",
+                        help="Markdown context output path (default: CHECKYOURSELF_PROJECT_CONTEXT.generated.md)")
+    parser.add_argument("--json", nargs="?", const="CHECKYOURSELF_SCAN.generated.json", default=None,
+                        help="Also write a JSON summary (default path: CHECKYOURSELF_SCAN.generated.json). Use - for stdout.")
+    parser.add_argument("--format", choices=("text", "json"), default="text",
+                        help="Console output format. Use json for machine-readable stdout.")
+    parser.add_argument("--ci", action="store_true",
+                        help="Exit non-zero if any P0 finding is detected.")
+    parser.add_argument("--no-write", action="store_true", help="Print the summary only; write no files.")
+    parser.add_argument("--quiet", action="store_true", help="Suppress the console summary.")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="checkyourself",
+        description="Local deterministic interface for CheckYourself diagnostics.",
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("describe", help="Emit the machine-readable capability manifest.")
+    p.add_argument("--format", choices=("text", "json"), default="text")
+    p.set_defaults(func=command_describe)
+
+    p = sub.add_parser("scan", help="Scan a project and emit deterministic local findings.")
+    add_scan_args(p)
+    p.set_defaults(func=command_scan)
+
+    p = sub.add_parser("schema", help="Print a bundled schema by name.")
+    p.add_argument("name", choices=sorted(schema_registry().keys()))
+    p.set_defaults(func=command_schema)
+
+    p = sub.add_parser("coverage", help="Emit or check the 20-surface coverage matrix.")
+    group = p.add_mutually_exclusive_group()
+    group.add_argument("--emit", action="store_true", help="Emit the coverage skeleton (default).")
+    group.add_argument("--check", help="Validate a filled coverage JSON file.")
+    p.add_argument("--project", default="", help="Optional project label for emitted coverage.")
+    p.add_argument("--out", help="Write emitted coverage JSON to this path.")
+    p.add_argument("--format", choices=("text", "json"), default="json")
+    p.set_defaults(func=command_coverage)
+
+    p = sub.add_parser("score", help="Compute deterministic Production Reality Score.")
+    p.add_argument("--findings", required=True, help="JSON file containing findings, scan output, or report.")
+    p.add_argument("--coverage", help="Optional coverage JSON file.")
+    p.add_argument("--format", choices=("text", "json"), default="text")
+    p.set_defaults(func=command_score)
+
+    p = sub.add_parser("backlog", help="Rank the complete remediation backlog.")
+    p.add_argument("--findings", required=True, help="JSON file containing findings, scan output, or report.")
+    p.add_argument("--format", choices=("text", "json"), default="text")
+    p.set_defaults(func=command_backlog)
+
+    p = sub.add_parser("next", help="Return the next safest unresolved approval batch.")
+    p.add_argument("--findings", required=True, help="JSON file containing findings, scan output, or report.")
+    p.add_argument("--format", choices=("text", "json"), default="text")
+    p.set_defaults(func=command_next)
+
+    p = sub.add_parser("validate", help="Validate a JSON artifact against a bundled schema.")
+    p.add_argument("--kind", required=True, choices=sorted(schema_registry().keys()))
+    p.add_argument("file", help="JSON artifact path, or - for stdin.")
+    p.add_argument("--format", choices=("text", "json"), default="text")
+    p.set_defaults(func=command_validate)
+
+    p = sub.add_parser("init", help="Create starter generated CheckYourself files in a target project.")
+    p.add_argument("project", nargs="?", default=".")
+    p.add_argument("--force", action="store_true", help="Overwrite existing generated files.")
+    p.add_argument("--format", choices=("text", "json"), default="text")
+    p.set_defaults(func=command_init)
+
+    p = sub.add_parser("mcp", help="Run the stdio MCP server.")
+    p.set_defaults(func=lambda _args: run_mcp_server())
+    return parser
+
+
+def legacy_scan_main(argv: Sequence[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="checkyourself",
+        description="Optional local scan & scaffold for CheckYourself.",
+    )
+    add_scan_args(parser)
+    args = parser.parse_args(list(argv))
+    return command_scan(args)
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    raw = list(sys.argv[1:] if argv is None else argv)
+    commands = {"describe", "scan", "schema", "coverage", "score", "backlog", "next", "validate", "init", "mcp"}
+    try:
+        if not raw or raw[0] not in commands:
+            return legacy_scan_main(raw)
+        parser = build_parser()
+        args = parser.parse_args(raw)
+        return args.func(args)
+    except CliError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return exc.code
 
 
 if __name__ == "__main__":

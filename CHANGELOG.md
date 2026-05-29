@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.6.0
+
+- Promoted the CLI from scan-only helper to deterministic agent interface with
+  `describe`, `scan`, `coverage`, `score`, `backlog`, `next`, `validate`,
+  `schema`, `init`, and `mcp` commands.
+- Added schema-backed contracts for scan, coverage, score, backlog, next batch,
+  and capabilities.
+- Added a zero-dependency stdio MCP wrapper over the same CLI functions.
+- Expanded unit tests and CI smoke coverage for the agent-facing command
+  surface.
+- Updated CLI, MCP, README, manifest, and agent-access docs to match the
+  shipped code instead of future-tense plans.
+
 ## 1.5.3
 
 - Made the roast-lite reality-check voice part of the actual agent operating

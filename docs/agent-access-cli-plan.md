@@ -1,15 +1,15 @@
 # Build Plan — Agent-Accessible CheckYourself CLI
 
-Status: **implementation plan / not fully implemented.** This document is the build plan for
+Status: **implemented in v1.6.0.** This document is now the decision record for
 turning `tools/checkyourself.py` from a one-shot scanner into the machine interface that lets an
 AI agent **discover, run, score, and self-verify** CheckYourself with no human in the loop.
 
-Current decision: **CLI first, MCP later, no hosted API for now.** The CLI should be the canonical
-engine because it is local, offline, scriptable, CI-friendly, and easiest for AI agents to call
-through an existing shell tool. A future MCP server should be a thin native-agent wrapper over the
-same CLI functions after the command contract is stable. A hosted HTTP API is intentionally out of
-scope unless CheckYourself becomes a SaaS/team service; it would add auth, hosting, privacy,
-support, and attack-surface work that the current open-source folder/CLI product does not need.
+Current decision: **CLI is the canonical engine, MCP is a thin local wrapper, no hosted API for
+now.** The CLI is local, offline, scriptable, CI-friendly, and easiest for AI agents to call
+through an existing shell tool. The MCP server wraps the same CLI functions for native agent tools.
+A hosted HTTP API is intentionally out of scope unless CheckYourself becomes a SaaS/team service;
+it would add auth, hosting, privacy, support, and attack-surface work that the current open-source
+folder/CLI product does not need.
 
 It is grounded in the existing system: `02_RUN_DIAGNOSTIC/scoring-method.md`,
 `02_RUN_DIAGNOSTIC/coverage-matrix.md`, `AGENTS.md`, and `schemas/`.
@@ -56,7 +56,7 @@ agent-usable instead of merely agent-runnable.
 | Agent-findable | One call returns the full capability surface | `describe`, `AGENTS.md` pointer, manifest entrypoint |
 | Agent-readable | Structured, schema-backed output everywhere | `--format json`, `schema`, stable IDs/enums |
 | Agent-usable | The whole workflow exposed as callable verbs | `scan`, `coverage`, `score`, `backlog`, `next`, `validate` |
-| Agent-accessible | Zero-dep, offline, deterministic, native tool access | stdlib, stable exit codes, optional future `mcp` server |
+| Agent-accessible | Zero-dep, offline, deterministic, native tool access | stdlib, stable exit codes, local `mcp` server |
 
 ---
 
@@ -66,7 +66,7 @@ The CLI moves to a subcommand model. **Backward compatibility:** the current bar
 `checkyourself <path>` continues to mean `scan <path>` so nothing that exists today breaks.
 
 Global conventions:
-- `--format {json,md,text}` on every command (default `text` for humans, `json` for agents).
+- `--format {json,text}` where useful (default `text` for humans, `json` for agent-first emitters).
 - `--out PATH` / `--json [PATH]` for file output; generated files keep the gitignored
   `CHECKYOURSELF_*.generated.*` names.
 - Stable, documented exit codes (see §6).
@@ -155,6 +155,8 @@ Reuse the existing schemas where they already fit; add the missing machine contr
 - `schemas/scan.schema.json` — the `checkyourself-scan/1` object `scan` emits.
 - `schemas/coverage.schema.json` — the 20-surface matrix with status enum + evidence arrays.
 - `schemas/score-result.schema.json` — the `score` breakdown (per-category, caps, confidence).
+- `schemas/backlog.schema.json` — the ranked backlog and first approval batch.
+- `schemas/next-batch.schema.json` — the next unresolved approval batch.
 - `schemas/capabilities.schema.json` — the `describe` manifest shape.
 
 Every new schema must be added to the public validator's JSON checks and link-checked.
@@ -259,37 +261,36 @@ missing, points awarded, and what would raise the score.
 be run by a person, CI, or an AI agent through shell access. It is enough for launch because it
 keeps the product offline, zero-dependency, private-by-default, and easy to verify.
 
-**MCP** (Model Context Protocol) is an optional agent integration layer. It would expose the same
-commands as native tools inside Claude, Cursor, Codex, or other agent clients. It should come after
-the CLI contract is stable and should call the same internal functions as the CLI.
+**MCP** (Model Context Protocol) is an optional agent integration layer. It exposes the same
+commands as native tools inside Claude, Cursor, Codex, or other agent clients, and it calls the
+same internal functions as the CLI.
 
 **API** means a hosted HTTP service. It is not needed for the current public repository. Build one
 only if CheckYourself becomes a remote SaaS/team product that needs accounts, shared history,
 hosted runs, billing, or web dashboards. Until then, an API would mostly add operational burden and
 security/privacy risk.
 
-Recommendation: **ship CLI as the engine, plan MCP as a later wrapper, do not build an API now.**
+Recommendation: **ship CLI as the engine, ship MCP as a local wrapper, do not build an API now.**
 
 ## 9. MCP server (`checkyourself mcp`) — Phase 3
 
 Make the verbs callable as **native agent tools** in Claude / Cursor / Codex.
 
-- **Transport:** JSON-RPC 2.0 over stdio, implemented with the standard library only (read
-  Content-Length framed messages on stdin, write responses on stdout). No third-party MCP SDK,
-  preserving the zero-dependency promise.
-- **Handshake:** implement `initialize`, `tools/list`, `tools/call`.
+- **Transport:** JSON-RPC 2.0 over stdio, implemented with the standard library only. The current
+  MCP stdio transport uses newline-delimited JSON-RPC messages on stdin/stdout. No third-party MCP
+  SDK, preserving the zero-dependency promise.
+- **Handshake:** implements `initialize`, `notifications/initialized`, `ping`, `tools/list`, and
+  `tools/call`.
 - **Tools exposed:** `scan`, `coverage_emit`, `coverage_check`, `score`, `backlog`, `next`,
   `validate`, `describe` — each a thin wrapper over the same internal functions the CLI uses, so
   there is one implementation and one contract.
 - **Inputs/outputs:** JSON arguments mirroring the CLI flags; results are the same schema-backed
   objects, returned as MCP tool content.
-- **Sequencing:** build only after the subcommand contract is stable (Phase 1–2), so the MCP layer
-  is a pure wrapper, not a parallel implementation.
+- **Sequencing:** built after the subcommand contract, so the MCP layer is a pure wrapper, not a
+  parallel implementation.
 - **Docs:** a `docs/mcp.md` with a ready-to-paste server entry for Claude Code / Cursor.
 
-If a stdlib JSON-RPC loop proves fiddly, the fallback is to document `checkyourself` as a tool an
-existing generic "shell command" MCP can call — but the native server is the better UX and is
-tracked here as the target.
+The native stdlib server is shipped as `python3 tools/checkyourself.py mcp`.
 
 ---
 
@@ -329,6 +330,8 @@ tracked here as the target.
 
 ## 13. Phased rollout & acceptance criteria
 
+All phases below are delivered in v1.6.0 unless a future enhancement is called out explicitly.
+
 **Phase 1A — Agent contract foundation**
 - Add subcommands while preserving `python3 tools/checkyourself.py <path>` as `scan <path>`.
 - Add `describe --format json`, `schema <name>`, stable exit codes, `scan --format json`, and
@@ -336,24 +339,24 @@ tracked here as the target.
 - Add `schemas/scan.schema.json` and `schemas/capabilities.schema.json`.
 - Fix current scan-shape gaps: normalize `title/detail` with the report schema fields, make
   `--json --no-write` capable of writing JSON to stdout, and keep secret values redacted.
-- *Done when:* an agent can discover the tool, run `scan`, fetch schemas, and validate generated
+- *Delivered:* an agent can discover the tool, run `scan`, fetch schemas, and validate generated
   scan output offline with passing CI.
 
 **Phase 1B — Deterministic scoring core**
 - Add `score`, `validate`, and `schemas/score-result.schema.json`.
 - Implement the evidence-first scoring algorithm above.
-- *Done when:* an agent can score a findings/coverage fixture reproducibly and CI proves the caps
-  and confidence labels.
+- *Delivered:* an agent can score findings and coverage reproducibly; tests prove the P0 cap and
+  validation contract.
 
 **Phase 2 — Full workflow**
 - `coverage` (emit/check), `backlog`, `next`, `init`; `coverage` schema.
-- *Done when:* an agent can run the entire diagnose → score → backlog → next-batch loop through the
-  CLI without a human, and `coverage --check` enforces the completeness rule.
+- *Delivered:* an agent can run the diagnose → score → backlog → next-batch loop through the CLI,
+  and `coverage --check` enforces the completeness rule.
 
 **Phase 3 — Native tool access (MCP)**
 - `checkyourself mcp` stdio server + `docs/mcp.md`.
-- *Done when:* Claude Code / Cursor can call CheckYourself tools natively with a one-line config and
-  no third-party dependency.
+- *Delivered:* compatible MCP clients can call CheckYourself tools natively with a local stdio
+  config and no third-party dependency.
 
 ---
 
@@ -371,11 +374,12 @@ tracked here as the target.
 
 ---
 
-## 15. Open questions
+## 15. Resolved questions
 
-1. Exact penalty fractions in §5 — confirm against how you intend the score to "feel."
-2. Single file vs `tools/checkyourself/` package — decide at the §7 size threshold.
-3. Is `init` worth it, or do agents always write into their own project layout?
-4. MCP: native stdlib server (preferred) vs documented generic-shell wrapper.
-5. Should `score`/`backlog` accept the agent's full report JSON directly (one input) in addition to
-   separate `--findings`/`--coverage` files?
+1. Penalty fractions shipped as `P0=100%`, `P1=60%`, `P2=25%`, `P3=10%` of the mapped category.
+2. The implementation stays in one `tools/checkyourself.py` file for now; split only if future
+   growth makes review harder.
+3. `init` is included because it gives agents a safe generated-file target without guessing paths.
+4. MCP ships as the native stdlib server.
+5. `score` and `backlog` accept scan output, report-like JSON, or raw findings arrays through the
+   same normalization path.

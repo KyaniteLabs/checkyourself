@@ -24,15 +24,15 @@ Use this when your assistant cannot read a project folder.
 2. Give those operating instructions to your AI along with your app files, repo, screenshots, exported code, or a written description.
 3. Ask for the diagnostic first.
 
-### Path 3 - Optional local scan
+### Path 3 - Local CLI
 
-Run the bundled scanner to detect your stack and obvious issues, then hand the generated context to your AI:
+Run the bundled CLI to detect your stack and obvious issues, then hand the generated context to your AI:
 
 ```text
-python3 tools/checkyourself.py /path/to/your/project
+python3 tools/checkyourself.py scan /path/to/your/project
 ```
 
-It writes `CHECKYOURSELF_PROJECT_CONTEXT.generated.md` so your assistant spends tokens on judgment, not discovery. Use `--format json --no-write` when an agent or CI needs machine-readable output. The CLI is optional; every path above works without it.
+It writes `CHECKYOURSELF_PROJECT_CONTEXT.generated.md` so your assistant spends tokens on judgment, not discovery. Use `describe --format json`, `score`, `backlog`, `next`, and `validate` when an agent or CI needs machine-readable receipts. The CLI also includes a local stdio MCP wrapper with `python3 tools/checkyourself.py mcp`. The CLI is optional for humans; it is the best path for agents.
 
 ### Keep Context Lean
 

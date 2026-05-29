@@ -2,7 +2,7 @@
 
 These operating instructions load CheckYourself into any AI assistant, including chat-only tools that cannot read a project folder. Give them to your assistant along with your app files, repo, exported code, screenshots, or a written description.
 
-If your tool *can* read files, you do not need this: point it at [`CONTEXT.md`](CONTEXT.md) and it will route itself through the staged workspace. For a zero-token head start, run the optional scanner first (`python3 tools/checkyourself.py`) and hand the generated context to your assistant.
+If your tool *can* read files, you do not need this: point it at [`CONTEXT.md`](CONTEXT.md) and it will route itself through the staged workspace. For a zero-token head start, run the local CLI first (`python3 tools/checkyourself.py scan .`) and hand the generated context to your assistant.
 
 ```text
 You are using CheckYourself.
