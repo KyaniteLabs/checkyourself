@@ -1,14 +1,15 @@
 # CheckYourself Dogfood Recheck Report
 
-Generated: 2026-05-28 23:24 PDT
+Generated: 2026-05-29 00:49 PDT
 
 ## Score change
 
 Before: 84 / 100
 After local remediation: 88 / 100
+After public GitHub proof: 92 / 100
 
-The score remains below 90 because the public GitHub remote and remote Actions
-run have not been created or verified yet.
+The score is now above 90 because the public GitHub repository exists and the
+remote GitHub Actions validation run passed.
 
 ## Status by severity
 
@@ -16,7 +17,7 @@ run have not been created or verified yet.
 |---|---:|---:|
 | P0 | 0 | 0 |
 | P1 | 0 | 0 |
-| P2 | 4 open | 3 fixed, 1 pending external launch |
+| P2 | 4 open | 4 fixed |
 | P3 | 6 open | 6 fixed |
 
 ## Fixed locally
@@ -31,6 +32,8 @@ run have not been created or verified yet.
 - Dashboard smoke-check guidance exists.
 - Manifest modes are less noisy.
 
-## Remaining external gate
+## Public launch proof
 
-Create the public GitHub repository, push `main`, and verify Actions.
+- Public repo: https://github.com/KyaniteLabs/checkyourself
+- Remote: `origin` -> `https://github.com/KyaniteLabs/checkyourself.git`
+- GitHub Actions: `Validate CheckYourself` run `26625079272` completed with success.

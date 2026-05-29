@@ -1,9 +1,9 @@
 {
   "app_name": "CheckYourself Dogfood Self-Audit",
   "generated_at": "2026-05-29 00:32 PDT",
-  "score": 88,
+  "score": 92,
   "confidence": "medium-high",
-  "summary": "CheckYourself audited itself as a public, file-first diagnostic system. Local P2/P3 findings have been remediated; the remaining launch gate is public GitHub remote and Actions proof.",
+  "summary": "CheckYourself audited itself as a public, file-first diagnostic system. Local P2/P3 findings are remediated, the public GitHub repo is live, and remote Actions proof passed.",
   "language_mode": {
     "primary": "en",
     "secondary": "es",
@@ -27,8 +27,8 @@
   "counts": {
     "P0": 0,
     "P1": 0,
-    "P2": 4,
-    "P3": 6,
+    "P2": 0,
+    "P3": 0,
     "Unknown": 1
   },
   "coverage": [
@@ -43,8 +43,8 @@
     {"surface": "Security and threat model", "status": "Pass", "evidence": "Secret scan passed and CI includes gitleaks when available.", "finding_ids": ["CY-P2-003"]},
     {"surface": "Privacy and data governance", "status": "Pass", "evidence": "Public product collects no data and warns against secret/private output.", "finding_ids": []},
     {"surface": "Tests and quality gates", "status": "Pass", "evidence": "Public validator, release validators, syntax checks, link checks, schema checks, and dashboard smoke guidance are present.", "finding_ids": ["CY-P2-003", "CY-P3-004"]},
-    {"surface": "CI/CD and supply chain", "status": "Finding", "evidence": "Local workflow is stronger, but remote GitHub Actions is not proven until push.", "finding_ids": ["CY-P2-004"]},
-    {"surface": "Hosting, deployment, rollback", "status": "Finding", "evidence": "No remote is configured yet; public release proof remains external.", "finding_ids": ["CY-P2-004"]},
+    {"surface": "CI/CD and supply chain", "status": "Pass", "evidence": "Remote GitHub Actions passed on KyaniteLabs/checkyourself run 26625079272.", "finding_ids": ["CY-P2-004"]},
+    {"surface": "Hosting, deployment, rollback", "status": "Pass", "evidence": "Public repository is live at https://github.com/KyaniteLabs/checkyourself.", "finding_ids": ["CY-P2-004"]},
     {"surface": "Cloud infrastructure/IaC", "status": "Not applicable", "evidence": "No cloud runtime or IaC.", "finding_ids": []},
     {"surface": "Performance, caching, rate limits", "status": "Pass", "evidence": "Progressive context-loading and token-efficiency rules are documented.", "finding_ids": ["CY-P3-001"]},
     {"surface": "Scaling and resilience", "status": "Not applicable", "evidence": "No service workload; resilience is context-size control.", "finding_ids": []},
@@ -56,8 +56,8 @@
   "findings": [
     {"id": "CY-P2-001", "severity": "P2", "title": "Scanner-generated context could dirty repo root", "plain_risk": "Maintainers could accidentally commit local generated context.", "status": "fixed", "next_step": "Keep ignore pattern covered by validator."},
     {"id": "CY-P2-002", "severity": "P2", "title": "Manifest dashboard paths drifted from docs", "plain_risk": "Agents could choose the wrong dashboard mode.", "status": "fixed", "next_step": "Keep manifest and dashboard docs validated together."},
-    {"id": "CY-P2-003", "severity": "P2", "title": "CI was narrower than dogfood verification", "plain_risk": "Public regressions could pass a weaker CI gate.", "status": "fixed", "next_step": "Confirm remote Actions after push."},
-    {"id": "CY-P2-004", "severity": "P2", "title": "Public GitHub launch is not proven", "plain_risk": "The local repo is ready, but the public repo and Actions run do not exist yet.", "status": "pending external launch", "next_step": "Create KyaniteLabs/checkyourself, push main, verify Actions."},
+    {"id": "CY-P2-003", "severity": "P2", "title": "CI was narrower than dogfood verification", "plain_risk": "Public regressions could pass a weaker CI gate.", "status": "fixed", "next_step": "Keep remote Actions green after changes."},
+    {"id": "CY-P2-004", "severity": "P2", "title": "Public GitHub launch was not proven", "plain_risk": "The local repo was ready, but the public repo and Actions run had not been proven.", "status": "fixed", "next_step": "Optional: tag a release when launch copy is final."},
     {"id": "CY-P3-001", "severity": "P3", "title": "Duplicate token-efficiency docs", "plain_risk": "Duplicate docs can drift over time.", "status": "fixed", "next_step": "Keep the short doc as a pointer."},
     {"id": "CY-P3-002", "severity": "P3", "title": "Private v1.3 release note looked current", "plain_risk": "Private launch materials could confuse future packaging.", "status": "fixed", "next_step": "Use root changelog for current release truth."},
     {"id": "CY-P3-003", "severity": "P3", "title": "Scanner header referenced old path", "plain_risk": "Maintainers could chase stale script locations.", "status": "fixed", "next_step": "Keep script output path-neutral."},
@@ -70,7 +70,7 @@
     {"wave": "Wave 2", "goal": "Product polish and eval surface", "items": ["CY-P3-001", "CY-P3-002", "CY-P3-003", "CY-P3-004", "CY-P3-005", "CY-P3-006"]},
     {"wave": "Wave 3", "goal": "External public proof", "items": ["CY-P2-004"]}
   ],
-  "next_approval": "Approve creating and pushing the public KyaniteLabs/checkyourself remote when ready.",
+  "next_approval": "Public repo and Actions proof are complete. Next decision: tag a release or collect first user feedback.",
   "learning_priorities": [
     {
       "concept": "Keep generated files out of the public repo",

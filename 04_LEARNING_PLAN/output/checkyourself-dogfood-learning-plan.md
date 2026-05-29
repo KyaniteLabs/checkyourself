@@ -118,7 +118,8 @@ and a release people can download.
 mismo que un repo público con Actions en verde, README legible, imágenes que se
 ven, y una release que otra persona puede usar.
 
-**Triggered by:** `CY-P2-004`, public GitHub launch is not proven yet.
+**Triggered by:** `CY-P2-004`, public GitHub launch proof was missing during
+the audit and is now complete.
 
 **Do this next:** After publishing, open the repo as a visitor would. Confirm
 the README renders, the workflow image appears, Actions passes, and the release
