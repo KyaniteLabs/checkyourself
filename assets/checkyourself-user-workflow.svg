@@ -1,0 +1,21 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="CheckYourself user workflow">
+<rect width="1600" height="900" fill="#f6f8fb"/>
+<rect x="60" y="60" width="1480" height="150" rx="36" fill="#111827"/>
+<text x="110" y="135" font-family="Arial, sans-serif" font-size="64" font-weight="900" fill="#ffffff">CheckYourself</text>
+<text x="112" y="178" font-family="Arial, sans-serif" font-size="29" fill="#d1d5db">Find the production gaps before production does.</text>
+<rect x="1135" y="96" width="310" height="74" rx="28" fill="#ffffff"/>
+<text x="1290" y="126" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" font-weight="800" fill="#111827">No code changes</text>
+<text x="1290" y="153" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" font-weight="800" fill="#111827">without approval</text>
+<g font-family="Arial, sans-serif">
+  <rect x="80" y="280" width="220" height="150" rx="22" fill="#fff" stroke="#d8e0ef" stroke-width="2"/><text x="110" y="330" font-size="20" font-weight="800" fill="#111827">1 Add project</text><text x="110" y="366" font-size="17" fill="#475569">Folder or prompt</text>
+  <rect x="340" y="280" width="220" height="150" rx="22" fill="#fff" stroke="#d8e0ef" stroke-width="2"/><text x="370" y="330" font-size="20" font-weight="800" fill="#111827">2 Audit</text><text x="370" y="366" font-size="17" fill="#475569">Read-only sweep</text>
+  <rect x="600" y="280" width="220" height="150" rx="22" fill="#fff" stroke="#d8e0ef" stroke-width="2"/><text x="630" y="330" font-size="20" font-weight="800" fill="#111827">3 Results</text><text x="630" y="366" font-size="17" fill="#475569">Report + optional dashboard</text>
+  <rect x="860" y="280" width="220" height="150" rx="22" fill="#fff" stroke="#d8e0ef" stroke-width="2"/><text x="890" y="330" font-size="20" font-weight="800" fill="#111827">4 Approve</text><text x="890" y="366" font-size="17" fill="#475569">You choose fixes</text>
+  <rect x="1120" y="280" width="220" height="150" rx="22" fill="#fff" stroke="#d8e0ef" stroke-width="2"/><text x="1150" y="330" font-size="20" font-weight="800" fill="#111827">5 Recheck</text><text x="1150" y="366" font-size="17" fill="#475569">Verify and rescore</text>
+  <rect x="1380" y="280" width="160" height="150" rx="22" fill="#fff" stroke="#d8e0ef" stroke-width="2"/><text x="1410" y="330" font-size="20" font-weight="800" fill="#111827">6 Learn</text><text x="1410" y="366" font-size="17" fill="#475569">Custom plan</text>
+</g>
+<rect x="80" y="540" width="440" height="170" rx="26" fill="#fff7ed" stroke="#ea580c"/><text x="120" y="604" font-family="Arial, sans-serif" font-size="28" font-weight="800" fill="#ea580c">Complete audit</text><text x="120" y="650" font-family="Arial, sans-serif" font-size="22" fill="#1f2937">Finds every evidence-backed gap it can justify.</text>
+<rect x="580" y="540" width="440" height="170" rx="26" fill="#eff6ff" stroke="#2563eb"/><text x="620" y="604" font-family="Arial, sans-serif" font-size="28" font-weight="800" fill="#2563eb">Guided remediation</text><text x="620" y="650" font-family="Arial, sans-serif" font-size="22" fill="#1f2937">Fixes move in approved, reversible batches.</text>
+<rect x="1080" y="540" width="440" height="170" rx="26" fill="#ecfdf5" stroke="#059669"/><text x="1120" y="604" font-family="Arial, sans-serif" font-size="28" font-weight="800" fill="#059669">Learning plan</text><text x="1120" y="650" font-family="Arial, sans-serif" font-size="22" fill="#1f2937">Learn from your actual gaps and fixes.</text>
+<rect x="80" y="770" width="1440" height="66" rx="22" fill="#eef2ff" stroke="#c7d2fe"/><text x="800" y="812" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#3730a3">Model-agnostic • Stack-aware • Approval-first • Dashboard optional • Token-efficient by default</text>
+</svg>

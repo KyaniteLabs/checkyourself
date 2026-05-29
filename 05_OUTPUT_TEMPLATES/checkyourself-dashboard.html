@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <!-- Advanced local data-template dashboard. Default dashboard generation should use the CSS-only template in 10_DASHBOARD/. -->
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CheckYourself Dashboard</title>
+  <style>
+    :root {
+      --bg: #07111f;
+      --panel: #0e1c2c;
+      --panel2: #111d2e;
+      --text: #f8fbff;
+      --muted: #b9c8dc;
+      --line: #29415c;
+      --green: #43e06b;
+      --blue: #42a5ff;
+      --red: #ef4444;
+      --orange: #f59e0b;
+      --yellow: #facc15;
+      --purple: #a855f7;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: radial-gradient(circle at top right, #163456 0, var(--bg) 45%, #050b14 100%); color: var(--text); font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Arial, sans-serif; }
+    main { max-width: 1220px; margin: 0 auto; padding: 28px 18px 48px; }
+    header { display: flex; gap: 20px; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+    h1 { font-size: clamp(2rem, 5vw, 4.5rem); letter-spacing: -0.06em; margin: 0; }
+    h1 span { color: var(--green); }
+    .tagline { color: var(--muted); font-size: 1.12rem; margin-top: 8px; }
+    .badge-row { display: flex; flex-wrap: wrap; gap: 10px; }
+    .badge { border: 1px solid var(--line); background: rgba(14,28,44,.78); color: var(--muted); padding: 8px 12px; border-radius: 999px; font-size: .88rem; }
+    .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px; }
+    .card { background: linear-gradient(180deg, rgba(17,29,46,.96), rgba(10,20,32,.96)); border: 1px solid var(--line); border-radius: 22px; padding: 18px; box-shadow: 0 22px 50px rgba(0,0,0,.22); }
+    .span-3 { grid-column: span 3; } .span-4 { grid-column: span 4; } .span-5 { grid-column: span 5; } .span-6 { grid-column: span 6; } .span-7 { grid-column: span 7; } .span-8 { grid-column: span 8; } .span-12 { grid-column: span 12; }
+    h2 { margin: 0 0 12px; font-size: 1.1rem; }
+    h3 { margin: 0 0 8px; font-size: 1rem; }
+    p { color: var(--muted); line-height: 1.45; }
+    .score-wrap { display: flex; align-items: center; gap: 18px; }
+    .score { width: 160px; height: 160px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(var(--score-color) calc(var(--score, 0) * 1%), #1f3248 0); position: relative; flex: 0 0 auto; }
+    .score:after { content: ''; width: 116px; height: 116px; border-radius: 50%; background: var(--panel); position: absolute; }
+    .score strong { position: relative; z-index: 1; font-size: 2.7rem; }
+    .score small { position: relative; z-index: 1; color: var(--muted); font-size: .8rem; }
+    .severity-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; }
+    .severity { padding: 14px 12px; border-radius: 16px; border: 1px solid var(--line); background: #0b1422; }
+    .severity b { display:block; font-size: 2rem; line-height: 1; }
+    .p0 b, .p0 label { color: var(--red); } .p1 b, .p1 label { color: var(--orange); } .p2 b, .p2 label { color: var(--yellow); } .p3 b, .p3 label { color: var(--green); }
+    table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+    th, td { text-align: left; padding: 10px; border-bottom: 1px solid rgba(41,65,92,.72); vertical-align: top; }
+    th { color: #dce8f7; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; }
+    td { color: var(--muted); }
+    .pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 999px; font-size: .78rem; border: 1px solid var(--line); background: #0b1422; color: #dce8f7; }
+    .sev-P0 { color: var(--red); } .sev-P1 { color: var(--orange); } .sev-P2 { color: var(--yellow); } .sev-P3 { color: var(--green); }
+    .list { display: grid; gap: 10px; }
+    .item { padding: 12px; border-radius: 16px; background: #0b1422; border: 1px solid rgba(41,65,92,.72); }
+    .item-title { display:flex; justify-content:space-between; gap:10px; font-weight: 800; color: #fff; }
+    .item p { margin: 8px 0 0; }
+    .progress { height: 10px; background: #1f3248; border-radius: 999px; overflow:hidden; margin-top: 8px; }
+    .progress div { height:100%; background: linear-gradient(90deg, var(--blue), var(--green)); width:0%; }
+    .empty { color: var(--muted); font-style: italic; }
+    .footer-note { color: var(--muted); margin-top: 18px; font-size: .9rem; }
+    @media (max-width: 900px) { .span-3,.span-4,.span-5,.span-6,.span-7,.span-8 { grid-column: span 12; } header { align-items:flex-start; flex-direction: column; } .severity-grid { grid-template-columns: repeat(2, 1fr); } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Check<span>Yourself</span></h1>
+      <div class="tagline" id="subtitle">Production readiness dashboard</div>
+    </div>
+    <div class="badge-row">
+      <div class="badge">Full audit</div>
+      <div class="badge">Approved fixes only</div>
+      <div class="badge">Learning plan included</div>
+    </div>
+  </header>
+
+  <section class="grid">
+    <article class="card span-7">
+      <h2>Readiness score</h2>
+      <div class="score-wrap">
+        <div class="score" id="scoreDial" style="--score:0; --score-color: var(--red)"><div><strong id="score">0</strong><small>/100</small></div></div>
+        <div>
+          <h3 id="projectName">Project</h3>
+          <p id="summary">Paste dashboard data into this file to render your CheckYourself report.</p>
+          <div class="badge-row" id="metaBadges"></div>
+        </div>
+      </div>
+    </article>
+    <article class="card span-5">
+      <h2>Risk overview</h2>
+      <div class="severity-grid">
+        <div class="severity p0"><label>P0</label><b id="countP0">0</b><span>Do not ship</span></div>
+        <div class="severity p1"><label>P1</label><b id="countP1">0</b><span>Serious</span></div>
+        <div class="severity p2"><label>P2</label><b id="countP2">0</b><span>Important</span></div>
+        <div class="severity p3"><label>P3</label><b id="countP3">0</b><span>Improve</span></div>
+      </div>
+    </article>
+
+    <article class="card span-6">
+      <h2>Do-not-ship flags</h2>
+      <div id="doNotShip" class="list"></div>
+    </article>
+    <article class="card span-6">
+      <h2>Fix progress</h2>
+      <div id="fixProgress"></div>
+    </article>
+
+    <article class="card span-12">
+      <h2>Complete remediation backlog</h2>
+      <div style="overflow:auto"><table id="backlogTable"></table></div>
+    </article>
+
+    <article class="card span-7">
+      <h2>Coverage sweep</h2>
+      <div style="overflow:auto"><table id="coverageTable"></table></div>
+    </article>
+    <article class="card span-5">
+      <h2>Learning plan</h2>
+      <div id="learningPlan" class="list"></div>
+    </article>
+  </section>
+  <p class="footer-note">Generated locally from CheckYourself data. No external scripts, fonts, analytics, or network calls.</p>
+</main>
+
+<script id="checkyourself-data" type="application/json">
+{
+  "project": "Example App",
+  "summary": "Replace this sample data with your diagnostic output. The dashboard is optional; use it when you want a visual version of the report.",
+  "score": 52,
+  "confidence": "medium",
+  "generated_at": "",
+  "status": "Needs improvement",
+  "counts": {"P0": 2, "P1": 4, "P2": 6, "P3": 3},
+  "do_not_ship": [
+    {"id": "CY-001", "title": "Server-side authorization is not proven", "risk": "Users may be able to access data or actions they should not have."},
+    {"id": "CY-002", "title": "Secrets handling is unclear", "risk": "Private keys or tokens may leak into logs, client bundles, or source control."}
+  ],
+  "coverage": [
+    {"surface": "Auth and permissions", "status": "Finding", "evidence": "Routes found; server-side checks not yet proven", "finding_ids": ["CY-001"]},
+    {"surface": "Secrets and runtime config", "status": "Finding", "evidence": ".env references detected; no documented secret policy", "finding_ids": ["CY-002"]},
+    {"surface": "Tests and quality gates", "status": "Unknown", "evidence": "No test command detected", "finding_ids": []}
+  ],
+  "backlog": [
+    {"order": 1, "id": "CY-001", "severity": "P0", "fix": "Add server-side authorization checks to protected routes", "status": "proposed", "verification": "Negative access tests"},
+    {"order": 2, "id": "CY-002", "severity": "P0", "fix": "Document secret boundaries and verify no secret values are exposed", "status": "proposed", "verification": "Secret scan and runtime check"},
+    {"order": 3, "id": "CY-003", "severity": "P1", "fix": "Add rollback instructions for deployment", "status": "open", "verification": "Dry-run rollback plan"}
+  ],
+  "learning_plan": [
+    {"concept": "Authorization vs authentication", "why": "Your app needs proof that logged-in users can only do allowed actions.", "practice": "Write one negative test where User A tries to access User B's data."},
+    {"concept": "Secrets management", "why": "Your app needs clear boundaries between public config and private secrets.", "practice": "Create a safe .env.example and verify no secret values are committed."}
+  ]
+}
+</script>
+<script>
+(function () {
+  const data = JSON.parse(document.getElementById('checkyourself-data').textContent || '{}');
+  const esc = (x) => String(x ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  const byId = (id) => document.getElementById(id);
+  const score = Math.max(0, Math.min(100, Number(data.score || 0)));
+  const color = score < 50 ? 'var(--red)' : score < 75 ? 'var(--orange)' : score < 90 ? 'var(--yellow)' : 'var(--green)';
+  byId('score').textContent = score;
+  byId('scoreDial').style.setProperty('--score', score);
+  byId('scoreDial').style.setProperty('--score-color', color);
+  byId('projectName').textContent = data.project || 'Project';
+  byId('subtitle').textContent = data.status ? `Production readiness dashboard · ${data.status}` : 'Production readiness dashboard';
+  byId('summary').textContent = data.summary || '';
+  const counts = data.counts || {};
+  ['P0','P1','P2','P3'].forEach(k => byId('count'+k).textContent = counts[k] ?? 0);
+  byId('metaBadges').innerHTML = [data.confidence && `Confidence: ${data.confidence}`, data.generated_at && `Generated: ${data.generated_at}`].filter(Boolean).map(x => `<span class="badge">${esc(x)}</span>`).join('');
+
+  const flags = data.do_not_ship || [];
+  byId('doNotShip').innerHTML = flags.length ? flags.map(f => `<div class="item"><div class="item-title"><span>${esc(f.id)} · ${esc(f.title)}</span><span class="pill sev-P0">P0</span></div><p>${esc(f.risk)}</p></div>`).join('') : '<p class="empty">No P0 do-not-ship flags reported.</p>';
+
+  const backlog = data.backlog || [];
+  const total = backlog.length || 0;
+  const done = backlog.filter(x => ['fixed','resolved','accepted-risk','deferred','not-applicable'].includes(String(x.status||'').toLowerCase())).length;
+  const pct = total ? Math.round(done/total*100) : 0;
+  byId('fixProgress').innerHTML = `<p><strong>${done}/${total}</strong> backlog items closed, accepted, deferred, or invalidated.</p><div class="progress"><div style="width:${pct}%"></div></div><p>${pct}% complete. Keep going until every item has a final status.</p>`;
+
+  byId('backlogTable').innerHTML = `<thead><tr><th>#</th><th>ID</th><th>Severity</th><th>Fix</th><th>Status</th><th>Verification</th></tr></thead><tbody>${backlog.map(x => `<tr><td>${esc(x.order)}</td><td>${esc(x.id)}</td><td><span class="pill sev-${esc(x.severity)}">${esc(x.severity)}</span></td><td>${esc(x.fix)}</td><td>${esc(x.status)}</td><td>${esc(x.verification)}</td></tr>`).join('')}</tbody>`;
+
+  const coverage = data.coverage || [];
+  byId('coverageTable').innerHTML = `<thead><tr><th>Surface</th><th>Status</th><th>Evidence</th><th>Findings</th></tr></thead><tbody>${coverage.map(x => `<tr><td>${esc(x.surface)}</td><td><span class="pill">${esc(x.status)}</span></td><td>${esc(x.evidence)}</td><td>${esc((x.finding_ids||[]).join(', '))}</td></tr>`).join('')}</tbody>`;
+
+  const lp = data.learning_plan || [];
+  byId('learningPlan').innerHTML = lp.length ? lp.map(x => `<div class="item"><div class="item-title"><span>${esc(x.concept)}</span></div><p><strong>Why:</strong> ${esc(x.why)}</p><p><strong>Practice:</strong> ${esc(x.practice)}</p></div>`).join('') : '<p class="empty">No learning plan items yet.</p>';
+})();
+</script>
+</body>
+</html>

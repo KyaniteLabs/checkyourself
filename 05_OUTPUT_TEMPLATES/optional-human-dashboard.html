@@ -1,0 +1,99 @@
+<!--
+CheckYourself Optional Human Dashboard
+Use only when the user asks for a visual dashboard or says dashboard yes.
+Keep it compact. Do not include secret values. Do not repeat long evidence blocks.
+Replace bracketed placeholders with project-specific content.
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CheckYourself Dashboard - [Project Name]</title>
+<style>
+  :root{
+    --bg:#f8fafc; --panel:#ffffff; --ink:#0f172a; --muted:#64748b; --line:#e2e8f0;
+    --p0:#991b1b; --p1:#b45309; --p2:#1d4ed8; --p3:#475569; --ok:#166534;
+    --score:[SCORE_PERCENTAGE];
+  }
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+  main{max-width:1180px;margin:0 auto;padding:28px} h1,h2,h3,p{margin-top:0} h1{font-size:34px;letter-spacing:-.03em;margin-bottom:6px} h2{font-size:18px;margin-bottom:12px} h3{font-size:15px;margin-bottom:8px}
+  .muted{color:var(--muted)} .grid{display:grid;gap:16px}.cols-3{grid-template-columns:repeat(3,1fr)}.cols-2{grid-template-columns:repeat(2,1fr)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:18px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+  .hero{display:grid;grid-template-columns:1.15fr .85fr;gap:16px;align-items:stretch;margin-bottom:16px}
+  .scoreWrap{display:flex;align-items:center;gap:18px}.score{width:132px;height:132px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--ok) 0 var(--score), #e5e7eb var(--score) 100%)}
+  .score b{display:grid;place-items:center;width:96px;height:96px;border-radius:50%;background:white;font-size:28px}.pill{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:4px 9px;margin:2px 4px 2px 0;background:#fff;font-size:12px;color:var(--muted)}
+  .sev{font-weight:700;border-radius:999px;padding:3px 8px;color:#fff;font-size:12px}.p0{background:var(--p0)}.p1{background:var(--p1)}.p2{background:var(--p2)}.p3{background:var(--p3)}.ok{background:var(--ok)}
+  table{width:100%;border-collapse:collapse} th,td{border-bottom:1px solid var(--line);padding:9px;text-align:left;vertical-align:top} th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  .flag{border-left:5px solid var(--p0);padding:10px 12px;background:#fff7f7;border-radius:10px;margin:8px 0}.bar{height:12px;background:#e5e7eb;border-radius:99px;overflow:hidden}.bar span{display:block;height:100%;width:[REMEDIATION_PROGRESS];background:var(--ok)}
+  .workflow{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}.step{border:1px solid var(--line);border-radius:14px;padding:12px;background:#fff}.step b{display:block;margin-bottom:4px}
+  .small{font-size:12px}.printOnly{display:none}
+  @media(max-width:850px){main{padding:16px}.hero,.cols-3,.cols-2,.workflow{grid-template-columns:1fr}.scoreWrap{align-items:flex-start}.score{width:110px;height:110px}.score b{width:80px;height:80px;font-size:24px}}
+  @media print{body{background:#fff}main{max-width:none;padding:0}.card{box-shadow:none;break-inside:avoid}.noPrint{display:none}.printOnly{display:block}}
+</style>
+</head>
+<body>
+<main>
+  <section class="hero">
+    <div class="card">
+      <p class="muted">CheckYourself Dashboard</p>
+      <h1>[Project Name]</h1>
+      <p>[One-sentence summary of what the app appears to do.]</p>
+      <span class="pill">Stack: [Detected stack]</span>
+      <span class="pill">Confidence: [High/Medium/Low]</span>
+      <span class="pill">Generated: [Date]</span>
+    </div>
+    <div class="card scoreWrap">
+      <div class="score"><b>[Score]</b></div>
+      <div>
+        <h2>Production Reality Score</h2>
+        <p class="muted">Evidence-based readiness, capped by unresolved high-risk findings.</p>
+        <p><strong>Status:</strong> [Do not ship / Launch with fixes / Continue hardening / Looks healthy]</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid cols-3">
+    <div class="card"><h2>Risk counts</h2><p><span class="sev p0">P0</span> [P0 count] &nbsp; <span class="sev p1">P1</span> [P1 count] &nbsp; <span class="sev p2">P2</span> [P2 count] &nbsp; <span class="sev p3">P3</span> [P3 count]</p></div>
+    <div class="card"><h2>Remediation progress</h2><div class="bar"><span></span></div><p class="muted small">[Fixed] fixed · [Open] open · [Deferred] deferred · [Accepted risk] accepted risk</p></div>
+    <div class="card"><h2>Next approval</h2><p>[Smallest safe approval batch or next single fix.]</p></div>
+  </section>
+
+  <section class="card" style="margin-top:16px">
+    <h2>Do-not-ship flags</h2>
+    <div class="flag"><strong>[P0/P1 ID]</strong> — [Plain-English risk and why it matters.]</div>
+    <p class="muted small">If there are no P0/P1 flags, say so and explain the remaining risk level.</p>
+  </section>
+
+  <section class="card" style="margin-top:16px">
+    <h2>Workflow</h2>
+    <div class="workflow">
+      <div class="step"><b>1. Diagnose</b><span class="muted small">Read-only review.</span></div>
+      <div class="step"><b>2. Explain</b><span class="muted small">Score, risks, evidence.</span></div>
+      <div class="step"><b>3. Approve</b><span class="muted small">User chooses fixes.</span></div>
+      <div class="step"><b>4. Verify</b><span class="muted small">Tests/checks/re-score.</span></div>
+      <div class="step"><b>5. Learn</b><span class="muted small">Plan from real gaps.</span></div>
+    </div>
+  </section>
+
+  <section class="card" style="margin-top:16px">
+    <h2>Complete ranked remediation backlog</h2>
+    <table>
+      <thead><tr><th>#</th><th>Severity</th><th>Finding</th><th>Recommended action</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td><span class="sev p0">P0</span></td><td>[Finding ID + short finding]</td><td>[Smallest safe fix]</td><td>[Open/Fixed/Deferred/Accepted]</td></tr>
+        <tr><td>2</td><td><span class="sev p1">P1</span></td><td>[Finding ID + short finding]</td><td>[Smallest safe fix]</td><td>[Open/Fixed/Deferred/Accepted]</td></tr>
+      </tbody>
+    </table>
+    <p class="muted small">Every finding remains tracked until fixed, deferred with a reason, accepted as risk, blocked by missing evidence, or proven not applicable.</p>
+  </section>
+
+  <section class="grid cols-2" style="margin-top:16px">
+    <div class="card"><h2>Evidence snapshot</h2><ul><li>[File/config/observation supporting a major finding]</li><li>[Unknown that limits confidence]</li></ul></div>
+    <div class="card"><h2>Bespoke learning plan</h2><ol><li>[Concept triggered by a finding]</li><li>[Small project exercise]</li><li>[What to ignore for now]</li></ol></div>
+  </section>
+
+  <p class="muted small" style="margin-top:18px">Optional visual summary generated from the CheckYourself report. Do not include secrets or private data in this dashboard.</p>
+</main>
+</body>
+</html>

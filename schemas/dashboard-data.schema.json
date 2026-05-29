@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CheckYourself Dashboard Data",
+  "description": "Accepts both the compact dashboard-data mode and the HTML-template data mode used by CheckYourself dashboard templates.",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "app_name",
+        "score",
+        "confidence",
+        "counts",
+        "coverage",
+        "findings"
+      ],
+      "properties": {
+        "app_name": {
+          "type": "string"
+        },
+        "generated_at": {
+          "type": "string"
+        },
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "confidence": {
+          "type": "string"
+        },
+        "detected_stack": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "summary": {
+          "type": "string"
+        },
+        "counts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "coverage": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "remediation_waves": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "next_approval": {
+          "type": "string"
+        },
+        "learning_priorities": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    {
+      "type": "object",
+      "required": [
+        "project",
+        "score",
+        "counts",
+        "coverage",
+        "backlog",
+        "learning_plan"
+      ],
+      "properties": {
+        "project": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "confidence": {
+          "type": "string"
+        },
+        "generated_at": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "counts": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "do_not_ship": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "coverage": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "backlog": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "learning_plan": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": true
+    }
+  ]
+}

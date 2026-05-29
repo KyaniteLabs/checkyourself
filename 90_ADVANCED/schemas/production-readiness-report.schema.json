@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/schemas/production-readiness-report.schema.json",
+  "title": "Production Readiness Report",
+  "type": "object",
+  "required": [
+    "scope",
+    "findings",
+    "recommended_actions",
+    "verification_gates",
+    "residual_risk"
+  ],
+  "properties": {
+    "scope": {
+      "type": "string"
+    },
+    "findings": {
+      "type": "array"
+    },
+    "recommended_actions": {
+      "type": "array"
+    },
+    "verification_gates": {
+      "type": "array"
+    },
+    "residual_risk": {
+      "type": "array"
+    }
+  }
+}

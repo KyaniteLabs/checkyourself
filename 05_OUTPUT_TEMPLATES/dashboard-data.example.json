@@ -1,0 +1,69 @@
+{
+  "project": "Example App",
+  "summary": "Replace this sample data with your diagnostic output.",
+  "score": 52,
+  "confidence": "medium",
+  "generated_at": "",
+  "status": "Needs improvement",
+  "counts": {
+    "P0": 2,
+    "P1": 4,
+    "P2": 6,
+    "P3": 3
+  },
+  "do_not_ship": [
+    {
+      "id": "CY-001",
+      "title": "Server-side authorization is not proven",
+      "risk": "Users may be able to access data or actions they should not have."
+    },
+    {
+      "id": "CY-002",
+      "title": "Secrets handling is unclear",
+      "risk": "Private keys or tokens may leak into logs, client bundles, or source control."
+    }
+  ],
+  "coverage": [
+    {
+      "surface": "Auth and permissions",
+      "status": "Finding",
+      "evidence": "Routes found; server-side checks not yet proven",
+      "finding_ids": [
+        "CY-001"
+      ]
+    },
+    {
+      "surface": "Secrets and runtime config",
+      "status": "Finding",
+      "evidence": ".env references detected; no documented secret policy",
+      "finding_ids": [
+        "CY-002"
+      ]
+    }
+  ],
+  "backlog": [
+    {
+      "order": 1,
+      "id": "CY-001",
+      "severity": "P0",
+      "fix": "Add server-side authorization checks to protected routes",
+      "status": "proposed",
+      "verification": "Negative access tests"
+    },
+    {
+      "order": 2,
+      "id": "CY-002",
+      "severity": "P0",
+      "fix": "Document secret boundaries and verify no secret values are exposed",
+      "status": "proposed",
+      "verification": "Secret scan and runtime check"
+    }
+  ],
+  "learning_plan": [
+    {
+      "concept": "Authorization vs authentication",
+      "why": "Your app needs proof that logged-in users can only do allowed actions.",
+      "practice": "Write one negative test where User A tries to access User B's data."
+    }
+  ]
+}
