@@ -99,6 +99,9 @@ Evidence includes file, line, matched pattern type, confidence, and redacted
 context. Known credential shapes can still create P0 findings. Name-only or
 assignment-only signals are lower severity so schema fields like
 `feedbackToken` do not wreck the score just for having an unfortunate name.
+Env example variants such as `.env.dogfood.example`, commented placeholders,
+and obvious placeholder values are treated as setup documentation instead of
+real local secrets.
 
 Projects can suppress reviewed false positives with `.checkyourself.yml`:
 

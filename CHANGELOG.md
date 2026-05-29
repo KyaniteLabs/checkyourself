@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.6.3
+
+- Calibrated env example detection so files like `.env.dogfood.example` are
+  treated as examples, not real local `.env` files.
+- Ignored commented secret placeholders and obvious example values for
+  lower-confidence secret-like assignment findings, while preserving
+  high-confidence credential-shape detection.
+
 ## 1.6.2
 
 - Added reviewed finding suppressions through `.checkyourself.yml`, keeping

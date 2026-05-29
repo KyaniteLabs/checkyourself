@@ -425,6 +425,31 @@ def gitignore_entries(root: Path) -> str:
     return read_text(gi).lower() if gi.exists() else ""
 
 
+def is_env_example_name(name: str) -> bool:
+    lower = name.lower()
+    return lower in ENV_EXAMPLE_NAMES or (
+        lower.startswith(".env")
+        and lower.endswith((".example", ".sample", ".template"))
+    )
+
+
+def is_placeholder_secret_value(value: str) -> bool:
+    lower = value.lower().strip("\"'")
+    placeholder_tokens = (
+        "your_",
+        "replace",
+        "placeholder",
+        "example",
+        "sample",
+        "changeme",
+        "change_me",
+        "dummy",
+        "fake",
+        "redacted",
+    )
+    return any(token in lower for token in placeholder_tokens)
+
+
 def scan_env_and_secrets(root: Path, files: List[Path]) -> Tuple[List[str], List[str], List[str], List[str]]:
     env_files: List[str] = []
     real_env_files: List[str] = []
@@ -433,7 +458,7 @@ def scan_env_and_secrets(root: Path, files: List[Path]) -> Tuple[List[str], List
     for p in files:
         rp = rel(root, p)
         name = p.name.lower()
-        is_example = name in ENV_EXAMPLE_NAMES
+        is_example = is_env_example_name(name)
         if name == ".env" or (name.startswith(".env.") and not is_example) or name.endswith(".env"):
             real_env_files.append(rp)
             env_files.append(rp)
@@ -444,6 +469,7 @@ def scan_env_and_secrets(root: Path, files: List[Path]) -> Tuple[List[str], List
             high_seen = False
             low_seen = False
             for line_no, line in enumerate(text.splitlines(), start=1):
+                stripped = line.strip()
                 shaped = any(r.search(line) for r in SECRET_SHAPE_RES)
                 value_match = SECRET_VALUE_RE.search(line)
                 name_match = SECRET_NAME_RE.search(line)
@@ -458,6 +484,10 @@ def scan_env_and_secrets(root: Path, files: List[Path]) -> Tuple[List[str], List
                     ))
                     high_seen = True
                 elif value_match and name_match:
+                    if stripped.startswith(("#", "//", "*")):
+                        continue
+                    if is_example and is_placeholder_secret_value(value_match.group(2)):
+                        continue
                     suspicious_low.append(secret_evidence(
                         rp,
                         line_no,

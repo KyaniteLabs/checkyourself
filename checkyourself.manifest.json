@@ -1,7 +1,7 @@
 {
   "name": "checkyourself",
   "display_name": "CheckYourself",
-  "version": "1.6.2",
+  "version": "1.6.3",
   "license": "MIT",
   "copyright": "Copyright (c) 2026 Simon Gonzalez De Cruz",
   "description": "Pre-launch reality check, guided hardening, and learning-plan system for AI-built apps.",
