@@ -1,0 +1,100 @@
+{
+  "app_name": "Example App",
+  "generated_at": "2026-05-29",
+  "score": 58,
+  "confidence": "Medium",
+  "detected_stack": [
+    "React",
+    "Node API",
+    "Postgres",
+    "Vercel"
+  ],
+  "summary": "The app is demo-functional but not launch-ready until auth, secrets, and observability gaps are resolved.",
+  "counts": {
+    "P0": 1,
+    "P1": 3,
+    "P2": 5,
+    "P3": 4,
+    "Unknown": 2
+  },
+  "coverage": [
+    {
+      "surface": "Auth & permissions",
+      "status": "Finding"
+    },
+    {
+      "surface": "Secrets & environment",
+      "status": "Finding"
+    },
+    {
+      "surface": "Tests & quality",
+      "status": "Finding"
+    },
+    {
+      "surface": "Deployment & rollback",
+      "status": "Unknown"
+    },
+    {
+      "surface": "Observability",
+      "status": "Finding"
+    },
+    {
+      "surface": "AI/RAG governance",
+      "status": "N/A"
+    }
+  ],
+  "findings": [
+    {
+      "id": "P0-001",
+      "severity": "P0",
+      "title": "Admin action lacks server-side authorization",
+      "status": "open",
+      "plain_risk": "A user may be able to perform actions they should not be allowed to perform.",
+      "next_step": "Add server-side permission check and tests."
+    },
+    {
+      "id": "P1-001",
+      "severity": "P1",
+      "title": "Environment secrets are not clearly separated",
+      "status": "open",
+      "plain_risk": "Production credentials could be confused with local or test settings.",
+      "next_step": "Document env requirements and add safe examples."
+    },
+    {
+      "id": "P1-002",
+      "severity": "P1",
+      "title": "No rollback path documented",
+      "status": "open",
+      "plain_risk": "A bad deploy may be harder to recover from quickly.",
+      "next_step": "Create rollback checklist."
+    }
+  ],
+  "remediation_waves": [
+    {
+      "wave": "Wave 1",
+      "goal": "Remove do-not-ship blockers",
+      "items": [
+        "P0-001"
+      ]
+    },
+    {
+      "wave": "Wave 2",
+      "goal": "Resolve serious launch risks",
+      "items": [
+        "P1-001",
+        "P1-002"
+      ]
+    }
+  ],
+  "next_approval": "Approve Wave 1 fix card for P0-001 after reviewing files touched, verification, and rollback.",
+  "learning_priorities": [
+    {
+      "concept": "Server-side authorization",
+      "why": "The app relied too much on UI/client assumptions."
+    },
+    {
+      "concept": "Release safety",
+      "why": "The app needs a documented rollback path before launch."
+    }
+  ]
+}

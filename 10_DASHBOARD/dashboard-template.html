@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CheckYourself Dashboard</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #111827;
+    --card: #1f2937;
+    --muted: #94a3b8;
+    --text: #f8fafc;
+    --line: #334155;
+    --good: #22c55e;
+    --warn: #f59e0b;
+    --bad: #ef4444;
+    --info: #38bdf8;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); line-height: 1.45; }
+  main { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 28px 0 56px; }
+  header { display: grid; gap: 18px; grid-template-columns: 1.6fr .8fr; align-items: stretch; margin-bottom: 22px; }
+  section, .hero, .score-card { background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.015)); border: 1px solid var(--line); border-radius: 18px; padding: 18px; box-shadow: 0 18px 50px rgba(0,0,0,.18); }
+  h1, h2, h3, p { margin-top: 0; }
+  h1 { font-size: clamp(2rem, 4vw, 4rem); line-height: .95; margin-bottom: 10px; letter-spacing: -.04em; }
+  h2 { font-size: 1.1rem; margin-bottom: 12px; }
+  p, td, th, li { font-size: .95rem; }
+  .muted { color: var(--muted); }
+  .badge { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; color: var(--text); background: rgba(255,255,255,.04); font-size: .84rem; margin: 0 6px 6px 0; }
+  .score { font-size: clamp(3rem, 8vw, 6rem); font-weight: 800; line-height: .9; letter-spacing: -.06em; }
+  .score small { font-size: 1rem; color: var(--muted); letter-spacing: 0; }
+  .bar { height: 12px; background: #020617; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; margin: 16px 0 10px; }
+  .bar > div { height: 100%; width: 62%; background: linear-gradient(90deg, var(--bad), var(--warn), var(--good)); }
+  .grid { display: grid; gap: 14px; }
+  .grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+  .grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+  .metric { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+  .metric strong { display: block; font-size: 2rem; line-height: 1; }
+  .p0 { color: var(--bad); } .p1 { color: var(--warn); } .p2 { color: var(--info); } .p3 { color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; overflow: hidden; border-radius: 12px; }
+  th, td { text-align: left; padding: 10px 11px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 700; background: rgba(255,255,255,.03); }
+  tr:last-child td { border-bottom: 0; }
+  .status { display: inline-block; border-radius: 999px; padding: 3px 8px; font-size: .78rem; border: 1px solid var(--line); }
+  .finding { color: var(--warn); } .pass { color: var(--good); } .unknown { color: var(--info); }
+  .callout { border-left: 4px solid var(--warn); background: rgba(245,158,11,.08); padding: 12px 14px; border-radius: 12px; }
+  footer { margin-top: 18px; color: var(--muted); font-size: .84rem; }
+  @media (max-width: 900px) { header, .grid.cols-2, .grid.cols-4 { grid-template-columns: 1fr; } main { width: min(100% - 20px, 1180px); padding-top: 12px; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="hero">
+      <span class="badge">CheckYourself Dashboard</span>
+      <span class="badge">Read-only report view</span>
+      <h1>{{PROJECT_NAME}}</h1>
+      <p class="muted">{{ONE_SENTENCE_APP_SUMMARY}}</p>
+      <p><strong>Detected stack:</strong> {{DETECTED_STACK}}</p>
+      <p><strong>Current ship status:</strong> {{SHIP_STATUS}}</p>
+    </div>
+    <div class="score-card">
+      <div class="score">{{SCORE}}<small>/100</small></div>
+      <div class="bar"><div style="width: {{SCORE}}%;"></div></div>
+      <p class="muted">Confidence: {{CONFIDENCE}}. Score caps: {{SCORE_CAPS}}</p>
+    </div>
+  </header>
+
+  <section class="grid cols-4" aria-label="Risk counts">
+    <div class="metric"><strong class="p0">{{P0_COUNT}}</strong><span>P0 do-not-ship</span></div>
+    <div class="metric"><strong class="p1">{{P1_COUNT}}</strong><span>P1 serious</span></div>
+    <div class="metric"><strong class="p2">{{P2_COUNT}}</strong><span>P2 hardening</span></div>
+    <div class="metric"><strong class="p3">{{P3_COUNT}}</strong><span>P3 improvements</span></div>
+  </section>
+
+  <section>
+    <h2>Do-not-ship flags</h2>
+    <div class="callout">{{DO_NOT_SHIP_FLAGS}}</div>
+  </section>
+
+  <section>
+    <h2>Coverage sweep</h2>
+    <table>
+      <thead><tr><th>Surface</th><th>Status</th><th>Evidence or reason</th></tr></thead>
+      <tbody>
+        {{COVERAGE_ROWS}}
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Complete remediation backlog</h2>
+    <p class="muted">Every finding stays here until it is fixed, verified, deferred with a reason, accepted as risk, or marked not applicable.</p>
+    <table>
+      <thead><tr><th>Order</th><th>Finding</th><th>Fix</th><th>Status</th><th>Verify</th></tr></thead>
+      <tbody>
+        {{BACKLOG_ROWS}}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="grid cols-2">
+    <div>
+      <h2>Current approval batch</h2>
+      <p class="muted">This is the safe starting batch, not the entire fix scope.</p>
+      {{APPROVAL_BATCH_CARDS}}
+    </div>
+    <div>
+      <h2>Learning plan snapshot</h2>
+      {{LEARNING_PLAN_ITEMS}}
+    </div>
+  </section>
+
+  <section>
+    <h2>Next decision</h2>
+    <p>{{NEXT_USER_DECISION}}</p>
+  </section>
+
+  <footer>
+    Generated by CheckYourself. Dashboard mode is optional; the Markdown report remains the source of truth.
+  </footer>
+</main>
+</body>
+</html>

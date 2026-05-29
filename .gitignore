@@ -1,0 +1,14 @@
+.DS_Store
+.omx/
+.git/
+__pycache__/
+*.py[cod]
+
+# Private launch and maintainer material. Do not publish this sidecar.
+checkyourself-creator-launch-kit copy/
+
+# Generated CheckYourself outputs are local handoff artifacts by default.
+CHECKYOURSELF_DASHBOARD.html
+CHECKYOURSELF_REPORT.md
+CHECKYOURSELF_LEARNING_PLAN.md
+CHECKYOURSELF_RECHECK.md

@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CheckYourself Dashboard Data",
+  "type": "object",
+  "required": [
+    "project",
+    "score",
+    "counts",
+    "coverage",
+    "backlog",
+    "learning_plan"
+  ],
+  "properties": {
+    "project": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "confidence": {
+      "type": "string"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "counts": {
+      "type": "object",
+      "properties": {
+        "P0": {
+          "type": "integer"
+        },
+        "P1": {
+          "type": "integer"
+        },
+        "P2": {
+          "type": "integer"
+        },
+        "P3": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": true
+    },
+    "do_not_ship": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "risk"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "risk": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "coverage": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "surface",
+          "status"
+        ],
+        "properties": {
+          "surface": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "finding_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "backlog": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "severity",
+          "fix",
+          "status"
+        ],
+        "properties": {
+          "order": {
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "P0",
+              "P1",
+              "P2",
+              "P3"
+            ]
+          },
+          "fix": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "verification": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "learning_plan": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "concept",
+          "why",
+          "practice"
+        ],
+        "properties": {
+          "concept": {
+            "type": "string"
+          },
+          "why": {
+            "type": "string"
+          },
+          "practice": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CheckYourself Bespoke Learning Plan",
+  "type": "object",
+  "required": [
+    "inferred_level",
+    "topics",
+    "seven_day_plan",
+    "thirty_day_plan"
+  ],
+  "properties": {
+    "inferred_level": {
+      "type": "string"
+    },
+    "topics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "concept",
+          "triggering_finding",
+          "why_it_matters",
+          "exercise"
+        ],
+        "properties": {
+          "concept": {
+            "type": "string"
+          },
+          "triggering_finding": {
+            "type": "string"
+          },
+          "why_it_matters": {
+            "type": "string"
+          },
+          "exercise": {
+            "type": "string"
+          },
+          "level": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "seven_day_plan": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "thirty_day_plan": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "ignore_for_now": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}
