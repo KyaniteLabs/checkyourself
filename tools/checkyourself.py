@@ -30,6 +30,13 @@ SCORE_SCHEMA_ID = "checkyourself-score/1"
 CAPABILITIES_SCHEMA_ID = "checkyourself-capabilities/1"
 MCP_PROTOCOL_VERSION = "2025-11-25"
 SUPPORTED_MCP_PROTOCOLS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
+PUBLIC_REPO_SCOPE_GUARDRAILS = [
+    "Name the exact GitHub owner namespace(s) before claiming public repository coverage.",
+    "Report the repository count and verification timestamp for each owner namespace.",
+    "State whether forks, archived repositories, and externally owned repositories were excluded.",
+    "Do not infer ownership from linked repositories, examples, forks, or upstream references.",
+    "List the live evidence surfaces checked, including findings, open PRs, dependency alerts, and branch status.",
+]
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_DIR = ROOT / "schemas"
@@ -773,6 +780,7 @@ def scan(root: Path, deep: bool = False) -> dict:
         "counts": counts,
         "suppression_count": suppression_count,
         "tree": tree_sample(root),
+        "public_repo_scope_guardrails": PUBLIC_REPO_SCOPE_GUARDRAILS,
     }
 
 
@@ -787,6 +795,11 @@ def render_markdown(root: Path, data: dict) -> str:
     add(f"- Generated at: {data['generated_at']}")
     add(f"- Project root: `{data['project']}`")
     add(f"- Files scanned: {data['files_scanned']}")
+    add("")
+    add("## Scope guardrails")
+    add("")
+    add("- Before claiming an entire GitHub namespace is clean, name the exact owner namespace, repository count, verification timestamp, and live evidence surfaces checked.")
+    add("- Leave forks, externally owned repositories, and upstream references out of scope unless the user explicitly includes them.")
     add("")
 
     add("## Deterministic findings (local scan only)")
@@ -1333,6 +1346,7 @@ def describe_capabilities() -> dict:
             {"name": name, "summary": summary, "inputs": inputs, "output_schema": output}
             for name, summary, inputs, output in commands
         ],
+        "public_repo_scope_guardrails": PUBLIC_REPO_SCOPE_GUARDRAILS,
         "coverage_surfaces": [
             {"id": sid, "surface": surface, "category": category}
             for sid, surface, category in COVERAGE_SURFACES
@@ -1826,7 +1840,12 @@ def handle_mcp_message(message: dict) -> Optional[dict]:
                 "version": read_manifest_version(),
                 "description": "Local-first production-readiness diagnostic tools.",
             },
-            "instructions": "Use CheckYourself read-only first. Scan, fill coverage with evidence, score, rank backlog, ask before fixes.",
+            "instructions": (
+                "Use CheckYourself read-only first. Scan, fill coverage with evidence, "
+                "score, rank backlog, ask before fixes. For public repository claims, "
+                "name exact owner namespaces, repository counts, verification timestamps, "
+                "live evidence surfaces, and fork exclusions before saying all or 100%."
+            ),
         })
     if method == "notifications/initialized":
         return None

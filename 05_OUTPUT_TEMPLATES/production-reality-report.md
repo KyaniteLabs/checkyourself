@@ -23,6 +23,11 @@
 | Unknown/assumption | Why it matters | How to resolve | Blocks score? |
 |---|---|---|---|
 
+### Public repository scope confirmation, if applicable
+
+| Owner namespace | Repository count | Fork policy | Verification time | Live evidence checked | Not included |
+|---|---:|---|---|---|---|
+
 ## 5. Production Reality Score
 
 **Score:** __ / 100
