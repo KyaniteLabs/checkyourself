@@ -1,6 +1,6 @@
 # CheckYourself — AI Production-Readiness Diagnostic for Apps Built With AI
 
-> **Before you ship it, CheckYourself.**
+> **Check yourself before you wreck yourself — for the apps you ship.** Before you launch it, CheckYourself.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Model-agnostic](https://img.shields.io/badge/AI-model--agnostic-blue.svg)](#works-with-every-ai-coding-tool)
