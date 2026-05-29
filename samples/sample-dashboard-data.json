@@ -91,28 +91,42 @@
     {
       "concept": "Server-side authorization",
       "plain_english": "The server must check what each user is allowed to do. Hiding a button is not enough.",
-      "plain_other_language": "El servidor debe comprobar lo que cada usuario puede hacer. Ocultar un boton no basta.",
+      "secondary_language": "confirmed-secondary-language-name",
+      "plain_secondary_language": "Confirmed second-language explanation goes here after the user chooses that language.",
       "why": "The app relied too much on UI/client assumptions.",
       "do_this_next": "Pick one protected action and test that a different user cannot perform it.",
+      "do_this_next_secondary_language": "Confirmed second-language next action goes here after user confirmation.",
       "success_signal": "A cross-user request fails on the server.",
       "source_title": "OWASP: Authorization Cheat Sheet",
       "source_url": "https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html",
+      "source_type": "standards body documentation",
+      "authority_level": "high",
+      "why_this_source_is_trusted": "OWASP is a widely used application-security standards community.",
+      "checked_at": "YYYY-MM-DD",
       "youtube_title": "Broken Access Control Explained: OWASP Top 10 A01 Explained with Examples",
       "youtube_url": "https://www.youtube.com/watch?v=vUFVxoV5y_I",
-      "video_trust_note": "Established application-security educator; verify fit during live generation."
+      "video_trust_note": "Established application-security educator; verify fit during live generation.",
+      "video_authority_level": "supplemental"
     },
     {
       "concept": "Release safety",
       "plain_english": "Before launch, know how to undo a bad change.",
-      "plain_other_language": "Antes de lanzar, ten claro como deshacer un cambio malo.",
+      "secondary_language": "confirmed-secondary-language-name",
+      "plain_secondary_language": "Confirmed second-language explanation goes here after the user chooses that language.",
       "why": "The app needs a documented rollback path before launch.",
       "do_this_next": "Write the exact steps to return to the last working version.",
+      "do_this_next_secondary_language": "Confirmed second-language next action goes here after user confirmation.",
       "success_signal": "A teammate can follow the rollback steps without asking you.",
       "source_title": "GitHub Docs: Managing releases in a repository",
       "source_url": "https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository",
+      "source_type": "official docs",
+      "authority_level": "high",
+      "why_this_source_is_trusted": "GitHub maintains the release feature and its official documentation.",
+      "checked_at": "YYYY-MM-DD",
       "youtube_title": "How to automatically generate release notes for your project #Shorts",
       "youtube_url": "https://www.youtube.com/watch?v=8ryjj5x6FlQ",
-      "video_trust_note": "Official GitHub channel; short format."
+      "video_trust_note": "Official GitHub channel; short format.",
+      "video_authority_level": "medium"
     }
   ]
 }

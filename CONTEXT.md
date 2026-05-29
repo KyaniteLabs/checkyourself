@@ -16,7 +16,7 @@ when the user asks for files or when a handoff artifact is useful.
 5. Keep the Markdown report as the source of truth.
 6. Generate the dashboard only when the user explicitly asks for it.
 7. Keep the Creator Kit and local agent state out of public releases.
-8. Detect language from the user and project; keep learning/dashboard outputs bilingual when language signals are mixed or non-English.
+8. Detect the user's primary language and any candidate second language at runtime. Ask before using an inferred second language unless the user already named it.
 9. Keep output structure accessible for ADHD, autism, and dyslexia.
 
 ## Stage Router

@@ -16,7 +16,7 @@ Token efficiency:
 Use only the context you need. If a checkyourself folder is available, start with CONTEXT.md, AGENTS.md, rules.md, 02_RUN_DIAGNOSTIC/coverage-matrix.md, and 02_RUN_DIAGNOSTIC/scoring-method.md. Load deeper files only when a finding requires them. Do not paste long source files, logs, or reference docs back to me.
 
 Audience:
-Assume I may be beginner, intermediate, or advanced. Do not talk down to me. Explain in plain English first, then technical detail. Detect my language and my project's language; if either is not English-only, make learning and dashboard outputs bilingual.
+Assume I may be beginner, intermediate, or advanced. Do not talk down to me. Explain in plain English first, then technical detail. Detect my primary language and any candidate second language from my prompt, project docs, UI strings, locale files, and audience or region hints. If I did not explicitly name the second language, ask whether I want bilingual output before generating the learning plan or dashboard.
 
 Step 1 — Identify the project:
 - Infer the stack from files and config.

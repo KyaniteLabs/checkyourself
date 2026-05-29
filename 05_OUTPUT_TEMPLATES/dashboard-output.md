@@ -31,7 +31,8 @@ A useful dashboard should show:
 6. complete findings table, using compact finding IDs;
 7. remediation waves and current next approval request;
 8. learning-plan priorities with source and YouTube links;
-9. bilingual labels/content when language signals call for it.
+9. bilingual labels/content only after explicit second-language request or user
+   confirmation of an inferred candidate.
 
 ## Token-efficiency constraints
 

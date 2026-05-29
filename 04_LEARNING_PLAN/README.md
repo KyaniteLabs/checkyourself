@@ -35,9 +35,17 @@ Detect language from:
 - locale files such as `es.json`, `i18n/`, `locales/`, or translation tables;
 - comments and domain vocabulary in the codebase.
 
-If the user or codebase is not English-only, put the user's/project language
-first and include English labels for common production terms. If language
-evidence is mixed, make the learning plan bilingual.
+Identify:
+
+- primary output language;
+- candidate second language;
+- evidence for the candidate;
+- whether the user explicitly requested or confirmed it.
+
+If the user explicitly named the second language, use it. If the candidate is
+only inferred from mixed language, region, locale files, audience, or domain
+signals, ask before making the learning plan bilingual. If no useful candidate
+is found, write in the primary language and offer a bilingual version.
 
 Write for ADHD, autism, and dyslexia:
 
@@ -48,6 +56,29 @@ Write for ADHD, autism, and dyslexia:
 - glossary for jargon;
 - no shame language;
 - no dense curriculum dumps.
+
+## Source reliability
+
+For each top learning priority, record:
+
+- source type: official docs, standards body, original author, official vendor,
+  conference/community, or established educator;
+- authority_level: high, medium, or supplemental;
+- why_this_source_is_trusted;
+- checked_at date;
+- whether the video is canonical or only a practical companion.
+
+Authority levels:
+
+- high: official docs, standards bodies, original authors, or official vendor
+  channels for that exact topic;
+- medium: respected conference talks, documentation communities, or well-known
+  maintainers explaining their own domain;
+- supplemental: useful educator content that helps a beginner act, but should
+  be paired with a stronger written source.
+
+The written source is the canonical learning reference unless the video is from
+the same official or original-author source.
 
 ## Required sections
 

@@ -83,9 +83,14 @@
       "success_signal": "`git status --short` shows only intentional source changes.",
       "source_title": "GitHub Docs: Ignoring files",
       "source_url": "https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files",
+      "source_type": "official docs",
+      "authority_level": "high",
+      "why_this_source_is_trusted": "GitHub is the platform owner for .gitignore guidance in GitHub repositories.",
+      "checked_at": "2026-05-29",
       "youtube_title": "Git Crash Course #9 - .gitignore File",
       "youtube_url": "https://www.youtube.com/watch?v=Oh6SeuOMnV4",
-      "video_trust_note": "Established programming educator; canonical written source is GitHub Docs."
+      "video_trust_note": "Established programming educator; canonical written source is GitHub Docs.",
+      "video_authority_level": "supplemental"
     },
     {
       "concept": "Make one place the source of truth",
@@ -98,9 +103,14 @@
       "success_signal": "A new agent can answer which file to use without choosing between conflicting instructions.",
       "source_title": "Diataxis: Start here",
       "source_url": "https://diataxis.fr/start-here/",
+      "source_type": "original author",
+      "authority_level": "high",
+      "why_this_source_is_trusted": "Diataxis is the original documentation-system source for this concept.",
+      "checked_at": "2026-05-29",
       "youtube_title": "DjangoCon 2020 | What You Need to Know About Your Documentation - Daniele Procida",
       "youtube_url": "https://www.youtube.com/watch?v=qC1OYK5oqDo",
-      "video_trust_note": "Diataxis creator on an official conference channel."
+      "video_trust_note": "Diataxis creator on an official conference channel.",
+      "video_authority_level": "high"
     },
     {
       "concept": "Make CI prove the same things you prove locally",
@@ -113,9 +123,14 @@
       "success_signal": "A broken JSON file, Python syntax error, or accidental generated file fails before release.",
       "source_title": "GitHub Docs: Quickstart for GitHub Actions",
       "source_url": "https://docs.github.com/en/actions/get-started/quickstart",
+      "source_type": "official docs",
+      "authority_level": "high",
+      "why_this_source_is_trusted": "GitHub owns GitHub Actions and maintains the official quickstart.",
+      "checked_at": "2026-05-29",
       "youtube_title": "How to use GitHub Actions | GitHub for Beginners",
       "youtube_url": "https://www.youtube.com/watch?v=BQrohJ3PT7I",
-      "video_trust_note": "Official GitHub channel."
+      "video_trust_note": "Official GitHub channel.",
+      "video_authority_level": "high"
     },
     {
       "concept": "Separate works-here from published-and-proven",
@@ -128,9 +143,14 @@
       "success_signal": "A stranger can use the public GitHub page without private context from this workspace.",
       "source_title": "GitHub Docs: Managing releases in a repository",
       "source_url": "https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository",
+      "source_type": "official docs",
+      "authority_level": "high",
+      "why_this_source_is_trusted": "GitHub maintains the release feature and its official documentation.",
+      "checked_at": "2026-05-29",
       "youtube_title": "How to automatically generate release notes for your project #Shorts",
       "youtube_url": "https://www.youtube.com/watch?v=8ryjj5x6FlQ",
-      "video_trust_note": "Official GitHub channel; short format."
+      "video_trust_note": "Official GitHub channel; short format.",
+      "video_authority_level": "medium"
     },
     {
       "concept": "Test the AI with one known-bad example",
@@ -143,9 +163,14 @@
       "success_signal": "The AI does not stop at top three issues and does not start fixing before approval.",
       "source_title": "OpenAI Cookbook: Getting started with OpenAI Evals",
       "source_url": "https://cookbook.openai.com/examples/evaluation/getting_started_with_openai_evals",
+      "source_type": "official vendor example",
+      "authority_level": "high",
+      "why_this_source_is_trusted": "OpenAI maintains the Cookbook and the example addresses AI evaluation directly.",
+      "checked_at": "2026-05-29",
       "youtube_title": "Evals in Action: From Frontier Research to Production Applications",
       "youtube_url": "https://www.youtube.com/watch?v=YEaKXjHENyQ",
-      "video_trust_note": "Official OpenAI channel."
+      "video_trust_note": "Official OpenAI channel.",
+      "video_authority_level": "high"
     },
     {
       "concept": "Check visual outputs like a user",
@@ -158,9 +183,14 @@
       "success_signal": "The screenshot shows the score, finding counts, backlog, and learning section without broken layout.",
       "source_title": "Chrome for Developers: Lighthouse overview",
       "source_url": "https://developer.chrome.com/docs/lighthouse",
+      "source_type": "official vendor docs",
+      "authority_level": "high",
+      "why_this_source_is_trusted": "Chrome for Developers maintains Lighthouse documentation.",
+      "checked_at": "2026-05-29",
       "youtube_title": "Lighthouse - Totally Tooling Tips",
       "youtube_url": "https://www.youtube.com/watch?v=d98CAgQNeaM",
-      "video_trust_note": "Official Chrome for Developers channel."
+      "video_trust_note": "Official Chrome for Developers channel.",
+      "video_authority_level": "high"
     }
   ]
 }

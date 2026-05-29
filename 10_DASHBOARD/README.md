@@ -26,8 +26,9 @@ Use it when the user wants a visual, human-readable summary of:
 
 The dashboard must be usable by neurodivergent readers: clear sections,
 literal labels, high contrast, short paragraphs, stable tables, and no
-motion-dependent meaning. If the user or project uses another language, include
-that language and English labels for technical terms.
+motion-dependent meaning. Detect the primary language and candidate second
+language at runtime. Include a second language only when the user explicitly
+requests it or confirms the inferred candidate.
 
 ## Important
 

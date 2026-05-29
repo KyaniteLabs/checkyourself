@@ -25,7 +25,15 @@ Also create:
 - a “do not learn this yet” list to prevent overwhelm.
 
 Language and accessibility:
-- Detect my language and the dominant language of the project.
-- If either is not English-only, make the plan bilingual and put the most useful language first.
+- Detect my primary language and any candidate second language from my prompt, project docs, UI strings, locale files, audience, and region hints.
+- If I explicitly named the second language, use it.
+- If the second language is inferred, ask me whether I want the plan in the primary language plus that candidate, a different second language, or primary language only.
 - Write for ADHD, autism, and dyslexia: short paragraphs, concrete next actions, stable sections, and no dense textbook tone.
+
+For each source and video, include:
+- source_type;
+- authority_level;
+- why_this_source_is_trusted;
+- checked_at;
+- whether the video is canonical or supplemental.
 ```

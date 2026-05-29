@@ -73,6 +73,41 @@ STALE_PUBLIC_PHRASES = [
     "05_OUTPUT_TEMPLATES/checkyourself-dashboard.html",
 ]
 
+HARDCODED_SECONDARY_LANGUAGE_PHRASES = [
+    "Saltar al tablero",
+    "Puntaje",
+    "Confianza",
+    "Próxima decisión",
+    "No lanzar",
+    "No Lanzar",
+    "Cobertura completa",
+    "Lista completa",
+    "Prioridades de aprendizaje",
+    "Project / Proyecto",
+    "Score / Puntaje",
+    "Surface / Superficie",
+    "Evidence / Evidencia",
+]
+
+CANONICAL_LANGUAGE_TEMPLATES = [
+    "10_DASHBOARD/dashboard-template.html",
+    "10_DASHBOARD/inline-dashboard.md",
+]
+
+AUTO_BILINGUAL_PHRASES = [
+    "make learning/dashboard outputs bilingual",
+    "make the plan bilingual",
+    "bilingual labels/content when the user or codebase is not English-only",
+    "bilingual content appears when the user or project language is not English-only",
+    "Include the user's language when the prompt or codebase is not English-only",
+    "bilingual labels/content when language signals call for it",
+]
+
+NON_DOGFOOD_EXAMPLE_DATA = [
+    "05_OUTPUT_TEMPLATES/dashboard-data.example.json",
+    "samples/sample-dashboard-data.json",
+]
+
 STAGE_CONTEXTS = [
     "00_START_HERE/CONTEXT.md",
     "01_PROJECT_CONTEXT/CONTEXT.md",
@@ -272,6 +307,46 @@ def validate_public_text(root: Path, errors: list[str]) -> None:
         errors.append("05_OUTPUT_TEMPLATES/dashboard-prompt.md must identify the single canonical dashboard")
     if "inline Markdown fallback" not in dashboard_prompt:
         errors.append("05_OUTPUT_TEMPLATES/dashboard-prompt.md must identify the inline Markdown fallback")
+
+    for rel in CANONICAL_LANGUAGE_TEMPLATES:
+        path = root / rel
+        if not path.exists():
+            continue
+        body = text(path)
+        for phrase in HARDCODED_SECONDARY_LANGUAGE_PHRASES:
+            if phrase in body:
+                errors.append(f"canonical dashboard template hardcodes a secondary language in {rel}: {phrase}")
+
+    agent_instructions = text(root / "AGENTS.md") if (root / "AGENTS.md").exists() else ""
+    if "candidate second language" not in agent_instructions:
+        errors.append("AGENTS.md must require runtime candidate second-language detection")
+    if "ask the user" not in agent_instructions:
+        errors.append("AGENTS.md must require asking before using an inferred second language")
+
+    learning_template = text(root / "05_OUTPUT_TEMPLATES/bespoke-learning-plan.md") if (root / "05_OUTPUT_TEMPLATES/bespoke-learning-plan.md").exists() else ""
+    for phrase in ["why_this_source_is_trusted", "authority_level", "checked_at"]:
+        if phrase not in learning_template:
+            errors.append(f"bespoke learning plan template missing source reliability field: {phrase}")
+
+    for path in public_files(root):
+        rel = str(path.relative_to(root))
+        if rel.startswith(("04_LEARNING_PLAN/output/", "10_DASHBOARD/output/")):
+            continue
+        if path.suffix.lower() not in {".md", ".json", ".html", ".txt"}:
+            continue
+        body = text(path)
+        for phrase in AUTO_BILINGUAL_PHRASES:
+            if phrase in body:
+                errors.append(f"auto-bilingual instruction must ask for confirmation first in {rel}: {phrase}")
+
+    for rel in NON_DOGFOOD_EXAMPLE_DATA:
+        path = root / rel
+        if not path.exists():
+            continue
+        body = text(path)
+        for phrase in ["plain_other_language", "do_this_next_other_language"]:
+            if phrase in body:
+                errors.append(f"non-dogfood example must use runtime-neutral secondary-language fields in {rel}: {phrase}")
 
 
 def main() -> int:

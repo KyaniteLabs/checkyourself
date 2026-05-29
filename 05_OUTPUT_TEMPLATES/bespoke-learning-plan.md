@@ -20,7 +20,15 @@ Evidence for this inference:
 |---|---|---|---|
 | User language |  |  |  |
 | Project language |  |  |  |
-| Secondary language |  |  |  |
+| Candidate second language |  |  |  |
+| User confirmed second language? | Yes / No / Explicitly requested / Not applicable |  |  |
+
+If the candidate second language is inferred rather than explicitly requested,
+ask before producing bilingual sections:
+
+> I found signals for {{CANDIDATE_SECOND_LANGUAGE}}. Do you want the learning
+> plan in {{PRIMARY_LANGUAGE}} + {{CANDIDATE_SECOND_LANGUAGE}}, a different
+> second language, or {{PRIMARY_LANGUAGE}} only?
 
 Accessibility choices:
 
@@ -41,7 +49,9 @@ Each priority should be plain enough for a non-developer to act on. Include:
 - exactly what to do next inside this project;
 - a success signal;
 - one trusted written source that teaches that specific issue;
-- one real relevant YouTube video from a trusted source when available.
+- one real relevant YouTube video from a trusted source when available;
+- source_type, authority_level, why_this_source_is_trusted, and checked_at for
+  the written source and video.
 
 ### Priority 1
 
@@ -59,10 +69,33 @@ Each priority should be plain enough for a non-developer to act on. Include:
 
 **Learn from:** [Title](https://example.com)
 
+**Source type:** Official docs / standards body / original author / official
+vendor / conference or documentation community / established educator
+
+**Authority level:** High / Medium / Supplemental
+
+**Why this source is trusted:** {{why_this_source_is_trusted}}
+
+**Checked at:** {{checked_at}}
+
 **Watch:** [Trusted YouTube title](https://www.youtube.com/watch?v=example)
 
 **Video trust note:** Official vendor / official conference / documentation
 community / established educator / lower confidence.
+
+**Video authority level:** High / Medium / Supplemental
+
+Authority levels:
+
+- **High:** official docs, standards bodies, original authors, or official
+  vendor channels for this exact topic.
+- **Medium:** respected conference talks, documentation communities, or known
+  maintainers explaining their own domain.
+- **Supplemental:** useful educator content that helps with action, but should
+  be paired with a stronger written source.
+
+The written source is canonical unless the video comes from the same official
+or original-author source.
 
 Repeat this format for the remaining top priorities.
 

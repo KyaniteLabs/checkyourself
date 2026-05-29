@@ -22,8 +22,9 @@ dashboard. If the user does not want HTML/CSS, use
 - Show the safest next approval batch, but make clear the backlog continues after that batch.
 - Use one self-contained HTML file with inline CSS and no external assets.
 - Prefer short sentences and plain language.
-- Make labels and learning sections bilingual when the user or codebase is not
-  English-only.
+- Detect primary language and candidate second language at runtime. If the
+  second language is inferred rather than explicitly requested, ask before
+  making labels or learning sections bilingual.
 - Design for ADHD, autism, and dyslexia: predictable structure, generous
   spacing, high contrast, no flashing, no dense walls of text, and text labels
   in addition to color.

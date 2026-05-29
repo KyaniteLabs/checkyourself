@@ -13,13 +13,13 @@
     --basalt-2: #0e1b29;
     --basalt-3: #122335;
     --field: #07111b;
-    --panel: rgba(8, 18, 28, 0.92);
-    --panel-strong: rgba(10, 23, 35, 0.98);
-    --line: rgba(221, 234, 241, 0.18);
-    --line-strong: rgba(243, 248, 255, 0.3);
-    --text: #f3f8ff;
-    --text-2: #c3d4e2;
-    --muted: #91a5b8;
+    --panel: #08141f;
+    --panel-strong: #0b1a29;
+    --line: #496174;
+    --line-strong: #7fa2b7;
+    --text: #f7fbff;
+    --text-2: #e5eef7;
+    --muted: #c7d8e8;
     --cyan: #5edce8;
     --cyan-2: #2aaec1;
     --magenta: #e85682;
@@ -43,11 +43,7 @@
     margin: 0;
     min-height: 100vh;
     color: var(--text);
-    background:
-      linear-gradient(90deg, rgba(94, 220, 232, 0.08) 0 1px, transparent 1px 100%),
-      linear-gradient(0deg, rgba(233, 201, 96, 0.045) 0 1px, transparent 1px 100%),
-      linear-gradient(145deg, #05070b 0%, #07111b 38%, #0b131d 68%, #05070b 100%);
-    background-size: 56px 56px, 56px 56px, auto;
+    background: #05070b;
     font-family: var(--body-font);
     font-size: 17px;
     line-height: 1.65;
@@ -56,14 +52,7 @@
   }
 
   body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.03), transparent 24%),
-      repeating-linear-gradient(135deg, rgba(255,255,255,0.018) 0 1px, transparent 1px 9px);
-    opacity: 0.55;
+    display: none;
   }
 
   a { color: var(--cyan); text-underline-offset: 0.18em; }
@@ -105,7 +94,7 @@
     position: relative;
     border: 1px solid var(--line);
     border-radius: var(--radius);
-    background: linear-gradient(180deg, var(--panel-strong), rgba(5, 10, 17, 0.96));
+    background: var(--panel);
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 22px 60px rgba(0,0,0,0.34);
     padding: 20px;
   }
@@ -189,8 +178,8 @@
     border: 1px solid var(--line);
     border-radius: var(--radius);
     padding: 5px 9px;
-    background: rgba(3, 10, 18, 0.72);
-    color: var(--text-2);
+    background: #06131e;
+    color: var(--text);
     font-size: 0.78rem;
   }
 
@@ -242,7 +231,7 @@
     border: 1px solid var(--line);
     border-radius: var(--radius);
     padding: 14px;
-    background: rgba(3, 10, 18, 0.62);
+    background: #06131e;
   }
 
   .metric strong {
@@ -274,7 +263,7 @@
     border-left: 4px solid var(--amber);
     border-radius: var(--radius);
     padding: 14px 16px;
-    background: rgba(233,201,96,0.08);
+    background: #19190f;
   }
 
   .callout p:last-child { margin-bottom: 0; }
@@ -283,6 +272,10 @@
     overflow-x: auto;
     border: 1px solid var(--line);
     border-radius: var(--radius);
+  }
+  .table-wrap:focus-visible {
+    outline: 3px solid var(--amber);
+    outline-offset: 3px;
   }
 
   table {
@@ -293,14 +286,14 @@
 
   th, td {
     padding: 12px 11px;
-    border-bottom: 1px solid rgba(221,234,241,0.12);
+    border-bottom: 1px solid #34495a;
     vertical-align: top;
     text-align: left;
   }
 
   th {
-    color: var(--muted);
-    background: rgba(3, 10, 18, 0.72);
+    color: var(--text);
+    background: #06131e;
     font-size: 0.78rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -317,7 +310,7 @@
   .learning-item {
     border: 1px solid var(--line);
     border-radius: var(--radius);
-    background: rgba(3, 10, 18, 0.62);
+    background: #06131e;
     padding: 15px;
   }
 
@@ -337,7 +330,7 @@
     border: 1px solid var(--line-strong);
     border-radius: var(--radius);
     padding: 5px 10px;
-    background: rgba(94, 220, 232, 0.08);
+    background: #072532;
   }
 
   .access-list {
@@ -377,7 +370,7 @@
 </style>
 </head>
 <body>
-<a class="skip-link" href="#main">Skip to dashboard / Saltar al tablero</a>
+<a class="skip-link" href="#main">{{SKIP_LINK_LABEL}}</a>
 <main id="main">
   <header>
     <section class="panel hero" aria-labelledby="dashboard-title">
@@ -389,24 +382,24 @@
         <ul class="stack" aria-label="Detected stack">{{DETECTED_STACK_BADGES}}</ul>
       </div>
       <div class="callout">
-        <p><strong>Ship status / Estado:</strong> {{SHIP_STATUS}}</p>
-        <p><strong>Next decision / Próxima decisión:</strong> {{NEXT_USER_DECISION}}</p>
+        <p><strong>{{SHIP_STATUS_LABEL}}:</strong> {{SHIP_STATUS}}</p>
+        <p><strong>{{NEXT_DECISION_LABEL}}:</strong> {{NEXT_USER_DECISION}}</p>
       </div>
     </section>
 
     <aside class="panel score-panel" aria-labelledby="score-title">
       <div>
-        <p class="eyebrow">Score / Puntaje</p>
+        <p class="eyebrow">{{SCORE_LABEL}}</p>
         <h2 id="score-title">Production Reality Score</h2>
         <div class="score">{{SCORE}}<small>/100</small></div>
-        <div class="score-bar" aria-label="Score {{SCORE}} out of 100"><div></div></div>
+        <div class="score-bar" role="meter" aria-label="{{SCORE_METER_LABEL}}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{SCORE}}"><div></div></div>
       </div>
-      <p><strong>Confidence / Confianza:</strong> {{CONFIDENCE}}</p>
+      <p><strong>{{CONFIDENCE_LABEL}}:</strong> {{CONFIDENCE}}</p>
       <p>{{SCORE_CAPS}}</p>
     </aside>
   </header>
 
-  <section class="risk-grid" aria-label="Risk counts / Conteo de riesgos">
+  <section class="risk-grid" aria-label="{{RISK_COUNTS_LABEL}}">
     <div class="metric p0"><strong>{{P0_COUNT}}</strong><span class="metric-label">P0 Do-not-ship</span></div>
     <div class="metric p1"><strong>{{P1_COUNT}}</strong><span class="metric-label">P1 Serious</span></div>
     <div class="metric p2"><strong>{{P2_COUNT}}</strong><span class="metric-label">P2 Hardening</span></div>
@@ -416,11 +409,11 @@
 
   <section class="two-col">
     <div class="panel">
-      <h2>Do-not-ship / No lanzar todavía</h2>
+      <h2>{{DO_NOT_SHIP_LABEL}}</h2>
       <div class="callout">{{DO_NOT_SHIP_FLAGS}}</div>
     </div>
     <div class="panel">
-      <h2>Accessible Reading Mode / Modo accesible</h2>
+      <h2>{{ACCESSIBLE_READING_LABEL}}</h2>
       <ul class="access-list">
         {{ACCESSIBILITY_NOTES}}
       </ul>
@@ -428,11 +421,11 @@
   </section>
 
   <section class="panel" aria-labelledby="coverage-title">
-    <h2 id="coverage-title">Coverage Sweep / Cobertura completa</h2>
+    <h2 id="coverage-title">{{COVERAGE_LABEL}}</h2>
     <p>Every relevant production surface stays visible. Unknowns are named instead of hidden.</p>
-    <div class="table-wrap">
+    <div class="table-wrap" tabindex="0" role="region" aria-label="{{COVERAGE_TABLE_LABEL}}">
       <table>
-        <thead><tr><th>Surface / Superficie</th><th>Status / Estado</th><th>Evidence / Evidencia</th><th>Findings</th></tr></thead>
+        <thead><tr><th>{{SURFACE_LABEL}}</th><th>{{STATUS_LABEL}}</th><th>{{EVIDENCE_LABEL}}</th><th>{{FINDINGS_LABEL}}</th></tr></thead>
         <tbody>
           {{COVERAGE_ROWS}}
         </tbody>
@@ -441,9 +434,9 @@
   </section>
 
   <section class="panel" aria-labelledby="backlog-title">
-    <h2 id="backlog-title">Complete Backlog / Lista completa</h2>
+    <h2 id="backlog-title">{{BACKLOG_LABEL}}</h2>
     <p>Every finding remains here until it is fixed, verified, deferred with a reason, accepted as risk, or proven not applicable.</p>
-    <div class="table-wrap">
+    <div class="table-wrap" tabindex="0" role="region" aria-label="{{BACKLOG_TABLE_LABEL}}">
       <table>
         <thead><tr><th>Order</th><th>ID</th><th>Severity</th><th>Finding</th><th>Status</th><th>Next step</th></tr></thead>
         <tbody>
@@ -455,18 +448,18 @@
 
   <section class="two-col">
     <div class="panel">
-      <h2>Remediation Waves / Olas de arreglo</h2>
+      <h2>{{REMEDIATION_WAVES_LABEL}}</h2>
       {{REMEDIATION_WAVES}}
     </div>
     <div class="panel">
-      <h2>Current Approval Batch / Aprobación actual</h2>
+      <h2>{{CURRENT_APPROVAL_BATCH_LABEL}}</h2>
       <p>{{APPROVAL_BATCH_SUMMARY}}</p>
       {{APPROVAL_BATCH_CARDS}}
     </div>
   </section>
 
   <section class="panel" aria-labelledby="learning-title">
-    <h2 id="learning-title">Learning Priorities / Prioridades de aprendizaje</h2>
+    <h2 id="learning-title">{{LEARNING_PRIORITIES_LABEL}}</h2>
     <p>Each item is tied to a real finding, has one next action, and includes a written source plus a relevant YouTube video.</p>
     <div class="learning-list">
       {{LEARNING_PLAN_ITEMS}}

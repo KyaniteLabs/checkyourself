@@ -22,8 +22,10 @@ The inline Markdown fallback is `10_DASHBOARD/inline-dashboard.md`.
 4. Build a compact visual summary, not a replacement report.
 5. Include the complete remediation backlog in compact form.
 6. Keep it self-contained and free of external assets.
-7. Make it bilingual when the user or project language signals are not English-only.
-8. Preserve neurodivergent accessibility: plain labels, short text, high contrast,
+7. Detect the primary language and candidate second language at runtime.
+8. If the second language is inferred rather than explicitly requested, ask the
+   user before generating bilingual dashboard labels or learning blocks.
+9. Preserve neurodivergent accessibility: plain labels, short text, high contrast,
    keyboard-readable structure, no flashing, and no information conveyed by color alone.
 
 ## Outputs
