@@ -1,10 +1,10 @@
 {
   "name": "checkyourself",
   "display_name": "CheckYourself",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "license": "MIT",
   "copyright": "Copyright (c) 2026 Simon Gonzalez De Cruz",
-  "description": "AI production-readiness diagnostic, guided fix, and learning-plan system for apps built by learning-by-doing.",
+  "description": "Pre-launch reality check, guided hardening, and learning-plan system for AI-built apps.",
   "modes": [
     "folder_diagnostic",
     "chat_bootstrap",

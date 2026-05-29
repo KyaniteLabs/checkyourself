@@ -1,21 +1,108 @@
-<svg width="1600" height="900" viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="CheckYourself user workflow">
-<rect width="1600" height="900" fill="#f6f8fb"/>
-<rect x="60" y="60" width="1480" height="150" rx="36" fill="#111827"/>
-<text x="110" y="135" font-family="Arial, sans-serif" font-size="64" font-weight="900" fill="#ffffff">CheckYourself</text>
-<text x="112" y="178" font-family="Arial, sans-serif" font-size="29" fill="#d1d5db">Find the production gaps before production does.</text>
-<rect x="1135" y="96" width="310" height="74" rx="28" fill="#ffffff"/>
-<text x="1290" y="126" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" font-weight="800" fill="#111827">No code changes</text>
-<text x="1290" y="153" text-anchor="middle" font-family="Arial, sans-serif" font-size="21" font-weight="800" fill="#111827">without approval</text>
-<g font-family="Arial, sans-serif">
-  <rect x="80" y="280" width="220" height="150" rx="22" fill="#fff" stroke="#d8e0ef" stroke-width="2"/><text x="110" y="330" font-size="20" font-weight="800" fill="#111827">1 Add project</text><text x="110" y="366" font-size="17" fill="#475569">Folder or prompt</text>
-  <rect x="340" y="280" width="220" height="150" rx="22" fill="#fff" stroke="#d8e0ef" stroke-width="2"/><text x="370" y="330" font-size="20" font-weight="800" fill="#111827">2 Audit</text><text x="370" y="366" font-size="17" fill="#475569">Read-only sweep</text>
-  <rect x="600" y="280" width="220" height="150" rx="22" fill="#fff" stroke="#d8e0ef" stroke-width="2"/><text x="630" y="330" font-size="20" font-weight="800" fill="#111827">3 Results</text><text x="630" y="366" font-size="17" fill="#475569">Report + optional dashboard</text>
-  <rect x="860" y="280" width="220" height="150" rx="22" fill="#fff" stroke="#d8e0ef" stroke-width="2"/><text x="890" y="330" font-size="20" font-weight="800" fill="#111827">4 Approve</text><text x="890" y="366" font-size="17" fill="#475569">You choose fixes</text>
-  <rect x="1120" y="280" width="220" height="150" rx="22" fill="#fff" stroke="#d8e0ef" stroke-width="2"/><text x="1150" y="330" font-size="20" font-weight="800" fill="#111827">5 Recheck</text><text x="1150" y="366" font-size="17" fill="#475569">Verify and rescore</text>
-  <rect x="1380" y="280" width="160" height="150" rx="22" fill="#fff" stroke="#d8e0ef" stroke-width="2"/><text x="1410" y="330" font-size="20" font-weight="800" fill="#111827">6 Learn</text><text x="1410" y="366" font-size="17" fill="#475569">Custom plan</text>
-</g>
-<rect x="80" y="540" width="440" height="170" rx="26" fill="#fff7ed" stroke="#ea580c"/><text x="120" y="604" font-family="Arial, sans-serif" font-size="28" font-weight="800" fill="#ea580c">Complete audit</text><text x="120" y="650" font-family="Arial, sans-serif" font-size="22" fill="#1f2937">Finds every evidence-backed gap it can justify.</text>
-<rect x="580" y="540" width="440" height="170" rx="26" fill="#eff6ff" stroke="#2563eb"/><text x="620" y="604" font-family="Arial, sans-serif" font-size="28" font-weight="800" fill="#2563eb">Guided remediation</text><text x="620" y="650" font-family="Arial, sans-serif" font-size="22" fill="#1f2937">Fixes move in approved, reversible batches.</text>
-<rect x="1080" y="540" width="440" height="170" rx="26" fill="#ecfdf5" stroke="#059669"/><text x="1120" y="604" font-family="Arial, sans-serif" font-size="28" font-weight="800" fill="#059669">Learning plan</text><text x="1120" y="650" font-family="Arial, sans-serif" font-size="22" fill="#1f2937">Learn from your actual gaps and fixes.</text>
-<rect x="80" y="770" width="1440" height="66" rx="22" fill="#eef2ff" stroke="#c7d2fe"/><text x="800" y="812" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#3730a3">Model-agnostic • Stack-aware • Approval-first • Dashboard optional • Token-efficient by default</text>
+<svg width="1600" height="900" viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">CheckYourself workflow</title>
+  <desc id="desc">Five stage loop: map the app, check reality, pick the safest fix, verify receipts, learn what to avoid next time, then recheck before launch.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#05070b"/>
+      <stop offset="0.58" stop-color="#07151f"/>
+      <stop offset="1" stop-color="#05070b"/>
+    </linearGradient>
+    <linearGradient id="signal" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#5edce8"/>
+      <stop offset="0.52" stop-color="#ffe66d"/>
+      <stop offset="1" stop-color="#ff4f8b"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="24" stdDeviation="26" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+    <style>
+      .label { font-family: Arial, Helvetica, sans-serif; font-weight: 900; letter-spacing: 0.08em; }
+      .body { font-family: Arial, Helvetica, sans-serif; font-weight: 700; }
+      .mono { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; letter-spacing: 0.08em; }
+      .muted { fill: #bac7d5; }
+      .panel { fill: #081823; stroke: #2d5d72; stroke-width: 2; }
+      .small { font-size: 21px; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <rect x="0" y="0" width="1600" height="900" fill="none" stroke="#102635" stroke-width="22"/>
+
+  <g opacity="0.32">
+    <path d="M80 725 C340 620 420 800 665 695 C925 585 1030 690 1240 575 C1395 490 1460 520 1535 470" fill="none" stroke="#5edce8" stroke-width="2"/>
+    <path d="M60 180 C305 95 440 255 660 165 C920 60 1065 160 1270 92 C1395 52 1490 75 1540 42" fill="none" stroke="#ff4f8b" stroke-width="2"/>
+  </g>
+
+  <g transform="translate(84 68)">
+    <rect x="0" y="0" width="1432" height="154" rx="24" fill="#07111a" stroke="#29475b" stroke-width="2" filter="url(#softShadow)"/>
+    <rect x="26" y="0" width="44" height="4" fill="#5edce8"/>
+    <rect x="78" y="0" width="44" height="4" fill="#ffe66d"/>
+    <rect x="130" y="0" width="44" height="4" fill="#ff4f8b"/>
+    <text x="34" y="62" class="mono" font-size="20" fill="#ffe66d">CHECKYOURSELF // PRE-LAUNCH REALITY CHECK</text>
+    <text x="34" y="104" class="body" font-size="43" fill="#f7fbff">Check yourself before production</text>
+    <text x="34" y="146" class="body" font-size="43" fill="#f7fbff">does it for you.</text>
+    <g transform="translate(1090 38)">
+      <rect width="292" height="74" rx="16" fill="#0b2230" stroke="#5edce8" stroke-width="2"/>
+      <text x="146" y="31" text-anchor="middle" class="mono" font-size="15" fill="#5edce8">RULE ZERO</text>
+      <text x="146" y="57" text-anchor="middle" class="body" font-size="23" fill="#f7fbff">No fixes without yes.</text>
+    </g>
+  </g>
+
+  <path d="M236 502 C356 435 429 435 548 502 C676 574 746 574 872 502 C998 430 1066 430 1193 502 C1276 550 1362 548 1445 498" fill="none" stroke="url(#signal)" stroke-width="10" stroke-linecap="round" opacity="0.9"/>
+  <path d="M1445 498 l-34 -8 l20 30 z" fill="#ff4f8b"/>
+
+  <g filter="url(#softShadow)">
+    <g transform="translate(88 306)">
+      <rect class="panel" width="258" height="178" rx="18"/>
+      <rect x="0" y="0" width="258" height="5" fill="#5edce8"/>
+      <text x="24" y="44" class="mono" font-size="17" fill="#5edce8">01 // MAP</text>
+      <text x="24" y="86" class="body" font-size="31" fill="#f7fbff">Map the app</text>
+      <text x="24" y="124" class="body small muted">What is it?</text>
+      <text x="24" y="153" class="body small muted">Who can it hurt?</text>
+    </g>
+
+    <g transform="translate(380 382)">
+      <rect class="panel" width="258" height="178" rx="18"/>
+      <rect x="0" y="0" width="258" height="5" fill="#ffe66d"/>
+      <text x="24" y="44" class="mono" font-size="17" fill="#ffe66d">02 // AUDIT</text>
+      <text x="24" y="86" class="body" font-size="31" fill="#f7fbff">Check reality</text>
+      <text x="24" y="124" class="body small muted">Pass needs proof.</text>
+      <text x="24" y="153" class="body small muted">Unknowns get named.</text>
+    </g>
+
+    <g transform="translate(672 306)">
+      <rect class="panel" width="258" height="178" rx="18"/>
+      <rect x="0" y="0" width="258" height="5" fill="#ff4f8b"/>
+      <text x="24" y="44" class="mono" font-size="17" fill="#ff4f8b">03 // FIX</text>
+      <text x="24" y="86" class="body" font-size="31" fill="#f7fbff">Pick safe fixes</text>
+      <text x="24" y="124" class="body small muted">Small batches.</text>
+      <text x="24" y="153" class="body small muted">Rollback included.</text>
+    </g>
+
+    <g transform="translate(964 382)">
+      <rect class="panel" width="258" height="178" rx="18"/>
+      <rect x="0" y="0" width="258" height="5" fill="#5edce8"/>
+      <text x="24" y="44" class="mono" font-size="17" fill="#5edce8">04 // VERIFY</text>
+      <text x="24" y="86" class="body" font-size="31" fill="#f7fbff">Verify receipts</text>
+      <text x="24" y="124" class="body small muted">Run the checks.</text>
+      <text x="24" y="153" class="body small muted">Rescore honestly.</text>
+    </g>
+
+    <g transform="translate(1256 306)">
+      <rect class="panel" width="258" height="178" rx="18"/>
+      <rect x="0" y="0" width="258" height="5" fill="#ffe66d"/>
+      <text x="24" y="44" class="mono" font-size="17" fill="#ffe66d">05 // LEARN</text>
+      <text x="24" y="86" class="body" font-size="31" fill="#f7fbff">Avoid repeats</text>
+      <text x="24" y="124" class="body small muted">Your gaps become</text>
+      <text x="24" y="153" class="body small muted">your learning plan.</text>
+    </g>
+  </g>
+
+  <g transform="translate(170 674)">
+    <rect width="1260" height="116" rx="22" fill="#08131c" stroke="#29475b" stroke-width="2"/>
+    <text x="44" y="48" class="mono" font-size="17" fill="#ffe66d">THE LOOP</text>
+    <text x="44" y="86" class="body" font-size="34" fill="#f7fbff">Recheck before launch. Sharper every pass.</text>
+    <text x="1046" y="48" text-anchor="middle" class="body" font-size="23" fill="#5edce8">Useful side-eye.</text>
+    <text x="1046" y="78" text-anchor="middle" class="body" font-size="23" fill="#5edce8">Backed by evidence.</text>
+  </g>
 </svg>

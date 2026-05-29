@@ -1,6 +1,7 @@
-# 04 — Bespoke Learning Plan
+# 04 - Bespoke Learning Plan
 
-CheckYourself should not only fix the app. It should help the user learn from what the app revealed.
+CheckYourself should not only fix the app. It should help the user learn from
+what the app revealed, without turning the report into homework soup.
 
 The learning plan is generated after the diagnostic and updated after remediation.
 

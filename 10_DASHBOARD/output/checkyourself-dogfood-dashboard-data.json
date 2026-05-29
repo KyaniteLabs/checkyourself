@@ -19,7 +19,7 @@
   ],
   "detected_stack": [
     "Markdown-first AI diagnostic workspace",
-    "ICM-style context routing",
+    "File-first context routing",
     "Python standard-library validation",
     "Static HTML/CSS dashboard output",
     "Private Creator Kit sidecar"
@@ -40,10 +40,10 @@
     {"surface": "Data storage and migrations", "status": "Not applicable", "evidence": "No database or migrations.", "finding_ids": []},
     {"surface": "User/tenant isolation", "status": "Not applicable", "evidence": "No multitenant runtime.", "finding_ids": []},
     {"surface": "Secrets and environment config", "status": "Pass", "evidence": "Gitleaks passed; local/generated/private paths are ignored.", "finding_ids": ["CY-P2-001"]},
-    {"surface": "Security and threat model", "status": "Pass", "evidence": "Secret scan passed and CI includes gitleaks when available.", "finding_ids": ["CY-P2-003"]},
+    {"surface": "Security and threat model", "status": "Pass", "evidence": "Secret scan passed and CI installs and runs gitleaks.", "finding_ids": ["CY-P2-003"]},
     {"surface": "Privacy and data governance", "status": "Pass", "evidence": "Public product collects no data and warns against secret/private output.", "finding_ids": []},
     {"surface": "Tests and quality gates", "status": "Pass", "evidence": "Public validator, CLI unit tests, syntax checks, link checks, schema checks, and dashboard smoke guidance are present.", "finding_ids": ["CY-P2-003", "CY-P3-004"]},
-    {"surface": "CI/CD and supply chain", "status": "Pass", "evidence": "Remote GitHub Actions passed on KyaniteLabs/checkyourself run 26625079272.", "finding_ids": ["CY-P2-004"]},
+    {"surface": "CI/CD and supply chain", "status": "Pass", "evidence": "Remote GitHub Actions passed on KyaniteLabs/checkyourself run 26628784699.", "finding_ids": ["CY-P2-004"]},
     {"surface": "Hosting, deployment, rollback", "status": "Pass", "evidence": "Public repository is live at https://github.com/KyaniteLabs/checkyourself.", "finding_ids": ["CY-P2-004"]},
     {"surface": "Cloud infrastructure/IaC", "status": "Not applicable", "evidence": "No cloud runtime or IaC.", "finding_ids": []},
     {"surface": "Performance, caching, rate limits", "status": "Pass", "evidence": "Progressive context-loading and token-efficiency rules are documented.", "finding_ids": ["CY-P3-001"]},

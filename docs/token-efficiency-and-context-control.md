@@ -37,7 +37,6 @@ Only generate the HTML/CSS dashboard when the user explicitly asks for it with w
 
 ```text
 dashboard yes
-DASHBOARD=html
 create a visual dashboard
 ```
 
@@ -47,7 +46,6 @@ If the user wants a dashboard-shaped summary without the HTML file, use:
 
 ```text
 dashboard inline
-DASHBOARD=inline
 ```
 
 That path returns the compact Markdown dashboard fallback.

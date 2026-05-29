@@ -3,6 +3,8 @@
 These templates define what CheckYourself produces.
 
 Default outputs are Markdown and should be compact, complete, and easy to scan.
+The tone should be direct and useful: check yourself before you wreck yourself,
+with evidence instead of vague reassurance.
 
 ## Default outputs
 

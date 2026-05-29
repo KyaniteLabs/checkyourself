@@ -119,7 +119,7 @@
         <p class="language-note">Language mode: English first with Spanish support. Modo de idioma: inglés primero con apoyo en español.</p>
         <ul class="stack" aria-label="Detected stack">
           <li class="badge">Markdown-first workspace</li>
-          <li class="badge">ICM-style context routing</li>
+          <li class="badge">File-first context routing</li>
           <li class="badge">Python validator</li>
           <li class="badge">Static HTML/CSS dashboard</li>
           <li class="badge">Private Creator Kit sidecar</li>
@@ -182,10 +182,10 @@
           <tr><td>Data storage and migrations</td><td><span class="status neutral">N/A</span></td><td>No database or migrations.</td><td></td></tr>
           <tr><td>User/tenant isolation</td><td><span class="status neutral">N/A</span></td><td>No multitenant runtime.</td><td></td></tr>
           <tr><td>Secrets and environment config</td><td><span class="status pass">Pass</span></td><td>Gitleaks passed; local/generated/private paths are ignored.</td><td>CY-P2-001</td></tr>
-          <tr><td>Security and threat model</td><td><span class="status pass">Pass</span></td><td>Secret scan passed and CI includes gitleaks when available.</td><td>CY-P2-003</td></tr>
+          <tr><td>Security and threat model</td><td><span class="status pass">Pass</span></td><td>Secret scan passed and CI installs and runs gitleaks.</td><td>CY-P2-003</td></tr>
           <tr><td>Privacy and data governance</td><td><span class="status pass">Pass</span></td><td>Public product collects no data and warns against secret/private output.</td><td></td></tr>
           <tr><td>Tests and quality gates</td><td><span class="status pass">Pass</span></td><td>Public validator, CLI unit tests, syntax checks, link checks, schema checks, and dashboard smoke guidance exist.</td><td>CY-P2-003, CY-P3-004</td></tr>
-          <tr><td>CI/CD and supply chain</td><td><span class="status pass">Pass</span></td><td>Remote GitHub Actions passed on KyaniteLabs/checkyourself run 26625079272.</td><td>CY-P2-004</td></tr>
+          <tr><td>CI/CD and supply chain</td><td><span class="status pass">Pass</span></td><td>Remote GitHub Actions passed on KyaniteLabs/checkyourself run 26628784699.</td><td>CY-P2-004</td></tr>
           <tr><td>Hosting, deployment, rollback</td><td><span class="status pass">Pass</span></td><td>Public repository is live at https://github.com/KyaniteLabs/checkyourself.</td><td>CY-P2-004</td></tr>
           <tr><td>Cloud infrastructure/IaC</td><td><span class="status neutral">N/A</span></td><td>No cloud runtime or IaC.</td><td></td></tr>
           <tr><td>Performance, caching, rate limits</td><td><span class="status pass">Pass</span></td><td>Progressive context-loading and token-efficiency rules are documented.</td><td>CY-P3-001</td></tr>

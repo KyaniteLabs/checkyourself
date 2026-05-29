@@ -1,10 +1,11 @@
-# Optional local CLI: `tools/checkyourself.py`
+# Optional Local CLI: `tools/checkyourself.py`
 
-CheckYourself is primarily a model-agnostic system you load as an AI assistant's
-operating context. This CLI is **optional** — a deterministic head start that
-does the cheap discovery locally so your AI spends its budget on judgment, not
-grep. It uses only the Python standard library, sends nothing over the network,
-and never prints secret values.
+CheckYourself is primarily a folder you load into an AI assistant. The CLI is an
+optional zero-token scout: it does cheap discovery locally so the assistant can
+spend its attention on judgment instead of file searching.
+
+It uses only the Python standard library, sends nothing over the network, and
+never prints secret values.
 
 ## What it does
 
@@ -21,8 +22,8 @@ and never prints secret values.
 - Returns a non-zero exit code under `--ci` when a P0 is found, so it can act as
   a lightweight CI gate.
 
-It is **not** a replacement for the full AI-driven diagnostic. It is the scaffold
-the diagnostic builds on — the AI still sweeps the entire production surface,
+It is **not** a replacement for the full AI-driven diagnostic. It is the scout,
+not the judge. The AI still sweeps the entire production surface,
 explains and ranks every finding, and produces the remediation backlog and
 learning plan.
 
@@ -67,3 +68,10 @@ builds on.
 
 Generated files match the gitignored `CHECKYOURSELF_*.generated.*` patterns, so
 they stay out of commits by default.
+
+## Agent Access Roadmap
+
+The public product is CLI-first. A future MCP server should wrap the same CLI
+logic for native agent tools. A hosted API is not needed unless CheckYourself
+becomes a service product with accounts, hosted runs, shared history, or
+billing. See [`agent-access-cli-plan.md`](agent-access-cli-plan.md).

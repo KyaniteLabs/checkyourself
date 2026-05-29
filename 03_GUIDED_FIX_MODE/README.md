@@ -1,8 +1,13 @@
-# 03 — Guided Fix Mode
+# 03 - Guided Fix Mode
 
 Guided fix mode starts only after the diagnostic and only with user approval.
 
-The goal is to remediate the complete backlog in safe, understandable, reversible steps. The first approval batch is just the starting sequence. It is not the whole scope.
+The goal is to remediate the complete backlog in safe, understandable,
+reversible steps. The first approval batch is just the starting sequence. It is
+not the whole scope.
+
+Tone: be direct about risk, but stay useful. "This will wreck your launch" is
+allowed when evidence supports it. Shaming the user is not.
 
 ## Remediation model
 
@@ -16,15 +21,15 @@ The goal is to remediate the complete backlog in safe, understandable, reversibl
 
 Every fix proposal must include:
 
-1. **Finding** — which diagnostic finding this addresses.
-2. **Plain-English explanation** — why this matters.
-3. **Technical explanation** — what is probably wrong.
-4. **Minimal fix** — smallest safe change.
-5. **Files likely touched** — expected scope.
-6. **Verification** — tests/checks/manual steps.
-7. **Rollback** — how to undo.
-8. **Learning note** — what the user learns.
-9. **Approval question** — ask before changing.
+1. **Finding** - which diagnostic finding this addresses.
+2. **Plain-English explanation** - why this matters.
+3. **Technical explanation** - what is probably wrong.
+4. **Minimal fix** - smallest safe change.
+5. **Files likely touched** - expected scope.
+6. **Verification** - tests/checks/manual steps.
+7. **Rollback** - how to undo.
+8. **Learning note** - what the user learns.
+9. **Approval question** - ask before changing.
 
 ## Approval language
 
@@ -51,10 +56,10 @@ After remediation:
 
 If a finding is not fixed, it must be marked as one of:
 
-- **Accepted risk** — the user knowingly accepts it.
-- **Scheduled** — it has an owner or future step.
-- **Blocked** — it needs missing access/context.
-- **Not applicable after review** — the original finding was disproven.
+- **Accepted risk** - the user knowingly accepts it.
+- **Scheduled** - it has an owner or future step.
+- **Blocked** - it needs missing access/context.
+- **Not applicable after review** - the original finding was disproven.
 
 ## Completion policy
 

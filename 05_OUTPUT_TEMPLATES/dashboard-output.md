@@ -1,14 +1,15 @@
-# Optional HTML Dashboard Output
+# Optional Dashboard Output
 
-The dashboard is optional. Default behavior is **no dashboard** to save context and tokens.
+The dashboard is optional. Default behavior is **no dashboard** to save context
+and tokens.
 
 Use it only when the user asks for a visual dashboard, HTML output, or a more readable summary.
 
 ## Modes
 
-- `DASHBOARD=off` — default. Produce the Markdown report only.
-- `DASHBOARD=inline` — produce the compact Markdown dashboard fallback.
-- `DASHBOARD=html` — produce one self-contained HTML/CSS dashboard after the report. Use this only if the user explicitly wants the AI to write the HTML.
+- `dashboard` not requested - default. Produce the Markdown report only.
+- `dashboard inline` - produce the compact Markdown dashboard fallback.
+- `dashboard yes` - produce one self-contained HTML/CSS dashboard after the report.
 
 For HTML output, use the single canonical template in `10_DASHBOARD/`. Do not
 create a second JavaScript/data-template dashboard.
@@ -33,6 +34,8 @@ A useful dashboard should show:
 8. learning-plan priorities with source and YouTube links;
 9. bilingual labels/content only after explicit second-language request or user
    confirmation of an inferred candidate.
+10. direct, useful product voice: evidence first, lightly opinionated, never
+    mean-spirited.
 
 ## Token-efficiency constraints
 

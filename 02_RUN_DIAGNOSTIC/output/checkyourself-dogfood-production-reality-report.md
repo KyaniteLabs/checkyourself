@@ -6,7 +6,7 @@ Scope: Public CheckYourself repo plus private Creator Kit boundary and maintaine
 
 ## 1. Executive Summary
 
-CheckYourself is in strong public-launch shape as a folder-based diagnostic system. The public repo has a clear safety contract, ICM-style routing, complete diagnostic templates, stage handoff folders, a validation script, GitHub Actions workflow, sample dashboard data, schema files, and an explicit private Creator Kit boundary.
+CheckYourself is in strong public-launch shape as a folder-based diagnostic system. The public repo has a clear safety contract, file-first routing, complete diagnostic templates, stage handoff folders, a validation script, GitHub Actions workflow, sample dashboard data, schema files, and an explicit private Creator Kit boundary.
 
 The dogfood run found no P0 or P1 issues. The first remediation pass fixed the local launch-hygiene and self-validation gaps: scanner output is ignored, dashboard metadata is aligned, CI is broader, duplicate docs are removed, and real dashboard/output examples exist.
 
@@ -54,7 +54,7 @@ The score improved after local remediation and public proof because the package 
 | Product clarity and onboarding | 12 / 12 | README, START_HERE, beginner prompt, and paste prompt are clear. |
 | Safety and approval controls | 12 / 12 | Read-only-first and approval gates are repeated in agent rules and prompts. |
 | Diagnostic coverage and templates | 14 / 15 | Coverage matrix and Production Reality Report are complete. |
-| ICM-style context routing | 11 / 12 | Root and stage contexts are present and validated. |
+| File-first context routing | 11 / 12 | Root and stage contexts are present and validated. |
 | Dashboard and output consistency | 9 / 9 | Dashboard docs, manifest metadata, real data JSON, and rendered examples are aligned. |
 | Public/private boundary | 12 / 12 | Private sidecar and generated scanner output are ignored. |
 | Validation, CI, and supply chain | 16 / 16 | Local validators pass and remote GitHub Actions passed after push. |
@@ -77,10 +77,10 @@ No P0/P1/P2 launch blocker remains after public repo creation and remote Actions
 | 6 | Data storage and migrations | Not applicable | No database/migrations. |
 | 7 | User/tenant isolation | Not applicable | No multitenant runtime or user records. |
 | 8 | Secrets and environment config | Pass | Gitleaks passed; `.gitignore` excludes private/local surfaces. |
-| 9 | Security and threat model | Pass | Local secret scan passed and CI includes a gitleaks-if-available step. |
+| 9 | Security and threat model | Pass | Local secret scan passed and CI installs and runs gitleaks. |
 | 10 | Privacy and data governance | Pass | Public product collects no data; prompts warn against secret/private output. |
 | 11 | Tests and quality gates | Pass | Public validator, CLI unit tests, syntax checks, link checks, schema checks, and dogfood backlog assertions pass locally. |
-| 12 | CI/CD and supply chain | Pass | Remote GitHub Actions run `26625079272` passed after push. |
+| 12 | CI/CD and supply chain | Pass | Remote GitHub Actions run `26628784699` passed after push. |
 | 13 | Hosting, deployment, rollback | Pass | Public GitHub repo is live at `https://github.com/KyaniteLabs/checkyourself`. |
 | 14 | Cloud infrastructure/IaC | Not applicable | No cloud runtime or IaC. |
 | 15 | Performance, caching, rate limits | Pass | Token-efficiency docs and progressive loading rules exist. |
@@ -104,8 +104,8 @@ None found.
 |---|---|---|---|---|
 | CY-P2-001 | Private scanner writes an unignored generated file at repo root by default | A maintainer can accidentally create and commit generated local context during launch prep | `CHECKYOURSELF_*.generated.md` is now ignored; scanner output was tested as ignored | Fixed |
 | CY-P2-002 | Manifest dashboard paths conflict with canonical dashboard docs | Agents and maintainers may pick the wrong dashboard path when multiple dashboard templates exist | Manifest now points to one rich dashboard template plus one inline Markdown fallback | Fixed |
-| CY-P2-003 | GitHub Actions gate is narrower than the dogfood verification suite | Public regressions could pass CI even if local checks would catch them | Workflow now includes public validation, whitespace check, Python compile, and gitleaks-if-available | Fixed locally |
-| CY-P2-004 | Public remote launch was not proven | The repo was locally ready but not yet public-launch verified | Public repo `KyaniteLabs/checkyourself` exists and Actions run `26625079272` passed | Fixed |
+| CY-P2-003 | GitHub Actions gate is narrower than the dogfood verification suite | Public regressions could pass CI even if local checks would catch them | Workflow now includes public validation, whitespace check, Python compile, unit tests, CLI smoke, and installed gitleaks | Fixed |
+| CY-P2-004 | Public remote launch was not proven | The repo was locally ready but not yet public-launch verified | Public repo `KyaniteLabs/checkyourself` exists and Actions run `26628784699` passed | Fixed |
 
 ## 10. P3 findings - improvements
 
@@ -128,7 +128,7 @@ None found.
 | E4 | `rules.md:5-14` | Diagnose before remediation, score honestly, and produce complete backlog. |
 | E5 | `02_RUN_DIAGNOSTIC/coverage-matrix.md:12-37` | All 20 production surfaces must be represented. |
 | E6 | `02_RUN_DIAGNOSTIC/scoring-method.md:24-30` | Score caps apply for unresolved severe findings and missing critical evidence. |
-| E7 | `README.md:5-9` | Product identity and ICM-style framing. |
+| E7 | `README.md:1-18` | Product identity, safety model, and useful side-eye framing. |
 | E8 | `README.md:45-62` | Default outputs and optional dashboard behavior. |
 | E9 | `CONTEXT.md:10-18` | Canonical rules including public/private boundary. |
 | E10 | `CONTEXT.md:20-30` | Stage router for user intent to context files. |
@@ -138,7 +138,7 @@ None found.
 | E14 | `tools/validate_public.py:146-163` | JSON parse and dashboard-shape validation. |
 | E15 | `tools/validate_public.py:182-202` | Local Markdown link validation. |
 | E16 | `tools/validate_public.py:222-236` | Stale public phrase and dashboard-doc checks. |
-| E17 | `.github/workflows/validate.yml:22-23` | CI currently runs only the public validator. |
+| E17 | `.github/workflows/validate.yml` | CI runs public validation, whitespace checks, Python compile, unit tests, CLI smoke, and installed gitleaks. |
 | E18 | `10_DASHBOARD/CONTEXT.md:3-6` | Canonical HTML/CSS dashboard path and inline Markdown fallback. |
 | E19 | `10_DASHBOARD/CONTEXT.md:38-42` | Second JavaScript/data-template dashboard is prohibited. |
 | E20 | `checkyourself.manifest.json:55-60` | Optional dashboard metadata points to the canonical template and inline fallback. |
@@ -159,8 +159,8 @@ None found.
 |---:|---|---|---|---|---|
 | 1 | CY-P2-001 | P2 | Add `CHECKYOURSELF_PROJECT_CONTEXT.generated.md` or `CHECKYOURSELF_*.generated.md` to `.gitignore`, or change scanner default output into a private/output folder. | Run scanner; confirm `git status --short` stays clean. | Revert `.gitignore` or scanner default. |
 | 2 | CY-P2-002 | P2 | Align manifest dashboard fields with the single canonical HTML/CSS dashboard and inline Markdown fallback. | Run `python3 tools/validate_public.py`; inspect manifest entrypoints. | Revert manifest changes. |
-| 3 | CY-P2-003 | P2 | Expand GitHub Actions to include `git diff --check`, py_compile, optional gitleaks if available, schema validation when `jsonschema` is installed, and maybe release-boundary checks. | Run CI locally or after push; confirm failure on known bad cases if practical. | Restore single validator workflow. |
-| 4 | CY-P2-004 | P2 | Create remote `KyaniteLabs/checkyourself`, push `main`, and verify Actions pass. | `origin` tracks `https://github.com/KyaniteLabs/checkyourself.git`; Actions run `26625079272` passed. | Keep the public repo; revert only with an explicit unpublish decision. |
+| 3 | CY-P2-003 | P2 | Expand GitHub Actions to include `git diff --check`, py_compile, unit tests, CLI smoke, and installed gitleaks. | Run CI locally or after push; confirm failure on known bad cases if practical. | Restore smaller validator workflow. |
+| 4 | CY-P2-004 | P2 | Create remote `KyaniteLabs/checkyourself`, push `main`, and verify Actions pass. | `origin` tracks `https://github.com/KyaniteLabs/checkyourself.git`; Actions run `26628784699` passed. | Keep the public repo; revert only with an explicit unpublish decision. |
 | 5 | CY-P3-001 | P3 | Keep one token-efficiency doc as canonical and turn the other into a short pointer, or remove duplicate from manifest. | Duplicate-hash check shows no duplicate docs. | Restore duplicate file. |
 | 6 | CY-P3-002 | P3 | Rename or update private `v1.3` release notes to `v1.4` or mark it historical. | Search Creator Kit for stale version phrasing. | Revert private note. |
 | 7 | CY-P3-003 | P3 | Update scanner generated header to current script location or neutral wording. | Run scanner to temp path and inspect first lines. | Revert header text. |
@@ -212,11 +212,11 @@ This batch is small, reversible, and directly tied to dogfood findings.
 
 **Why this matters in real life:** Public CI should catch the checks we already trust locally.
 
-**Smallest safe fix:** Add whitespace and Python syntax checks to Actions first; add optional gitleaks/schema gates if tool availability is acceptable.
+**Smallest safe fix:** Add whitespace, Python syntax, CLI unit tests, CLI smoke, and installed gitleaks checks to Actions.
 
 **Files likely touched:** `.github/workflows/validate.yml`.
 
-**Verification plan:** Run the commands locally and then confirm remote Actions after push. Completed: Actions run `26625079272` passed.
+**Verification plan:** Run the commands locally and then confirm remote Actions after push. Completed: Actions run `26628784699` passed.
 
 **Rollback plan:** Restore the current single-command workflow.
 
