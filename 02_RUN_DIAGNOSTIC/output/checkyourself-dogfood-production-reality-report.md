@@ -104,7 +104,7 @@ None found.
 | ID | Finding | Why it matters | Evidence | Status |
 |---|---|---|---|---|
 | CY-P2-001 | Private scanner writes an unignored generated file at repo root by default | A maintainer can accidentally create and commit generated local context during launch prep | `CHECKYOURSELF_*.generated.md` is now ignored; scanner output was tested as ignored | Fixed |
-| CY-P2-002 | Manifest dashboard paths conflict with canonical dashboard docs | Agents and maintainers may pick the wrong dashboard path, especially CSS-only vs advanced JS mode | Manifest now points default dashboard to `10_DASHBOARD/dashboard-template.html` and advanced data template to `05_OUTPUT_TEMPLATES/checkyourself-dashboard.html` | Fixed |
+| CY-P2-002 | Manifest dashboard paths conflict with canonical dashboard docs | Agents and maintainers may pick the wrong dashboard path when multiple dashboard templates exist | Manifest now points to one rich dashboard template plus one inline Markdown fallback | Fixed |
 | CY-P2-003 | GitHub Actions gate is narrower than the dogfood verification suite | Public regressions could pass CI even if local checks would catch them | Workflow now includes public validation, whitespace check, Python compile, and gitleaks-if-available | Fixed locally |
 | CY-P2-004 | Public remote launch is not proven | The repo is locally ready but not yet public-launch verified | `git remote -v` returned no remote; no Actions result exists yet | Pending external launch |
 
@@ -140,10 +140,10 @@ None found.
 | E15 | `tools/validate_public.py:182-202` | Local Markdown link validation. |
 | E16 | `tools/validate_public.py:222-236` | Stale public phrase and dashboard-doc checks. |
 | E17 | `.github/workflows/validate.yml:22-23` | CI currently runs only the public validator. |
-| E18 | `10_DASHBOARD/CONTEXT.md:3-5` | CSS-only dashboard default path. |
-| E19 | `10_DASHBOARD/CONTEXT.md:32-38` | Advanced JS data-template path is restricted. |
-| E20 | `checkyourself.manifest.json:55-60` | Optional dashboard template points to a legacy template path. |
-| E21 | `checkyourself.manifest.json:78-79` | Advanced dashboard template is separately listed. |
+| E18 | `10_DASHBOARD/CONTEXT.md:3-6` | Canonical HTML/CSS dashboard path and inline Markdown fallback. |
+| E19 | `10_DASHBOARD/CONTEXT.md:38-42` | Second JavaScript/data-template dashboard is prohibited. |
+| E20 | `checkyourself.manifest.json:55-60` | Optional dashboard metadata points to the canonical template and inline fallback. |
+| E21 | `10_DASHBOARD/inline-dashboard.md` | Token-efficient non-HTML dashboard fallback exists. |
 | E22 | `checkyourself_scan.py:231-234` | Private scanner default output filename. |
 | E23 | `checkyourself_scan.py:338-342` | Private scanner writes the output file to current working directory. |
 | E24 | Local command | `python3 tools/validate_public.py` passed. |
@@ -159,7 +159,7 @@ None found.
 | Rank | ID | Severity | Fix summary | Verification | Rollback |
 |---:|---|---|---|---|---|
 | 1 | CY-P2-001 | P2 | Add `CHECKYOURSELF_PROJECT_CONTEXT.generated.md` or `CHECKYOURSELF_*.generated.md` to `.gitignore`, or change scanner default output into a private/output folder. | Run scanner; confirm `git status --short` stays clean. | Revert `.gitignore` or scanner default. |
-| 2 | CY-P2-002 | P2 | Align manifest dashboard fields with canonical CSS-only default and explicitly label advanced JS template. | Run `python3 tools/validate_public.py`; inspect manifest entrypoints. | Revert manifest changes. |
+| 2 | CY-P2-002 | P2 | Align manifest dashboard fields with the single canonical HTML/CSS dashboard and inline Markdown fallback. | Run `python3 tools/validate_public.py`; inspect manifest entrypoints. | Revert manifest changes. |
 | 3 | CY-P2-003 | P2 | Expand GitHub Actions to include `git diff --check`, py_compile, optional gitleaks if available, schema validation when `jsonschema` is installed, and maybe release-boundary checks. | Run CI locally or after push; confirm failure on known bad cases if practical. | Restore single validator workflow. |
 | 4 | CY-P2-004 | P2 | Create remote `KyaniteLabs/checkyourself`, push `main`, and verify Actions pass. | `git remote -v`, `git push -u origin main`, Actions green. | Remove remote or keep local-only. |
 | 5 | CY-P3-001 | P3 | Keep one token-efficiency doc as canonical and turn the other into a short pointer, or remove duplicate from manifest. | Duplicate-hash check shows no duplicate docs. | Restore duplicate file. |
@@ -197,7 +197,7 @@ This batch is small, reversible, and directly tied to dogfood findings.
 
 **Why this matters in real life:** Agents often use manifests as routing truth. If the manifest disagrees with the docs, weaker agents may choose the wrong dashboard mode.
 
-**Smallest safe fix:** Set manifest dashboard defaults to `10_DASHBOARD/dashboard-template.html` and clearly keep `05_OUTPUT_TEMPLATES/checkyourself-dashboard.html` as the advanced data-template path.
+**Smallest safe fix:** Set manifest dashboard defaults to `10_DASHBOARD/dashboard-template.html` and `10_DASHBOARD/inline-dashboard.md`; remove the second JavaScript/data-template dashboard path.
 
 **Files likely touched:** `checkyourself.manifest.json`.
 

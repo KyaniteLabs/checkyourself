@@ -22,7 +22,7 @@ run have not been created or verified yet.
 ## Fixed locally
 
 - Generated scanner output is ignored.
-- Dashboard manifest metadata matches the CSS-only default path.
+- Dashboard manifest metadata now points to one HTML/CSS dashboard and one inline Markdown fallback.
 - GitHub Actions has a broader local quality gate.
 - Duplicate token-efficiency docs are removed.
 - Private v1.3 release note is marked historical.

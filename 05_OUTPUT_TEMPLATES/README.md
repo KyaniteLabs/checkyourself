@@ -15,13 +15,10 @@ Default outputs are Markdown and should be compact, complete, and easy to scan.
 
 ## Optional visual output
 
-- `optional-human-dashboard.html` — self-contained HTML/CSS dashboard.
 - `dashboard-output-instructions.md` — rules for when and how to generate it.
-- `checkyourself-dashboard.html` — advanced local data-template dashboard that
-  replaces embedded JSON and uses inline JavaScript.
 
 Do not generate the dashboard unless the user asks for it with `dashboard yes`.
 
-Default to the CSS-only dashboard path in `10_DASHBOARD/`. Use the advanced
-data-template dashboard only when the user asks for dashboard data mode, an
-editable local template, or explicitly approves JavaScript.
+Use the single canonical dashboard path in `10_DASHBOARD/dashboard-template.html`.
+If the user does not want HTML/CSS, use the inline Markdown fallback in
+`10_DASHBOARD/inline-dashboard.md`.

@@ -13,6 +13,9 @@ Reality Report.
 6. Confirm the first approval batch is visibly labeled as the next safe step.
 7. Confirm the learning-plan snapshot is visible.
 8. Confirm no external scripts, fonts, trackers, or CDNs are loaded.
+9. Confirm the dashboard has text labels in addition to color.
+10. Confirm bilingual content appears when the user or project language is not English-only.
+11. Confirm links in learning priorities open to a written source and a trusted YouTube video.
 
 ## Optional screenshot proof
 

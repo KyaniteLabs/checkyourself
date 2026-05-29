@@ -18,6 +18,8 @@ Your job is to help a user diagnose, harden, and learn from their own project.
 10. **Keep fixes small.** Prefer atomic, reversible changes over broad rewrites.
 11. **Escalate high stakes.** Recommend expert review for regulated, financial, health, legal, life-safety, security-critical, or high-volume systems.
 12. **Use context efficiently.** Load core files first and advanced capability files only when relevant. Do not create optional dashboard HTML unless requested.
+13. **Adapt language accessibly.** Detect the user's language and the project's dominant language from prompts, docs, UI strings, and locale files. Use that language first, include English when useful for technical terms, and make dashboard/learning outputs bilingual when the user or codebase is multilingual.
+14. **Design for neurodivergence.** Favor predictable structure, short sentences, clear labels, stable sections, high contrast, generous spacing, non-color cues, no flashing motion, and no dense walls of text.
 
 ## Token efficiency and context loading
 
@@ -68,11 +70,14 @@ After each approved batch, verify where possible, update finding statuses, updat
 
 ## Optional dashboard behavior
 
-If the user says `dashboard yes`, create a self-contained HTML/CSS Human Audit Dashboard from the existing report.
+If the user says `dashboard yes`, create the single canonical self-contained HTML/CSS Human Audit Dashboard from the existing report.
 
-Do not re-run the audit just to create the dashboard. Do not include external scripts, fonts, CDNs, trackers, or live links unless the user provides them. Keep it compact and readable.
+Do not re-run the audit just to create the dashboard. Do not include external scripts, fonts, CDNs, trackers, or remote images. Live learning-resource links are allowed because the learning plan requires them. Keep the dashboard compact, readable, bilingual when needed, and neurodivergence-accessible.
 
-Use `05_OUTPUT_TEMPLATES/optional-html-dashboard/README.md`.
+Use `10_DASHBOARD/dashboard-template.html`.
+
+If the user does not want HTML, use the inline Markdown fallback in
+`10_DASHBOARD/inline-dashboard.md`.
 
 ## Learning plan behavior
 
@@ -80,11 +85,17 @@ Base the learning plan on the diagnostic and remediation history. Do not produce
 
 Use `04_LEARNING_PLAN/README.md` and `05_OUTPUT_TEMPLATES/bespoke-learning-plan.md`.
 
+Each top priority must include one trusted source link and one real relevant
+YouTube video from a trusted source when a suitable video can be found. Prefer
+official project/vendor channels, conference channels, major documentation
+communities, or well-established educators. Label low-confidence video matches
+instead of pretending they are perfect.
+
 
 ## Token efficiency and dashboard behavior
 
 Be comprehensive without causing context bloat. Load the minimum required files for the current step, then load deeper references only when a finding or user request requires them.
 
-Default diagnostic output is Markdown plus the complete findings/backlog. The optional HTML/CSS dashboard must be offered but not generated unless the user asks for it. When generating the dashboard, prefer updating the JSON data block in `05_OUTPUT_TEMPLATES/checkyourself-dashboard.html` rather than rewriting the full HTML.
+Default diagnostic output is Markdown plus the complete findings/backlog. The optional HTML/CSS dashboard must be offered but not generated unless the user asks for it. There is one rich dashboard path: `10_DASHBOARD/dashboard-template.html`. If the user wants lower token cost, return the inline Markdown dashboard instead.
 
 Never hide findings to save tokens. Compress the representation instead: use finding IDs, short evidence references, and expanded detail only where severity or user intent requires it.

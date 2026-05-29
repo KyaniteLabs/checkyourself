@@ -4,6 +4,9 @@ The dashboard is a visual, human-readable HTML/CSS version of the CheckYourself 
 
 It is optional because it costs extra tokens.
 
+The canonical template lives at `../../10_DASHBOARD/dashboard-template.html`.
+This folder only keeps legacy generation notes.
+
 ## When to generate it
 
 Only generate the dashboard when the user explicitly says:
@@ -29,11 +32,14 @@ dashboard yes
 - Use a single self-contained HTML file.
 - Use inline CSS.
 - Do not use external dependencies.
-- Do not include JavaScript unless the user asks.
+- Do not include JavaScript.
 - Do not rerun the audit just to make the dashboard.
 - Keep evidence concise; link to paths instead of pasting long file contents.
 - Include every finding, but keep rows compact.
 - The dashboard is a visualization of the report, not a replacement for the report.
+- Make labels bilingual when the user or project is not English-only.
+- Preserve neurodivergent accessibility: stable sections, clear labels, high
+  contrast, short paragraphs, and no motion-dependent meaning.
 
 ## Recommended output filename
 

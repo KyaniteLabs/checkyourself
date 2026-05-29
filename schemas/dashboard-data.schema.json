@@ -67,7 +67,25 @@
         "learning_priorities": {
           "type": "array",
           "items": {
-            "type": "object"
+            "type": "object",
+            "properties": {
+              "concept": {"type": "string"},
+              "plain_english": {"type": "string"},
+              "plain_other_language": {"type": "string"},
+              "why": {"type": "string"},
+              "triggered_by": {"type": "array", "items": {"type": "string"}},
+              "do_this_next": {"type": "string"},
+              "do_this_next_other_language": {"type": "string"},
+              "success_signal": {"type": "string"},
+              "source_title": {"type": "string"},
+              "source_url": {"type": "string"},
+              "youtube_title": {"type": "string"},
+              "youtube_url": {"type": "string"},
+              "video_trust_note": {"type": "string"},
+              "resource_title": {"type": "string"},
+              "resource_url": {"type": "string"}
+            },
+            "additionalProperties": true
           }
         }
       },
@@ -129,7 +147,26 @@
         "learning_plan": {
           "type": "array",
           "items": {
-            "type": "object"
+            "type": "object",
+            "properties": {
+              "concept": {"type": "string"},
+              "plain_english": {"type": "string"},
+              "plain_other_language": {"type": "string"},
+              "why": {"type": "string"},
+              "practice": {"type": "string"},
+              "triggered_by": {"type": "array", "items": {"type": "string"}},
+              "do_this_next": {"type": "string"},
+              "do_this_next_other_language": {"type": "string"},
+              "success_signal": {"type": "string"},
+              "source_title": {"type": "string"},
+              "source_url": {"type": "string"},
+              "youtube_title": {"type": "string"},
+              "youtube_url": {"type": "string"},
+              "video_trust_note": {"type": "string"},
+              "resource_title": {"type": "string"},
+              "resource_url": {"type": "string"}
+            },
+            "additionalProperties": true
           }
         }
       },

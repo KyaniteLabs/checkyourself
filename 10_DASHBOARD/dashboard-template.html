@@ -1,124 +1,480 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{PRIMARY_LANGUAGE}}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CheckYourself Dashboard</title>
+<title>CheckYourself Dashboard - {{PROJECT_NAME}}</title>
 <style>
   :root {
-    --bg: #0f172a;
-    --panel: #111827;
-    --card: #1f2937;
-    --muted: #94a3b8;
-    --text: #f8fafc;
-    --line: #334155;
-    --good: #22c55e;
-    --warn: #f59e0b;
-    --bad: #ef4444;
-    --info: #38bdf8;
+    color-scheme: dark;
+    --void: #05070b;
+    --void-2: #070a10;
+    --basalt: #0b131d;
+    --basalt-2: #0e1b29;
+    --basalt-3: #122335;
+    --field: #07111b;
+    --panel: rgba(8, 18, 28, 0.92);
+    --panel-strong: rgba(10, 23, 35, 0.98);
+    --line: rgba(221, 234, 241, 0.18);
+    --line-strong: rgba(243, 248, 255, 0.3);
+    --text: #f3f8ff;
+    --text-2: #c3d4e2;
+    --muted: #91a5b8;
+    --cyan: #5edce8;
+    --cyan-2: #2aaec1;
+    --magenta: #e85682;
+    --amber: #e9c960;
+    --green: #7edba5;
+    --red: #ff5c70;
+    --radius: 8px;
+    --max: 1180px;
+    --body-font: "Plus Jakarta Sans", "Atkinson Hyperlegible", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono-font: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
   }
+
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); line-height: 1.45; }
-  main { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 28px 0 56px; }
-  header { display: grid; gap: 18px; grid-template-columns: 1.6fr .8fr; align-items: stretch; margin-bottom: 22px; }
-  section, .hero, .score-card { background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.015)); border: 1px solid var(--line); border-radius: 18px; padding: 18px; box-shadow: 0 18px 50px rgba(0,0,0,.18); }
+
+  html {
+    background: var(--void);
+    scroll-behavior: auto;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    color: var(--text);
+    background:
+      linear-gradient(90deg, rgba(94, 220, 232, 0.08) 0 1px, transparent 1px 100%),
+      linear-gradient(0deg, rgba(233, 201, 96, 0.045) 0 1px, transparent 1px 100%),
+      linear-gradient(145deg, #05070b 0%, #07111b 38%, #0b131d 68%, #05070b 100%);
+    background-size: 56px 56px, 56px 56px, auto;
+    font-family: var(--body-font);
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.03), transparent 24%),
+      repeating-linear-gradient(135deg, rgba(255,255,255,0.018) 0 1px, transparent 1px 9px);
+    opacity: 0.55;
+  }
+
+  a { color: var(--cyan); text-underline-offset: 0.18em; }
+  a:hover, a:focus-visible { color: #dcfbff; }
+  a:focus-visible, button:focus-visible { outline: 3px solid var(--amber); outline-offset: 3px; }
+
+  .skip-link {
+    position: absolute;
+    top: -100px;
+    left: 16px;
+    z-index: 10;
+    padding: 10px 14px;
+    border-radius: 0 0 var(--radius) var(--radius);
+    background: var(--amber);
+    color: #07111b;
+    font-weight: 800;
+  }
+
+  .skip-link:focus { top: 0; }
+
+  main {
+    position: relative;
+    width: min(var(--max), calc(100% - 32px));
+    margin: 0 auto;
+    padding: 28px 0 56px;
+  }
+
+  header {
+    display: grid;
+    grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.55fr);
+    gap: 16px;
+    align-items: stretch;
+    margin-bottom: 16px;
+  }
+
+  section { margin-top: 16px; }
+
+  .panel {
+    position: relative;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: linear-gradient(180deg, var(--panel-strong), rgba(5, 10, 17, 0.96));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 22px 60px rgba(0,0,0,0.34);
+    padding: 20px;
+  }
+
+  .panel::before {
+    content: "";
+    position: absolute;
+    left: 16px;
+    top: -1px;
+    width: 18px;
+    height: 2px;
+    background: var(--cyan);
+    box-shadow: 24px 0 0 var(--amber), 48px 0 0 var(--magenta);
+  }
+
+  .hero {
+    min-height: 320px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 24px;
+  }
+
+  .eyebrow, .mono, th, .badge, .status, .metric-label {
+    font-family: var(--mono-font);
+  }
+
+  .eyebrow {
+    margin: 0 0 16px;
+    color: var(--amber);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+  }
+
   h1, h2, h3, p { margin-top: 0; }
-  h1 { font-size: clamp(2rem, 4vw, 4rem); line-height: .95; margin-bottom: 10px; letter-spacing: -.04em; }
-  h2 { font-size: 1.1rem; margin-bottom: 12px; }
-  p, td, th, li { font-size: .95rem; }
-  .muted { color: var(--muted); }
-  .badge { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; color: var(--text); background: rgba(255,255,255,.04); font-size: .84rem; margin: 0 6px 6px 0; }
-  .score { font-size: clamp(3rem, 8vw, 6rem); font-weight: 800; line-height: .9; letter-spacing: -.06em; }
-  .score small { font-size: 1rem; color: var(--muted); letter-spacing: 0; }
-  .bar { height: 12px; background: #020617; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; margin: 16px 0 10px; }
-  .bar > div { height: 100%; width: 62%; background: linear-gradient(90deg, var(--bad), var(--warn), var(--good)); }
-  .grid { display: grid; gap: 14px; }
-  .grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
-  .grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
-  .metric { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
-  .metric strong { display: block; font-size: 2rem; line-height: 1; }
-  .p0 { color: var(--bad); } .p1 { color: var(--warn); } .p2 { color: var(--info); } .p3 { color: var(--muted); }
-  table { width: 100%; border-collapse: collapse; overflow: hidden; border-radius: 12px; }
-  th, td { text-align: left; padding: 10px 11px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  th { color: var(--muted); font-weight: 700; background: rgba(255,255,255,.03); }
+
+  h1 {
+    margin-bottom: 14px;
+    font-size: 3rem;
+    line-height: 1.04;
+    letter-spacing: 0;
+  }
+
+  h2 {
+    margin-bottom: 12px;
+    font-size: 1.35rem;
+    line-height: 1.2;
+    letter-spacing: 0;
+  }
+
+  h3 {
+    margin-bottom: 8px;
+    color: var(--text);
+    font-size: 1.05rem;
+    line-height: 1.25;
+  }
+
+  p { color: var(--text-2); max-width: 78ch; }
+
+  .language-note {
+    margin-bottom: 0;
+    color: var(--muted);
+    font-size: 0.96rem;
+  }
+
+  .stack {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 18px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .badge, .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 32px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 5px 9px;
+    background: rgba(3, 10, 18, 0.72);
+    color: var(--text-2);
+    font-size: 0.78rem;
+  }
+
+  .score-panel {
+    display: grid;
+    align-content: space-between;
+    gap: 16px;
+  }
+
+  .score {
+    font-family: var(--mono-font);
+    font-size: 4.8rem;
+    line-height: 1;
+    font-weight: 800;
+    color: var(--text);
+  }
+
+  .score small {
+    color: var(--muted);
+    font-size: 1rem;
+    font-weight: 700;
+  }
+
+  .score-bar {
+    height: 14px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: #030a12;
+    overflow: hidden;
+  }
+
+  .score-bar > div {
+    height: 100%;
+    width: {{SCORE}}%;
+    background: linear-gradient(90deg, var(--red), var(--amber), var(--cyan), var(--green));
+  }
+
+  .risk-grid, .two-col, .three-col {
+    display: grid;
+    gap: 12px;
+  }
+
+  .risk-grid { grid-template-columns: repeat(5, 1fr); }
+  .two-col { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .three-col { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+  .metric {
+    min-height: 112px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 14px;
+    background: rgba(3, 10, 18, 0.62);
+  }
+
+  .metric strong {
+    display: block;
+    font-family: var(--mono-font);
+    font-size: 2.15rem;
+    line-height: 1;
+  }
+
+  .metric-label {
+    display: block;
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .p0 { color: #ffd0d7; border-color: rgba(255,92,112,0.48); }
+  .p1 { color: #ffe8a6; border-color: rgba(233,201,96,0.54); }
+  .p2 { color: #c8f7ff; border-color: rgba(94,220,232,0.48); }
+  .p3 { color: #d2ffe3; border-color: rgba(126,219,165,0.45); }
+  .unknown { color: #e7d3ff; border-color: rgba(232,86,130,0.5); }
+  .pass { color: #d2ffe3; border-color: rgba(126,219,165,0.45); }
+  .finding { color: #ffe8a6; border-color: rgba(233,201,96,0.54); }
+  .neutral { color: var(--text-2); border-color: var(--line); }
+
+  .callout {
+    border-left: 4px solid var(--amber);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    background: rgba(233,201,96,0.08);
+  }
+
+  .callout p:last-child { margin-bottom: 0; }
+
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+  }
+
+  table {
+    width: 100%;
+    min-width: 760px;
+    border-collapse: collapse;
+  }
+
+  th, td {
+    padding: 12px 11px;
+    border-bottom: 1px solid rgba(221,234,241,0.12);
+    vertical-align: top;
+    text-align: left;
+  }
+
+  th {
+    color: var(--muted);
+    background: rgba(3, 10, 18, 0.72);
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  td { color: var(--text-2); font-size: 0.94rem; }
   tr:last-child td { border-bottom: 0; }
-  .status { display: inline-block; border-radius: 999px; padding: 3px 8px; font-size: .78rem; border: 1px solid var(--line); }
-  .finding { color: var(--warn); } .pass { color: var(--good); } .unknown { color: var(--info); }
-  .callout { border-left: 4px solid var(--warn); background: rgba(245,158,11,.08); padding: 12px 14px; border-radius: 12px; }
-  footer { margin-top: 18px; color: var(--muted); font-size: .84rem; }
-  @media (max-width: 900px) { header, .grid.cols-2, .grid.cols-4 { grid-template-columns: 1fr; } main { width: min(100% - 20px, 1180px); padding-top: 12px; } }
+
+  .learning-list {
+    display: grid;
+    gap: 12px;
+  }
+
+  .learning-item {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: rgba(3, 10, 18, 0.62);
+    padding: 15px;
+  }
+
+  .learning-item p { margin-bottom: 8px; }
+
+  .resources {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .resources a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    padding: 5px 10px;
+    background: rgba(94, 220, 232, 0.08);
+  }
+
+  .access-list {
+    margin: 0;
+    padding-left: 20px;
+    color: var(--text-2);
+  }
+
+  footer {
+    margin-top: 18px;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  @media (max-width: 940px) {
+    header, .two-col, .three-col { grid-template-columns: 1fr; }
+    .risk-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    h1 { font-size: 2.25rem; }
+    .score { font-size: 3.7rem; }
+  }
+
+  @media (max-width: 560px) {
+    body { font-size: 16px; }
+    main { width: min(100% - 20px, var(--max)); padding-top: 16px; }
+    .panel { padding: 16px; }
+    .risk-grid { grid-template-columns: 1fr; }
+    table { min-width: 680px; }
+  }
+
+  @media print {
+    body { background: #fff; color: #000; }
+    body::before { display: none; }
+    .panel, .metric, .learning-item, .table-wrap { box-shadow: none; background: #fff; color: #000; border-color: #999; }
+    p, td, .muted, .language-note { color: #222; }
+    a { color: #0645ad; }
+  }
 </style>
 </head>
 <body>
-<main>
+<a class="skip-link" href="#main">Skip to dashboard / Saltar al tablero</a>
+<main id="main">
   <header>
-    <div class="hero">
-      <span class="badge">CheckYourself Dashboard</span>
-      <span class="badge">Read-only report view</span>
-      <h1>{{PROJECT_NAME}}</h1>
-      <p class="muted">{{ONE_SENTENCE_APP_SUMMARY}}</p>
-      <p><strong>Detected stack:</strong> {{DETECTED_STACK}}</p>
-      <p><strong>Current ship status:</strong> {{SHIP_STATUS}}</p>
-    </div>
-    <div class="score-card">
-      <div class="score">{{SCORE}}<small>/100</small></div>
-      <div class="bar"><div style="width: {{SCORE}}%;"></div></div>
-      <p class="muted">Confidence: {{CONFIDENCE}}. Score caps: {{SCORE_CAPS}}</p>
-    </div>
+    <section class="panel hero" aria-labelledby="dashboard-title">
+      <div>
+        <p class="eyebrow">CheckYourself // Production Reality</p>
+        <h1 id="dashboard-title">{{PROJECT_NAME}}</h1>
+        <p>{{ONE_SENTENCE_APP_SUMMARY}}</p>
+        <p class="language-note">{{LANGUAGE_NOTE}}</p>
+        <ul class="stack" aria-label="Detected stack">{{DETECTED_STACK_BADGES}}</ul>
+      </div>
+      <div class="callout">
+        <p><strong>Ship status / Estado:</strong> {{SHIP_STATUS}}</p>
+        <p><strong>Next decision / Próxima decisión:</strong> {{NEXT_USER_DECISION}}</p>
+      </div>
+    </section>
+
+    <aside class="panel score-panel" aria-labelledby="score-title">
+      <div>
+        <p class="eyebrow">Score / Puntaje</p>
+        <h2 id="score-title">Production Reality Score</h2>
+        <div class="score">{{SCORE}}<small>/100</small></div>
+        <div class="score-bar" aria-label="Score {{SCORE}} out of 100"><div></div></div>
+      </div>
+      <p><strong>Confidence / Confianza:</strong> {{CONFIDENCE}}</p>
+      <p>{{SCORE_CAPS}}</p>
+    </aside>
   </header>
 
-  <section class="grid cols-4" aria-label="Risk counts">
-    <div class="metric"><strong class="p0">{{P0_COUNT}}</strong><span>P0 do-not-ship</span></div>
-    <div class="metric"><strong class="p1">{{P1_COUNT}}</strong><span>P1 serious</span></div>
-    <div class="metric"><strong class="p2">{{P2_COUNT}}</strong><span>P2 hardening</span></div>
-    <div class="metric"><strong class="p3">{{P3_COUNT}}</strong><span>P3 improvements</span></div>
+  <section class="risk-grid" aria-label="Risk counts / Conteo de riesgos">
+    <div class="metric p0"><strong>{{P0_COUNT}}</strong><span class="metric-label">P0 Do-not-ship</span></div>
+    <div class="metric p1"><strong>{{P1_COUNT}}</strong><span class="metric-label">P1 Serious</span></div>
+    <div class="metric p2"><strong>{{P2_COUNT}}</strong><span class="metric-label">P2 Hardening</span></div>
+    <div class="metric p3"><strong>{{P3_COUNT}}</strong><span class="metric-label">P3 Improve</span></div>
+    <div class="metric unknown"><strong>{{UNKNOWN_COUNT}}</strong><span class="metric-label">Unknown</span></div>
   </section>
 
-  <section>
-    <h2>Do-not-ship flags</h2>
-    <div class="callout">{{DO_NOT_SHIP_FLAGS}}</div>
+  <section class="two-col">
+    <div class="panel">
+      <h2>Do-not-ship / No lanzar todavía</h2>
+      <div class="callout">{{DO_NOT_SHIP_FLAGS}}</div>
+    </div>
+    <div class="panel">
+      <h2>Accessible Reading Mode / Modo accesible</h2>
+      <ul class="access-list">
+        {{ACCESSIBILITY_NOTES}}
+      </ul>
+    </div>
   </section>
 
-  <section>
-    <h2>Coverage sweep</h2>
-    <table>
-      <thead><tr><th>Surface</th><th>Status</th><th>Evidence or reason</th></tr></thead>
-      <tbody>
-        {{COVERAGE_ROWS}}
-      </tbody>
-    </table>
+  <section class="panel" aria-labelledby="coverage-title">
+    <h2 id="coverage-title">Coverage Sweep / Cobertura completa</h2>
+    <p>Every relevant production surface stays visible. Unknowns are named instead of hidden.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Surface / Superficie</th><th>Status / Estado</th><th>Evidence / Evidencia</th><th>Findings</th></tr></thead>
+        <tbody>
+          {{COVERAGE_ROWS}}
+        </tbody>
+      </table>
+    </div>
   </section>
 
-  <section>
-    <h2>Complete remediation backlog</h2>
-    <p class="muted">Every finding stays here until it is fixed, verified, deferred with a reason, accepted as risk, or marked not applicable.</p>
-    <table>
-      <thead><tr><th>Order</th><th>Finding</th><th>Fix</th><th>Status</th><th>Verify</th></tr></thead>
-      <tbody>
-        {{BACKLOG_ROWS}}
-      </tbody>
-    </table>
+  <section class="panel" aria-labelledby="backlog-title">
+    <h2 id="backlog-title">Complete Backlog / Lista completa</h2>
+    <p>Every finding remains here until it is fixed, verified, deferred with a reason, accepted as risk, or proven not applicable.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Order</th><th>ID</th><th>Severity</th><th>Finding</th><th>Status</th><th>Next step</th></tr></thead>
+        <tbody>
+          {{BACKLOG_ROWS}}
+        </tbody>
+      </table>
+    </div>
   </section>
 
-  <section class="grid cols-2">
-    <div>
-      <h2>Current approval batch</h2>
-      <p class="muted">This is the safe starting batch, not the entire fix scope.</p>
+  <section class="two-col">
+    <div class="panel">
+      <h2>Remediation Waves / Olas de arreglo</h2>
+      {{REMEDIATION_WAVES}}
+    </div>
+    <div class="panel">
+      <h2>Current Approval Batch / Aprobación actual</h2>
+      <p>{{APPROVAL_BATCH_SUMMARY}}</p>
       {{APPROVAL_BATCH_CARDS}}
     </div>
-    <div>
-      <h2>Learning plan snapshot</h2>
+  </section>
+
+  <section class="panel" aria-labelledby="learning-title">
+    <h2 id="learning-title">Learning Priorities / Prioridades de aprendizaje</h2>
+    <p>Each item is tied to a real finding, has one next action, and includes a written source plus a relevant YouTube video.</p>
+    <div class="learning-list">
       {{LEARNING_PLAN_ITEMS}}
     </div>
   </section>
 
-  <section>
-    <h2>Next decision</h2>
-    <p>{{NEXT_USER_DECISION}}</p>
-  </section>
-
   <footer>
-    Generated by CheckYourself. Dashboard mode is optional; the Markdown report remains the source of truth.
+    Generated by CheckYourself from the Markdown report. The Markdown report remains the source of truth.
   </footer>
 </main>
 </body>

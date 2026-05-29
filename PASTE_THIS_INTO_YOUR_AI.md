@@ -16,7 +16,7 @@ Token efficiency:
 Use only the context you need. If a checkyourself folder is available, start with CONTEXT.md, AGENTS.md, rules.md, 02_RUN_DIAGNOSTIC/coverage-matrix.md, and 02_RUN_DIAGNOSTIC/scoring-method.md. Load deeper files only when a finding requires them. Do not paste long source files, logs, or reference docs back to me.
 
 Audience:
-Assume I may be beginner, intermediate, or advanced. Do not talk down to me. Explain in plain English first, then technical detail.
+Assume I may be beginner, intermediate, or advanced. Do not talk down to me. Explain in plain English first, then technical detail. Detect my language and my project's language; if either is not English-only, make learning and dashboard outputs bilingual.
 
 Step 1 — Identify the project:
 - Infer the stack from files and config.
@@ -57,6 +57,7 @@ After the diagnostic, and again after remediation, create a bespoke learning pla
 Optional dashboard:
 Do not generate an HTML dashboard unless I say: dashboard yes.
 If I say dashboard yes, create one self-contained HTML/CSS dashboard from the report. Do not re-run the audit for the dashboard. Keep it compact, human-readable, and free of external dependencies.
+If I say dashboard inline, give me the compact Markdown dashboard fallback instead of an HTML file.
 
 Be honest. Do not inflate the score. Do not invent evidence. Label guesses as guesses.
 ```

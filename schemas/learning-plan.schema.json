@@ -35,6 +35,21 @@
           "exercise": {
             "type": "string"
           },
+          "source_title": {
+            "type": "string"
+          },
+          "source_url": {
+            "type": "string"
+          },
+          "youtube_title": {
+            "type": "string"
+          },
+          "youtube_url": {
+            "type": "string"
+          },
+          "video_trust_note": {
+            "type": "string"
+          },
           "level": {
             "type": "string"
           }

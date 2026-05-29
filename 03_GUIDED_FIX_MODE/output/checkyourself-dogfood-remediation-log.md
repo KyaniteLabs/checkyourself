@@ -13,7 +13,7 @@ remote, push `main`, and verify Actions on GitHub.
 | ID | Severity | Status | Change |
 |---|---|---|---|
 | CY-P2-001 | P2 | Fixed | Added `CHECKYOURSELF_*.generated.md` to `.gitignore` so scanner output does not dirty the public repo. |
-| CY-P2-002 | P2 | Fixed | Aligned manifest dashboard metadata to the CSS-only default path and kept the JS data-template as advanced. |
+| CY-P2-002 | P2 | Fixed | Aligned manifest dashboard metadata to one canonical HTML/CSS dashboard plus the inline Markdown fallback. |
 | CY-P2-003 | P2 | Fixed | Expanded GitHub Actions with whitespace, Python compile, and gitleaks-if-available checks. |
 | CY-P3-001 | P3 | Fixed | Converted duplicate token-efficiency doc into a short pointer to the canonical context-control doc. |
 | CY-P3-002 | P3 | Fixed | Marked the private v1.3 Creator Kit release note as historical. |

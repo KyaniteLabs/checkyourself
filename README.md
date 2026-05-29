@@ -58,7 +58,7 @@ Default outputs:
 
 Optional output:
 
-- **Human Audit Dashboard** — a self-contained HTML/CSS dashboard that visualizes the score, risks, backlog, coverage, status, and learning plan. It is optional because dashboards use extra tokens. Ask for it with `dashboard yes`.
+- **Human Audit Dashboard** — one self-contained HTML/CSS dashboard that visualizes the score, risks, backlog, coverage, status, and learning plan. It is optional because dashboards use extra tokens. Ask for it with `dashboard yes`. If you do not want HTML, use the compact inline Markdown dashboard instead.
 
 ---
 
@@ -131,12 +131,21 @@ After the report exists, say:
 dashboard yes
 ```
 
-The AI should create a single self-contained HTML/CSS dashboard from the report. It should not re-run the audit just to make the dashboard.
+The AI should create one self-contained HTML/CSS dashboard from the report. It should not re-run the audit just to make the dashboard.
+
+If you do not want HTML, ask for:
+
+```text
+dashboard inline
+```
+
+The AI should return the compact Markdown dashboard shape instead of creating a file.
 
 Dashboard files:
 
 - [`10_DASHBOARD/README.md`](10_DASHBOARD/README.md)
 - [`10_DASHBOARD/dashboard-data-contract.md`](10_DASHBOARD/dashboard-data-contract.md)
+- [`10_DASHBOARD/inline-dashboard.md`](10_DASHBOARD/inline-dashboard.md)
 - [`10_DASHBOARD/dashboard-prompt.md`](10_DASHBOARD/dashboard-prompt.md)
 - [`10_DASHBOARD/dashboard-template.html`](10_DASHBOARD/dashboard-template.html)
 

@@ -14,6 +14,22 @@ Beginner / Intermediate / Advanced / Mixed / Unknown
 
 Evidence for this inference:
 
+## Language and accessibility mode
+
+| Signal | Detected value | Evidence | Output choice |
+|---|---|---|---|
+| User language |  |  |  |
+| Project language |  |  |  |
+| Secondary language |  |  |  |
+
+Accessibility choices:
+
+- short paragraphs;
+- concrete verbs;
+- one action per item;
+- glossary for jargon;
+- no shame language;
+- no dense curriculum dump.
 
 ## Top 5 concepts to learn next
 
@@ -24,7 +40,8 @@ Each priority should be plain enough for a non-developer to act on. Include:
 - why it matters in real life;
 - exactly what to do next inside this project;
 - a success signal;
-- one live source or video link that teaches that specific issue.
+- one trusted written source that teaches that specific issue;
+- one real relevant YouTube video from a trusted source when available.
 
 ### Priority 1
 
@@ -41,6 +58,11 @@ Each priority should be plain enough for a non-developer to act on. Include:
 **Success signal:**
 
 **Learn from:** [Title](https://example.com)
+
+**Watch:** [Trusted YouTube title](https://www.youtube.com/watch?v=example)
+
+**Video trust note:** Official vendor / official conference / documentation
+community / established educator / lower confidence.
 
 Repeat this format for the remaining top priorities.
 
