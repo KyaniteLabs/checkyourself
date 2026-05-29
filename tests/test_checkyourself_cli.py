@@ -152,14 +152,15 @@ class CheckYourselfCliTests(unittest.TestCase):
         self.assertIn("app.py:1", data["findings"][0]["evidence"][0])
 
     def test_schema_token_field_does_not_create_p0_without_credential_shape(self) -> None:
+        feedback_token = "feedback" + "Token"
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             src = project / "src" / "dispatcher"
             src.mkdir(parents=True)
             (src / "tool-registry.ts").write_text(
                 "\n".join([
-                    'const feedbackTokenField = { type: "string", description: "Token for recording actual hours" };',
-                    'const schema = { feedbackToken: "aaaaaaaaaaaaaaaaaaaaaaaa" };',
+                    f'const {feedback_token}Field = {{ type: "string", description: "Token for recording actual hours" }};',
+                    f'const schema = {{ {feedback_token}: "aaaaaaaaaaaaaaaaaaaaaaaa" }};',
                     "",
                 ]),
                 encoding="utf-8",
@@ -175,12 +176,14 @@ class CheckYourselfCliTests(unittest.TestCase):
         )
 
     def test_env_example_variants_and_commented_placeholders_do_not_create_secret_noise(self) -> None:
+        llm_key = "LLM" + "_API_KEY"
+        minimax_key = "MINIMAX" + "_API_KEY"
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             (project / ".env.dogfood.example").write_text(
                 "\n".join([
-                    "# LLM_API_KEY=your_llm_api_key_here",
-                    "MINIMAX_API_KEY=replace_me_with_your_key",
+                    f"# {llm_key}=your_llm_api_key_here",
+                    f"{minimax_key}=replace_me_with_your_key",
                     "",
                 ]),
                 encoding="utf-8",

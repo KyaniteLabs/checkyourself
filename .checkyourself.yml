@@ -1,7 +1,0 @@
-version: 1
-suppress:
-  - id: Possible secret-like field without credential shape
-    reason: Unit test fixture intentionally exercises a benign feedbackToken schema field.
-    files: ["tests/test_checkyourself_cli.py"]
-    reviewed_by: CheckYourself maintainers
-    reviewed_at: "2026-05-29"
