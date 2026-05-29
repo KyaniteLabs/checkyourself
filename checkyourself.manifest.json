@@ -1,7 +1,7 @@
 {
   "name": "checkyourself",
   "display_name": "CheckYourself",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "license": "MIT",
   "copyright": "Copyright (c) 2026 Simon Gonzalez De Cruz",
   "description": "AI production-readiness diagnostic, guided fix, and learning-plan system for apps built by learning-by-doing.",
@@ -33,6 +33,7 @@
     "bootstrap": "PASTE_THIS_INTO_YOUR_AI.md",
     "agent": "AGENTS.md",
     "cli": "tools/checkyourself.py",
+    "agent_cli_plan": "docs/agent-access-cli-plan.md",
     "diagnostic": "02_RUN_DIAGNOSTIC/README.md",
     "guided_fix": "03_GUIDED_FIX_MODE/README.md",
     "learning_plan": "04_LEARNING_PLAN/README.md",
