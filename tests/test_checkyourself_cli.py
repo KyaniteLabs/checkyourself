@@ -35,6 +35,8 @@ class CheckYourselfCliTests(unittest.TestCase):
         self.assertIn("repository count", guardrails)
         self.assertIn("fork", guardrails)
         self.assertIn("verification timestamp", guardrails)
+        self.assertIn("default-branch alert state", guardrails)
+        self.assertIn("100% status", guardrails)
 
     def test_scan_subcommand_matches_machine_contract(self) -> None:
         result = self.run_cli("scan", ".", "--format", "json", "--no-write")
@@ -65,6 +67,7 @@ class CheckYourselfCliTests(unittest.TestCase):
         self.assertIn("owner namespace", guardrails)
         self.assertIn("repository count", guardrails)
         self.assertIn("fork", guardrails)
+        self.assertIn("dependency or security closure", guardrails)
 
         schema = self.run_cli("schema", "scan")
         self.assertEqual(schema.returncode, 0, schema.stderr)

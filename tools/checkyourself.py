@@ -36,6 +36,8 @@ PUBLIC_REPO_SCOPE_GUARDRAILS = [
     "State whether forks, archived repositories, and externally owned repositories were excluded.",
     "Do not infer ownership from linked repositories, examples, forks, or upstream references.",
     "List the live evidence surfaces checked, including findings, open PRs, dependency alerts, and branch status.",
+    "For dependency or security closure, verify the default-branch alert state after merge; local scans and PR checks are not enough.",
+    "For a 100% status claim, require scanner findings, default-branch CI, dependency/security alerts, and git branch state to all agree.",
 ]
 
 ROOT = Path(__file__).resolve().parents[1]
