@@ -155,8 +155,11 @@ CheckYourself has a point of view:
 - **Small fixes beat heroic rewrites.** The safest batch goes first.
 - **Learning is part of the product.** If your app had the gap, your plan explains the gap.
 - **Accessible by default.** Short sections, literal labels, high contrast, no motion-dependent meaning, and runtime language support when the user wants it.
+- **The checker learns from receipts.** Real remediation postmortems become durable agent rules when they expose a gap.
 
 The vibe is: a launch coach, a security-minded friend, and a code reviewer who knows when to say, "Not yet. Here is why."
+
+Recent agent self-improvement notes live in [`docs/agent-self-improvement.md`](docs/agent-self-improvement.md).
 
 ## Safety Model
 
