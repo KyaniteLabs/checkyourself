@@ -1,0 +1,12 @@
+# CheckYourself
+
+> Local-first production-readiness audit for AI-built apps: read-only checks, 0–100 score, guided fixes.
+
+## What it is
+A folder-based ICM tool + Python CLI + stdio MCP server that audits an AI-built app before launch: read-only review, evidence-based 0–100 score, ranked fixes, learning plan.
+
+## Install / use
+Drop the folder into your project, or run `python3 tools/checkyourself.py mcp` as an MCP server.
+
+## Links
+- Repository: https://github.com/KyaniteLabs/checkyourself
