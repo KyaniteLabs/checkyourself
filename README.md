@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/checkyourself-hero.webp" alt="checkyourself — local-first production-readiness audit for AI-built apps" width="100%">
+</p>
+
 # CheckYourself
 
 > **Check yourself before you wreck yourself.** A pre-launch reality check for AI-built apps.
