@@ -213,7 +213,7 @@ MIT. See [`LICENSE`](LICENSE).
 
 ## Part of KyaniteLabs
 
-Open-source tools by [KyaniteLabs](https://kyanitelabs.tech). Related projects:
+More from [KyaniteLabs](https://kyanitelabs.tech). Related projects:
 
 - **[devarch-framework](https://github.com/KyaniteLabs/devarch-framework)** — git-repository archaeology framework
 - **[dev-learning-archaeologist](https://github.com/KyaniteLabs/dev-learning-archaeologist)** — forensic git-history learning diagnostic
