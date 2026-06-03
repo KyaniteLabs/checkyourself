@@ -119,6 +119,12 @@ CheckYourself is plain Markdown plus a small optional Python CLI, so it works wi
 
 Tool-specific setup guides live in [`06_ADAPTERS/`](06_ADAPTERS/README.md).
 
+## Claude And Codex Skill
+
+CheckYourself also ships as an installable agent skill at [`skills/checkyourself/SKILL.md`](skills/checkyourself/SKILL.md).
+
+Use this path when submitting CheckYourself to Claude/Codex skill aggregators, or when installing it as a reusable production-readiness audit workflow. The skill preserves the same safety model: read-only first, complete coverage sweep, evidence-backed score, safest first fix batch, and optional dashboard only on request.
+
 ## Local CLI And MCP
 
 The folder workflow is the main product. The CLI is the deterministic engine for agents, CI, and local receipts:

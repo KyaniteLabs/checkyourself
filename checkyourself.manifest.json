@@ -37,6 +37,7 @@
     "context": "CONTEXT.md",
     "human": "START_HERE.md",
     "bootstrap": "PASTE_THIS_INTO_YOUR_AI.md",
+    "skill": "skills/checkyourself/SKILL.md",
     "agent": "AGENTS.md",
     "support": "SUPPORT.md",
     "security": "SECURITY.md",
