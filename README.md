@@ -208,3 +208,15 @@ Issues and pull requests are welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md) a
 ## License
 
 MIT. See [`LICENSE`](LICENSE).
+
+---
+
+## Part of KyaniteLabs
+
+Open-source tools by [KyaniteLabs](https://kyanitelabs.tech). Related projects:
+
+- **[devarch-framework](https://github.com/KyaniteLabs/devarch-framework)** — git-repository archaeology framework
+- **[dev-learning-archaeologist](https://github.com/KyaniteLabs/dev-learning-archaeologist)** — forensic git-history learning diagnostic
+- **[Epoch](https://github.com/KyaniteLabs/Epoch)** — time-estimation MCP server (PERT) for AI agents
+
+→ More at **[kyanitelabs.tech](https://kyanitelabs.tech)**
