@@ -1,0 +1,4 @@
+interface:
+  display_name: "CheckYourself"
+  short_description: "Pre-launch production readiness audits"
+  default_prompt: "Use $checkyourself to run a read-only production-readiness diagnostic for this app."
