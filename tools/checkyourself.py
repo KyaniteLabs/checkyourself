@@ -1712,74 +1712,185 @@ def command_init(args: argparse.Namespace) -> int:
 
 
 def mcp_tools() -> List[dict]:
+    schema_names = sorted(schema_registry().keys())
+
+    def read_only_annotations(title: str) -> dict:
+        return {
+            "title": title,
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        }
+
+    def object_schema(properties: dict, required: Optional[List[str]] = None) -> dict:
+        schema = {
+            "type": "object",
+            "properties": properties,
+            "additionalProperties": False,
+        }
+        if required:
+            schema["required"] = required
+        return schema
+
     return [
         {
             "name": "describe",
             "title": "Describe CheckYourself",
-            "description": "Return the CheckYourself command, schema, scoring, and MCP capability manifest.",
-            "inputSchema": {"type": "object", "properties": {}},
+            "description": (
+                "Return CheckYourself's machine-readable capability manifest: CLI commands, MCP transport, schema names, "
+                "scoring weights, score caps, coverage surfaces, exit codes, and public-repository scope guardrails. "
+                "This is a read-only discovery tool and does not scan a project."
+            ),
+            "inputSchema": object_schema({}),
+            "annotations": read_only_annotations("Describe CheckYourself"),
+            "outputSchema": {"type": "object", "description": "Capability manifest using schema checkyourself-capabilities/1."},
         },
         {
             "name": "scan",
             "title": "Scan Project",
-            "description": "Run deterministic local discovery and obvious-risk checks against a project path.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "project": {"type": "string", "description": "Project root path. Defaults to current directory."},
-                    "deep": {"type": "boolean", "description": "Run slower validation checks for detected surfaces."},
+            "description": (
+                "Inspect a local project directory for deterministic production-readiness signals: stack, scripts, CI, tests, "
+                "environment files, obvious secret/config risks, generated findings, counts, and public-repo claim guardrails. "
+                "MCP mode returns JSON only; it does not write generated files or apply fixes."
+            ),
+            "inputSchema": object_schema({
+                "project": {
+                    "type": "string",
+                    "description": "Project root path to inspect. Defaults to the MCP server process current directory when omitted.",
                 },
-            },
+                "deep": {
+                    "type": "boolean",
+                    "description": "Run slower validation checks for detected surfaces, such as mutable GitHub Action references. Defaults to false.",
+                },
+            }),
+            "annotations": read_only_annotations("Scan Project"),
+            "outputSchema": {"type": "object", "description": "Scan result using schema checkyourself-scan/1."},
         },
         {
             "name": "coverage_emit",
             "title": "Emit Coverage Skeleton",
-            "description": "Return the 20-surface coverage skeleton for an agent to fill with evidence.",
-            "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}}},
+            "description": (
+                "Return the 20-surface CheckYourself coverage skeleton that an agent fills with manual evidence, missing-evidence notes, "
+                "and not-applicable reasons before coverage-backed scoring. In MCP mode this only returns the skeleton object; it does not create a file."
+            ),
+            "inputSchema": object_schema({
+                "project": {
+                    "type": "string",
+                    "description": "Optional project label or path to include in the returned coverage skeleton.",
+                },
+            }),
+            "annotations": read_only_annotations("Emit Coverage Skeleton"),
+            "outputSchema": {"type": "object", "description": "Coverage skeleton using schema checkyourself-coverage/1."},
         },
         {
             "name": "coverage_check",
             "title": "Check Coverage",
-            "description": "Check a coverage object for completeness and evidence requirements.",
-            "inputSchema": {"type": "object", "properties": {"coverage": {"type": "object"}}, "required": ["coverage"]},
+            "description": (
+                "Validate an inline CheckYourself coverage object for required surfaces, valid statuses, reviewed evidence, "
+                "missing-evidence notes, and not-applicable reasons. Returns errors and warnings; it does not calculate a score."
+            ),
+            "inputSchema": object_schema({
+                "coverage": {
+                    "type": "object",
+                    "description": "Coverage object produced by coverage_emit and filled with evidence statuses.",
+                },
+            }, ["coverage"]),
+            "annotations": read_only_annotations("Check Coverage"),
+            "outputSchema": {"type": "object", "description": "Coverage completeness result using schema checkyourself-coverage-check/1."},
         },
         {
             "name": "score",
             "title": "Score Findings",
-            "description": "Compute the deterministic Production Reality Score from findings and optional coverage.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {"findings": {"type": "object"}, "coverage": {"type": "object"}},
-                "required": ["findings"],
-            },
+            "description": (
+                "Compute a deterministic Production Reality Score from inline findings and optional coverage evidence. "
+                "Returns score, raw score, confidence, score mode, severity counts, caps applied, per-category penalties, "
+                "and manual evidence still needed. MCP mode does not write score history."
+            ),
+            "inputSchema": object_schema({
+                "findings": {
+                    "type": "object",
+                    "description": "Scan result, report object, or findings object/list containing findings to normalize and score.",
+                },
+                "coverage": {
+                    "type": "object",
+                    "description": "Optional filled coverage object. Provide this for coverage-backed scoring; omit for scan-derived or finding-only estimates.",
+                },
+            }, ["findings"]),
+            "annotations": read_only_annotations("Score Findings"),
+            "outputSchema": {"type": "object", "description": "Score result using schema checkyourself-score/1."},
         },
         {
             "name": "backlog",
             "title": "Rank Backlog",
-            "description": "Rank findings into a complete remediation backlog and first approval batch.",
-            "inputSchema": {"type": "object", "properties": {"findings": {"type": "object"}}, "required": ["findings"]},
+            "description": (
+                "Normalize inline findings and return the complete remediation backlog sorted by severity, category, and finding ID. "
+                "Each item includes fix summary, order rationale, verification, rollback idea, learning value, and status. "
+                "This recommends work only; it does not modify files or mark findings resolved."
+            ),
+            "inputSchema": object_schema({
+                "findings": {
+                    "type": "object",
+                    "description": "Scan result, report object, or findings object/list to convert into a remediation backlog.",
+                },
+            }, ["findings"]),
+            "annotations": read_only_annotations("Rank Backlog"),
+            "outputSchema": {"type": "object", "description": "Backlog result using schema checkyourself-backlog/1."},
         },
         {
             "name": "next",
             "title": "Next Approval Batch",
-            "description": "Return the next safest unresolved approval batch from findings.",
-            "inputSchema": {"type": "object", "properties": {"findings": {"type": "object"}}, "required": ["findings"]},
+            "description": (
+                "Return the next safest unresolved approval batch from inline findings by reusing the backlog ranking rules. "
+                "The batch contains at most the first three unresolved findings at the highest current severity. "
+                "This is a planning tool only and does not perform fixes."
+            ),
+            "inputSchema": object_schema({
+                "findings": {
+                    "type": "object",
+                    "description": "Scan result, report object, or findings object/list whose unresolved items should be batched.",
+                },
+            }, ["findings"]),
+            "annotations": read_only_annotations("Next Approval Batch"),
+            "outputSchema": {"type": "object", "description": "Next-batch result using schema checkyourself-next-batch/1."},
         },
         {
             "name": "validate",
             "title": "Validate Artifact",
-            "description": "Validate a JSON artifact against a bundled CheckYourself schema subset.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {"kind": {"type": "string"}, "artifact": {"type": "object"}},
-                "required": ["kind", "artifact"],
-            },
+            "description": (
+                "Validate an inline JSON artifact against one bundled CheckYourself schema subset and return validation errors. "
+                "Supported kinds include scan, coverage, score, backlog, next, report, dashboard, dashboard-data, dashboard-html, learning-plan, and capabilities."
+            ),
+            "inputSchema": object_schema({
+                "kind": {
+                    "type": "string",
+                    "enum": schema_names,
+                    "description": "Bundled schema kind to validate against.",
+                },
+                "artifact": {
+                    "type": "object",
+                    "description": "Inline JSON object to validate. MCP mode does not read a file path for this tool.",
+                },
+            }, ["kind", "artifact"]),
+            "annotations": read_only_annotations("Validate Artifact"),
+            "outputSchema": {"type": "object", "description": "Validation result using schema checkyourself-validation/1."},
         },
         {
             "name": "schema",
             "title": "Get Schema",
-            "description": "Return a bundled JSON schema by name.",
-            "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]},
+            "description": (
+                "Return a bundled CheckYourself JSON schema by name so an agent can inspect expected fields before producing or validating artifacts. "
+                "This reads the repository's schema file and returns it; it does not validate an artifact."
+            ),
+            "inputSchema": object_schema({
+                "name": {
+                    "type": "string",
+                    "enum": schema_names,
+                    "description": "Schema name to return.",
+                },
+            }, ["name"]),
+            "annotations": read_only_annotations("Get Schema"),
+            "outputSchema": {"type": "object", "description": "The requested bundled JSON schema."},
         },
     ]
 
