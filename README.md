@@ -6,7 +6,7 @@
 
 > **Check yourself before you wreck yourself.** A pre-launch reality check for AI-built apps.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 [![Model-agnostic](https://img.shields.io/badge/AI-model--agnostic-blue.svg)](#works-with-your-ai-tool)
 [![Read-only first](https://img.shields.io/badge/safety-read--only%20first-brightgreen.svg)](#safety-model)
 [![Local CLI](https://img.shields.io/badge/CLI-local%20agent%20engine-black.svg)](#local-cli-and-mcp)
@@ -197,7 +197,7 @@ No. The CLI is optional. File-aware AI tools can start at [`CONTEXT.md`](CONTEXT
 
 ### Is it free?
 
-Yes. CheckYourself is MIT licensed.
+Yes. CheckYourself is Apache 2.0 licensed.
 
 ### Is it affiliated with any specific AI model or IDE?
 
@@ -213,7 +213,7 @@ Issues and pull requests are welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md) a
 
 ## License
 
-MIT. See [`LICENSE`](LICENSE).
+Apache 2.0. See [`LICENSE`](LICENSE).
 
 ---
 
