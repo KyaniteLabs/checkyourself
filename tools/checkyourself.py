@@ -1733,11 +1733,27 @@ def mcp_tools() -> List[dict]:
             schema["required"] = required
         return schema
 
+    def description(*parts: str) -> str:
+        safety = (
+            "Requires no authentication. It reads local inputs only, does not make network calls, "
+            "does not modify local files, and has no external rate limits."
+        )
+        return " ".join([*parts, safety])
+
+    def findings_schema(action: str) -> dict:
+        return {
+            "type": ["object", "array"],
+            "description": (
+                "Scan result object, CheckYourself report object, object with findings/remediation_backlog, "
+                f"or a plain list of finding objects to {action}."
+            ),
+        }
+
     return [
         {
             "name": "describe",
             "title": "Describe CheckYourself",
-            "description": (
+            "description": description(
                 "Return CheckYourself's machine-readable capability manifest: CLI commands, MCP transport, schema names, "
                 "scoring weights, score caps, coverage surfaces, exit codes, and public-repository scope guardrails. "
                 "This is a read-only discovery tool and does not scan a project."
@@ -1749,7 +1765,7 @@ def mcp_tools() -> List[dict]:
         {
             "name": "scan",
             "title": "Scan Project",
-            "description": (
+            "description": description(
                 "Inspect a local project directory for deterministic production-readiness signals: stack, scripts, CI, tests, "
                 "environment files, obvious secret/config risks, generated findings, counts, and public-repo claim guardrails. "
                 "MCP mode returns JSON only; it does not write generated files or apply fixes."
@@ -1770,7 +1786,7 @@ def mcp_tools() -> List[dict]:
         {
             "name": "coverage_emit",
             "title": "Emit Coverage Skeleton",
-            "description": (
+            "description": description(
                 "Return the 20-surface CheckYourself coverage skeleton that an agent fills with manual evidence, missing-evidence notes, "
                 "and not-applicable reasons before coverage-backed scoring. In MCP mode this only returns the skeleton object; it does not create a file."
             ),
@@ -1786,7 +1802,7 @@ def mcp_tools() -> List[dict]:
         {
             "name": "coverage_check",
             "title": "Check Coverage",
-            "description": (
+            "description": description(
                 "Validate an inline CheckYourself coverage object for required surfaces, valid statuses, reviewed evidence, "
                 "missing-evidence notes, and not-applicable reasons. Returns errors and warnings; it does not calculate a score."
             ),
@@ -1802,16 +1818,13 @@ def mcp_tools() -> List[dict]:
         {
             "name": "score",
             "title": "Score Findings",
-            "description": (
+            "description": description(
                 "Compute a deterministic Production Reality Score from inline findings and optional coverage evidence. "
                 "Returns score, raw score, confidence, score mode, severity counts, caps applied, per-category penalties, "
                 "and manual evidence still needed. MCP mode does not write score history."
             ),
             "inputSchema": object_schema({
-                "findings": {
-                    "type": "object",
-                    "description": "Scan result, report object, or findings object/list containing findings to normalize and score.",
-                },
+                "findings": findings_schema("normalize and score"),
                 "coverage": {
                     "type": "object",
                     "description": "Optional filled coverage object. Provide this for coverage-backed scoring; omit for scan-derived or finding-only estimates.",
@@ -1823,16 +1836,13 @@ def mcp_tools() -> List[dict]:
         {
             "name": "backlog",
             "title": "Rank Backlog",
-            "description": (
+            "description": description(
                 "Normalize inline findings and return the complete remediation backlog sorted by severity, category, and finding ID. "
                 "Each item includes fix summary, order rationale, verification, rollback idea, learning value, and status. "
                 "This recommends work only; it does not modify files or mark findings resolved."
             ),
             "inputSchema": object_schema({
-                "findings": {
-                    "type": "object",
-                    "description": "Scan result, report object, or findings object/list to convert into a remediation backlog.",
-                },
+                "findings": findings_schema("convert into a remediation backlog"),
             }, ["findings"]),
             "annotations": read_only_annotations("Rank Backlog"),
             "outputSchema": {"type": "object", "description": "Backlog result using schema checkyourself-backlog/1."},
@@ -1840,16 +1850,13 @@ def mcp_tools() -> List[dict]:
         {
             "name": "next",
             "title": "Next Approval Batch",
-            "description": (
+            "description": description(
                 "Return the next safest unresolved approval batch from inline findings by reusing the backlog ranking rules. "
                 "The batch contains at most the first three unresolved findings at the highest current severity. "
                 "This is a planning tool only and does not perform fixes."
             ),
             "inputSchema": object_schema({
-                "findings": {
-                    "type": "object",
-                    "description": "Scan result, report object, or findings object/list whose unresolved items should be batched.",
-                },
+                "findings": findings_schema("batch into the next approval group"),
             }, ["findings"]),
             "annotations": read_only_annotations("Next Approval Batch"),
             "outputSchema": {"type": "object", "description": "Next-batch result using schema checkyourself-next-batch/1."},
@@ -1857,7 +1864,7 @@ def mcp_tools() -> List[dict]:
         {
             "name": "validate",
             "title": "Validate Artifact",
-            "description": (
+            "description": description(
                 "Validate an inline JSON artifact against one bundled CheckYourself schema subset and return validation errors. "
                 "Supported kinds include scan, coverage, score, backlog, next, report, dashboard, dashboard-data, dashboard-html, learning-plan, and capabilities."
             ),
@@ -1878,7 +1885,7 @@ def mcp_tools() -> List[dict]:
         {
             "name": "schema",
             "title": "Get Schema",
-            "description": (
+            "description": description(
                 "Return a bundled CheckYourself JSON schema by name so an agent can inspect expected fields before producing or validating artifacts. "
                 "This reads the repository's schema file and returns it; it does not validate an artifact."
             ),

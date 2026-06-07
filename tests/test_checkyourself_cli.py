@@ -306,8 +306,24 @@ class CheckYourselfCliTests(unittest.TestCase):
         instructions = responses[0]["result"]["instructions"].lower()
         self.assertIn("owner namespaces", instructions)
         self.assertIn("fork exclusions", instructions)
-        tool_names = {tool["name"] for tool in responses[1]["result"]["tools"]}
+        tools = responses[1]["result"]["tools"]
+        tool_names = {tool["name"] for tool in tools}
         self.assertIn("score", tool_names)
+        for tool in tools:
+            description = tool["description"].lower()
+            self.assertIn("requires no authentication", description, tool["name"])
+            self.assertIn("does not make network calls", description, tool["name"])
+            self.assertIn("does not modify local files", description, tool["name"])
+            self.assertIn("no external rate limits", description, tool["name"])
+            self.assertTrue(tool["annotations"]["readOnlyHint"], tool["name"])
+            self.assertFalse(tool["annotations"]["destructiveHint"], tool["name"])
+
+        by_name = {tool["name"]: tool for tool in tools}
+        for tool_name in ("score", "backlog", "next"):
+            findings_schema = by_name[tool_name]["inputSchema"]["properties"]["findings"]
+            self.assertEqual(findings_schema["type"], ["object", "array"], tool_name)
+            self.assertIn("list", findings_schema["description"].lower(), tool_name)
+
         structured = responses[2]["result"]["structuredContent"]
         self.assertEqual(structured["schema"], "checkyourself-capabilities/1")
 
