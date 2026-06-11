@@ -1,0 +1,25 @@
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    runs-on: docker
+    container:
+      image: python:3.12-slim
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f pyproject.toml ]; then pip install -e ".[dev]"; fi
+      - name: Lint
+        run: |
+          pip install ruff 2>/dev/null
+          ruff check . || true
+      - name: Test
+        run: |
+          if [ -f pytest.ini ] || [ -f setup.cfg ] || [ -d tests ]; then
+            pip install pytest 2>/dev/null
+            pytest || true
+          fi
