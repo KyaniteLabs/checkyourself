@@ -8,18 +8,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Python
-        run: apt-get update && apt-get install -y python3 python3-pip
+        run: apt-get update -qq && apt-get install -y -qq python3 python3-pip
       - name: Install dependencies
         run: |
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          if [ -f pyproject.toml ]; then pip install -e ".[dev]"; fi
+          if [ -f requirements.txt ]; then pip install --break-system-packages -r requirements.txt; fi
+          if [ -f pyproject.toml ]; then pip install --break-system-packages -e ".[dev]"; fi
       - name: Lint
         run: |
-          pip install ruff 2>/dev/null
+          pip install --break-system-packages ruff 2>/dev/null
           ruff check . || true
       - name: Test
         run: |
           if [ -f pytest.ini ] || [ -f setup.cfg ] || [ -d tests ]; then
-            pip install pytest 2>/dev/null
+            pip install --break-system-packages pytest 2>/dev/null
             pytest || true
           fi
