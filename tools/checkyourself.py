@@ -2287,7 +2287,7 @@ def mcp_tools() -> List[dict]:
             "title": "Validate Artifact",
             "description": description(
                 "Validate an inline JSON artifact against one bundled CheckYourself schema subset and return validation errors. "
-                "Supported kinds include scan, coverage, score, backlog, next, report, dashboard, dashboard-data, dashboard-html, learning-plan, and capabilities."
+                "Supported kinds include scan, coverage, score, backlog, next, diff, report, dashboard, dashboard-data, learning-plan, and capabilities."
             ),
             "inputSchema": object_schema({
                 "kind": {
