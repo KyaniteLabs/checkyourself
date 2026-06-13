@@ -18,14 +18,24 @@ Use CheckYourself to turn an AI assistant into a calm, evidence-first production
 
 2. Run deterministic checks when safe and available.
    - Prefer read-only commands.
-   - If `tools/checkyourself.py` exists, useful commands include:
+   - Each scan finding carries a stable, semantic rule ID (for example
+     `CY-SECRET-001`, `CY-CONFIG-001`) that stays the same across runs, so you
+     can suppress, diff, and cite findings reliably.
+   - If `tools/checkyourself.py` exists, the deterministic pipeline is:
 
 ```bash
 python3 tools/checkyourself.py describe --format json
-python3 tools/checkyourself.py scan /path/to/project --format json --no-write
-python3 tools/checkyourself.py diagnostic /path/to/project --format json --no-write
 python3 tools/checkyourself.py scan /path/to/project --deep --format json --no-write
+python3 tools/checkyourself.py coverage --emit            # fill with evidence, then:
+python3 tools/checkyourself.py score --findings scan.json --coverage coverage.json --format json
+python3 tools/checkyourself.py backlog --findings scan.json --format json
+python3 tools/checkyourself.py next --findings scan.json --format json
+python3 tools/checkyourself.py diff --old baseline.json --new current.json --ci   # regression gate
 ```
+
+   - Treat scanner findings as confirmed evidence. Do not invent a separate
+     scoring or backlog path. If Python is unavailable, sweep manually and say
+     the score is hand-computed.
 
 3. Sweep the production surface.
    Cover product purpose, frontend UX, accessibility, backend/API behavior, auth, data storage, migrations, secrets, runtime config, tests, CI/CD, dependencies, deploy/rollback, observability, performance, privacy, compliance, and AI/RAG/agent governance when relevant.
@@ -36,7 +46,10 @@ python3 tools/checkyourself.py scan /path/to/project --deep --format json --no-w
    - what the app appears to do;
    - detected stack and confidence;
    - unknowns and assumptions;
-   - Production Reality Score from 0 to 100 with severity caps explained;
+   - Production Reality Score from 0 to 100 with severity caps explained
+     (P0 caps at 49, P1 at 74, missing critical evidence at 84, missing
+     launch-gate evidence at 90; the evidence caps apply even to estimates,
+     and absence of findings is treated as Unknown, never an automatic Pass);
    - coverage sweep marked Pass, Finding, Unknown, or Not applicable;
    - P0/P1/P2/P3 findings;
    - evidence table;

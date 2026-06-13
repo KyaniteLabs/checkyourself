@@ -10,7 +10,7 @@ This file records the editorial and architectural decisions behind the final mod
 4. **Added deterministic gates.** Skills alone cannot enforce production quality. The final pack explicitly routes mandatory controls into tests, scans, policy-as-code, deployment checks, approval gates, telemetry, and runbooks.
 5. **Added missing cross-cutting domains.** Testing/evals, configuration/secrets, privacy/compliance, agent/RAG governance, supply-chain provenance, and spec-driven delivery are first-class capabilities.
 6. **Separated multi-tenancy/RLS from generic database design.** Tenant isolation is high-risk enough to require its own specialized workflow and negative test plan.
-7. **Added publishable packaging.** The final version includes a manifest, router instructions, references, templates, validation script, license, notice, and publication checklist.
+7. **Added publishable packaging.** The final version includes a manifest, router instructions, references, and templates; the repo root carries the license, notice, and the `tools/validate_public.py` validation script that gates publication.
 
 ## Blind spots to watch
 
