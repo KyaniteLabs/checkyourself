@@ -9,6 +9,7 @@
     "project",
     "deep",
     "files_scanned",
+    "scan_limits",
     "stack_signals",
     "dependencies",
     "scripts",
@@ -29,6 +30,17 @@
     "project": { "type": "string" },
     "deep": { "type": "boolean" },
     "files_scanned": { "type": "integer", "minimum": 0 },
+    "scan_limits": {
+      "type": "object",
+      "required": ["max_files", "truncated", "files_beyond_limit", "symlinks_skipped", "files_unreadable"],
+      "properties": {
+        "max_files": { "type": "integer", "minimum": 0 },
+        "truncated": { "type": "boolean" },
+        "files_beyond_limit": { "type": "integer", "minimum": 0 },
+        "symlinks_skipped": { "type": "integer", "minimum": 0 },
+        "files_unreadable": { "type": "integer", "minimum": 0 }
+      }
+    },
     "stack_signals": { "type": "array", "items": { "type": "string" } },
     "dependencies": { "type": "object" },
     "scripts": { "type": "object" },
