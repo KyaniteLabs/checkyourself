@@ -7,28 +7,45 @@
 > **Check yourself before you wreck yourself.** A pre-launch reality check for AI-built apps.
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
+[![Version 1.7.0](https://img.shields.io/badge/version-1.7.0-blue.svg)](CHANGELOG.md)
 [![Model-agnostic](https://img.shields.io/badge/AI-model--agnostic-blue.svg)](#works-with-your-ai-tool)
 [![Read-only first](https://img.shields.io/badge/safety-read--only%20first-brightgreen.svg)](#safety-model)
-[![Local CLI](https://img.shields.io/badge/CLI-local%20agent%20engine-black.svg)](#local-cli-and-mcp)
+[![Zero dependencies](https://img.shields.io/badge/python-stdlib%20only-black.svg)](#local-cli-and-mcp)
+[![MCP ready](https://img.shields.io/badge/MCP-ready-black.svg)](docs/mcp.md)
 
-CheckYourself is a free, open-source audit system that turns your AI assistant into a pre-launch production reviewer.
+CheckYourself turns your AI assistant into a pre-launch production reviewer. Point it at your project, ask for a read-only diagnostic, and get a scored, evidence-backed report of what will break when real users, data, and deploys show up — before they do.
 
 It maps your app, checks the places AI-built projects usually get humbled, gives you a 0-100 Production Reality Score, ranks every finding, suggests the safest first fixes, and builds a learning plan from the exact gaps in your project.
 
 It is not a linter with a clipboard. It is not a shame machine. It is a calm, evidence-first second opinion with just enough side-eye to keep your launch honest.
 
-No SaaS. No account. No model lock-in. No code changes unless you approve them.
+**No SaaS. No account. No model lock-in. No telemetry. No code changes unless you approve them.**
+
+## Why CheckYourself, not just "review my app"
+
+Asking your AI to "review my app" gives you a different answer every time and stops after the first three obvious things. CheckYourself makes the audit *repeatable and hard to fake*:
+
+- **Complete, not shallow.** A 20-surface coverage sweep that refuses to stop at the first few findings — every surface ends as Pass, Finding, Unknown, or Not-applicable, with evidence.
+- **A score you can't game.** Severity caps keep real risk from hiding behind polish, missing evidence counts as Unknown (never an automatic pass), and an estimate can never report a launch-ready number. [How the score works.](docs/checkyourself-score-explained.md)
+- **Stable, citable findings.** Every deterministic finding has a fixed rule ID (`CY-SECRET-001`, `CY-CONFIG-001`, …) so you can suppress it, track it, and gate CI on it across runs.
+- **Regression-aware.** `diff` compares two runs and fails CI when new P0/P1 risk appears — so you gate on *what changed*, not just an absolute count.
+- **Local-first and inspectable.** Plain Markdown plus a zero-dependency Python CLI. Nothing leaves your machine; secret values are redacted before they ever reach output.
 
 ## Quick Start
 
-1. Put the `checkyourself` folder inside or next to your project.
-2. Point your AI coding assistant at [`CONTEXT.md`](CONTEXT.md).
-3. Ask for a read-only diagnostic.
-4. Review the score, findings, backlog, and safest first fix batch.
-5. Approve fixes one batch at a time.
-6. Recheck, rescore, and learn what to avoid next time.
+Get the folder (clone it as a sibling of your project, or copy it in):
 
-Use this prompt:
+```bash
+git clone https://github.com/KyaniteLabs/checkyourself.git
+```
+
+Kick the tires read-only in one command — no dependencies, nothing leaves your machine:
+
+```bash
+python3 checkyourself/tools/checkyourself.py scan /path/to/your/project
+```
+
+For the full diagnostic, point your AI coding assistant at [`CONTEXT.md`](CONTEXT.md) and use this prompt:
 
 ```text
 Use the checkyourself folder as your operating context.
@@ -37,6 +54,40 @@ Do not change code until I approve a specific fix.
 Generate the dashboard only if I say dashboard yes.
 After the diagnostic, create a learning plan based on the gaps you found.
 ```
+
+Then: review the score, findings, backlog, and safest first fix batch → approve fixes one batch at a time → recheck, rescore, and learn what to avoid next time.
+
+## What a check looks like
+
+You get a plain-English report, not a wall of lint. Here is the shape of it:
+
+```text
+Production Reality Score: 49 / 100   (one unresolved P0 caps the score at 49)
+
+P0 — fix before launch
+  CY-SECRET-001  High-confidence credential shape in source
+                 A live-looking key sits in the repo. Rotate it, move it to env,
+                 and confirm it is not in git history.
+  [auth]         No proof of server-side ownership checks
+                 A logged-in user may read another user's record by changing an ID.
+                 Add a tenant/owner check and a negative test.
+
+P1 — fix soon
+  CY-TEST-001    No automated tests detected
+  CY-ENV-003     No .env.example for required configuration
+
+P2 — fix when you can
+  CY-CI-001      No CI pipeline detected
+
+Safest first fix batch: CY-SECRET-001  (reversible, high-impact, with verification)
+```
+
+Deterministic detector findings carry stable `CY-` IDs you can suppress and gate
+on; findings that need your AI's judgment (like the `[auth]` one above) are
+tagged by surface instead. Then it ranks the full backlog, proposes a small
+approval-ready first batch with verification and rollback notes, and — once you
+approve — fixes, re-verifies, and rescores. See a full example in
+[`samples/sample-production-reality-report.md`](samples/sample-production-reality-report.md).
 
 ## How It Works
 
@@ -66,7 +117,7 @@ See a sample report in [`samples/sample-production-reality-report.md`](samples/s
 
 ## Dashboard Preview
 
-This is the real CheckYourself dogfood dashboard from CheckYourself auditing itself:
+CheckYourself audits itself. This is the real dogfood dashboard from that self-audit — a coverage-backed **100 / 100**, earned under the same caps and evidence rules it holds your app to (and re-earned under v1.7.0's stricter, harder-to-game scoring):
 
 ![CheckYourself dogfood dashboard showing the self-audit score, launch status, risk counts, and coverage sweep](10_DASHBOARD/output/checkyourself-dogfood-dashboard-live-20260529.png)
 
@@ -103,6 +154,8 @@ CheckYourself looks for launch trouble across the surfaces that matter:
 - performance, scaling, caching, and rate limits;
 - privacy, compliance, retention, and consent;
 - AI/RAG/agent governance when applicable.
+
+The optional CLI also runs **deterministic detectors** with stable rule IDs so the cheap, high-signal footguns get caught the same way every time: committed secrets and `.env` files, debug flags left on, default or weak credentials, wildcard CORS, dangerous code sinks, shipped source maps, missing lockfiles, unpinned CI actions, and untested payment or LLM integrations. Reviewed false positives can be suppressed in `.checkyourself.yml` without silencing the rest.
 
 The advanced hardening library is in [`90_ADVANCED/`](90_ADVANCED/). You do not need to read it first; agents load it only when a finding needs deeper guidance.
 
@@ -207,6 +260,14 @@ No. It is model-agnostic and tool-agnostic.
 ### How is it different from a linter?
 
 Linters catch style and narrow code issues. CheckYourself asks whether the app is actually ready to face users, data, auth, deploys, failures, privacy, and production pressure.
+
+### How is it different from just asking my AI to review my app?
+
+See [Why CheckYourself](#why-checkyourself-not-just-review-my-app) above. Short version: a staged workflow turns a one-off opinion into a repeatable, gateable receipt.
+
+### Does it work in CI?
+
+Yes. The composite action at `.github/actions/checkyourself` runs the scan, validates the JSON contract, and can fail pull requests on unresolved P0 findings. Use `diff --ci` to fail only on *new* P0/P1 risk against a baseline.
 
 ## Contributing
 
