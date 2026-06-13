@@ -119,7 +119,7 @@ See a sample report in [`samples/sample-production-reality-report.md`](samples/s
 
 CheckYourself audits itself. This is the real dogfood dashboard from that self-audit — a coverage-backed **100 / 100**, earned under the same caps and evidence rules it holds your app to (and re-earned under v1.7.0's stricter, harder-to-game scoring):
 
-![CheckYourself dogfood dashboard showing the self-audit score, launch status, risk counts, and coverage sweep](10_DASHBOARD/output/checkyourself-dogfood-dashboard-live-20260529.png)
+![CheckYourself dogfood dashboard showing the self-audit score, launch status, risk counts, and coverage sweep](10_DASHBOARD/output/checkyourself-dogfood-dashboard-live-20260612.png)
 
 The dashboard is optional. The Markdown report stays the source of truth because it is cheaper, easier to diff, and easier for agents to update.
 
