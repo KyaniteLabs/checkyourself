@@ -105,8 +105,8 @@ Return a concise report with these sections unless the user requested a concrete
 **Expected handling:** Return an autonomy matrix, trust/risk gate, allowed actions, audit trail, and human escalation path.
 
 ## References to load on demand
-- `references/ai-agent-rag-governance.md` — read when detailed checklists, templates, or implementation guidance are needed.
-- `templates/ai-eval-plan.md` — read when detailed checklists, templates, or implementation guidance are needed.
+- `../../references/ai-agent-rag-governance.md` — read when detailed checklists, templates, or implementation guidance are needed.
+- `../../templates/ai-eval-plan.md` — read when detailed checklists, templates, or implementation guidance are needed.
 
 ## Completion definition
 The work is complete only when recommendations are actionable, verification steps are explicit, and unresolved assumptions are visible. Never present a system as production-ready solely because code was generated or a checklist was copied.

@@ -13,12 +13,12 @@
   },
   "do_not_ship": [
     {
-      "id": "CY-001",
+      "id": "F-001",
       "title": "Server-side authorization is not proven",
       "risk": "Users may be able to access data or actions they should not have."
     },
     {
-      "id": "CY-002",
+      "id": "F-002",
       "title": "Secrets handling is unclear",
       "risk": "Private keys or tokens may leak into logs, client bundles, or source control."
     }
@@ -29,7 +29,7 @@
       "status": "Finding",
       "evidence": "Routes found; server-side checks not yet proven",
       "finding_ids": [
-        "CY-001"
+        "F-001"
       ]
     },
     {
@@ -37,14 +37,14 @@
       "status": "Finding",
       "evidence": ".env references detected; no documented secret policy",
       "finding_ids": [
-        "CY-002"
+        "F-002"
       ]
     }
   ],
   "backlog": [
     {
       "order": 1,
-      "id": "CY-001",
+      "id": "F-001",
       "severity": "P0",
       "fix": "Add server-side authorization checks to protected routes",
       "status": "proposed",
@@ -52,7 +52,7 @@
     },
     {
       "order": 2,
-      "id": "CY-002",
+      "id": "F-002",
       "severity": "P0",
       "fix": "Document secret boundaries and verify no secret values are exposed",
       "status": "proposed",
@@ -67,7 +67,7 @@
       "plain_secondary_language": "Confirmed second-language explanation goes here after the user chooses that language.",
       "why": "Your app needs proof that logged-in users can only do allowed actions.",
       "practice": "Write one negative test where User A tries to access User B's data.",
-      "triggered_by": ["CY-001"],
+      "triggered_by": ["F-001"],
       "do_this_next": "Find one protected action and describe who is allowed to perform it.",
       "do_this_next_secondary_language": "Confirmed second-language next action goes here after user confirmation.",
       "success_signal": "The app blocks a user from seeing or changing someone else's data.",

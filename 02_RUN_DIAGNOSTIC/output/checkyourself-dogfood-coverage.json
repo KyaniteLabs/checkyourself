@@ -9,7 +9,9 @@
       "surface": "Product purpose, users, and harm model",
       "category": "context",
       "status": "Pass",
-      "evidence_reviewed": ["README.md, START_HERE.md, and PASTE_THIS_INTO_YOUR_AI.md define audience, outputs, and approval workflow."],
+      "evidence_reviewed": [
+        "README.md, START_HERE.md, and PASTE_THIS_INTO_YOUR_AI.md define audience, outputs, and approval workflow."
+      ],
       "missing_evidence": [],
       "not_applicable_reason": ""
     },
@@ -18,7 +20,9 @@
       "surface": "Stack, architecture, and dependency map",
       "category": "context",
       "status": "Pass",
-      "evidence_reviewed": ["tools/checkyourself.py describe/scan, checkyourself.manifest.json, and docs/cli.md define the file-first architecture."],
+      "evidence_reviewed": [
+        "tools/checkyourself.py describe/scan, checkyourself.manifest.json, and docs/cli.md define the file-first architecture."
+      ],
       "missing_evidence": [],
       "not_applicable_reason": ""
     },
@@ -27,7 +31,9 @@
       "surface": "Frontend UX, accessibility, and client safety",
       "category": "C9",
       "status": "Pass",
-      "evidence_reviewed": ["10_DASHBOARD/dashboard-template.html, dashboard-smoke-check.md, and the rendered dogfood dashboard/screenshot exist."],
+      "evidence_reviewed": [
+        "10_DASHBOARD/dashboard-template.html, dashboard-smoke-check.md, and the rendered dogfood dashboard/screenshot exist."
+      ],
       "missing_evidence": [],
       "not_applicable_reason": ""
     },
@@ -72,7 +78,10 @@
       "surface": "Secrets, environment, runtime configuration",
       "category": "C3",
       "status": "Pass",
-      "evidence_reviewed": ["gitleaks dir and gitleaks git passed; package scripts are redacted before JSON/Markdown output; private Creator Kit is gitignored."],
+      "evidence_reviewed": [
+        "gitleaks dir and gitleaks git passed; redaction enforced in tools/checkyourself.py:redact_sensitive_text and asserted by tests/test_checkyourself_cli.py:test_secret_values_are_redacted_from_json_output.",
+        "Reviewed scanner false positives suppressed with path-scoped reasons in .checkyourself.yml; private Creator Kit excluded via .gitignore."
+      ],
       "missing_evidence": [],
       "not_applicable_reason": ""
     },
@@ -81,7 +90,9 @@
       "surface": "Security and threat model",
       "category": "C4",
       "status": "Pass",
-      "evidence_reviewed": ["SECURITY.md defines vulnerability handling; scan tests prove secret values and package script credentials are redacted."],
+      "evidence_reviewed": [
+        "SECURITY.md defines vulnerability handling; scan tests prove secret values and package script credentials are redacted."
+      ],
       "missing_evidence": [],
       "not_applicable_reason": ""
     },
@@ -90,7 +101,9 @@
       "surface": "Privacy, consent, compliance, and data governance",
       "category": "C1",
       "status": "Pass",
-      "evidence_reviewed": ["README.md, SECURITY.md, SUPPORT.md, and AGENTS.md warn against sharing secrets/private data; product is local-first and has no telemetry."],
+      "evidence_reviewed": [
+        "README.md, SECURITY.md, SUPPORT.md, and AGENTS.md warn against sharing secrets/private data; product is local-first and has no telemetry."
+      ],
       "missing_evidence": [],
       "not_applicable_reason": ""
     },
@@ -99,7 +112,10 @@
       "surface": "Tests, quality gates, and regression coverage",
       "category": "C5",
       "status": "Pass",
-      "evidence_reviewed": ["10 CLI/MCP unit tests pass; public validation, schema validation, py_compile, gitleaks, and MCP smoke pass locally and in CI."],
+      "evidence_reviewed": [
+        "60 unit tests pass (tests/test_checkyourself_cli.py, tests/test_validate_public.py) covering scan, scoring caps, suppressions, MCP error paths, diff, and symlink/truncation guards.",
+        "CI runs ruff, pytest, validate_public.py, schema validation, and gitleaks via .github/workflows/validate.yml."
+      ],
       "missing_evidence": [],
       "not_applicable_reason": ""
     },
@@ -108,7 +124,9 @@
       "surface": "CI/CD and supply chain",
       "category": "C6",
       "status": "Pass",
-      "evidence_reviewed": ["GitHub Actions run 26630676966 passed after v1.6.0; workflow validates public shape, CLI contracts, MCP wrapper, tests, and gitleaks."],
+      "evidence_reviewed": [
+        "GitHub Actions run 26630676966 passed after v1.6.0; workflow validates public shape, CLI contracts, MCP wrapper, tests, and gitleaks."
+      ],
       "missing_evidence": [],
       "not_applicable_reason": ""
     },
@@ -117,7 +135,9 @@
       "surface": "Hosting, deployment, release, and rollback",
       "category": "C6",
       "status": "Pass",
-      "evidence_reviewed": ["Public repository is live at https://github.com/KyaniteLabs/checkyourself; git history is rollback for static repo changes."],
+      "evidence_reviewed": [
+        "Public repository is live at https://github.com/KyaniteLabs/checkyourself; git history is rollback for static repo changes."
+      ],
       "missing_evidence": [],
       "not_applicable_reason": ""
     },
@@ -135,7 +155,9 @@
       "surface": "Performance, caching, and rate limits",
       "category": "C8",
       "status": "Pass",
-      "evidence_reviewed": ["AGENTS.md and docs/token-efficiency-and-context-control.md require progressive context loading and dashboard opt-in."],
+      "evidence_reviewed": [
+        "AGENTS.md and docs/token-efficiency-and-context-control.md require progressive context loading and dashboard opt-in."
+      ],
       "missing_evidence": [],
       "not_applicable_reason": ""
     },
@@ -153,7 +175,9 @@
       "surface": "Observability, logs, errors, and incident response",
       "category": "C7",
       "status": "Pass",
-      "evidence_reviewed": ["SUPPORT.md, SECURITY.md, GitHub issue template, and GitHub Actions logs define maintainer feedback and incident triage surfaces."],
+      "evidence_reviewed": [
+        "SUPPORT.md, SECURITY.md, GitHub issue template, and GitHub Actions logs define maintainer feedback and incident triage surfaces."
+      ],
       "missing_evidence": [],
       "not_applicable_reason": ""
     },
@@ -171,7 +195,9 @@
       "surface": "AI/RAG/agent governance",
       "category": "C10",
       "status": "Pass",
-      "evidence_reviewed": ["AGENTS.md, rules.md, coverage matrix, scoring method, schemas, and samples/dogfood-fixture-broken-app.md govern agent behavior."],
+      "evidence_reviewed": [
+        "AGENTS.md, rules.md, coverage matrix, scoring method, schemas, and samples/dogfood-fixture-broken-app.md govern agent behavior."
+      ],
       "missing_evidence": [],
       "not_applicable_reason": ""
     },
@@ -180,7 +206,9 @@
       "surface": "Learning needs and remediation history",
       "category": "learning",
       "status": "Pass",
-      "evidence_reviewed": ["04_LEARNING_PLAN templates and output, CHANGELOG.md, and dogfood reports tie findings to learning and remediation."],
+      "evidence_reviewed": [
+        "04_LEARNING_PLAN templates and output, CHANGELOG.md, and dogfood reports tie findings to learning and remediation."
+      ],
       "missing_evidence": [],
       "not_applicable_reason": ""
     }

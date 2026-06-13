@@ -27,3 +27,7 @@ The advanced stack includes 19 capabilities covering:
 - privacy/compliance/data governance.
 
 These are deliberately hidden under `90_ADVANCED/` so beginners are not overwhelmed, but serious users can go deep.
+
+The capability pack is versioned independently from the CheckYourself product
+version: `MANIFEST.yaml` carries the pack version, which only bumps when pack
+content changes.

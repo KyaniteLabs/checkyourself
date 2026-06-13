@@ -54,12 +54,15 @@ After remediation:
 
 ## Do not skip findings
 
-If a finding is not fixed, it must be marked as one of:
+If a finding is not fixed, it must be marked with one of the canonical JSON status tokens an agent writes into the report:
+`open`, `proposed`, `approved`, `fixed`, `accepted-risk`, `deferred`, `not-applicable`, `suppressed`.
 
-- **Accepted risk** - the user knowingly accepts it.
-- **Scheduled** - it has an owner or future step.
-- **Blocked** - it needs missing access/context.
-- **Not applicable after review** - the original finding was disproven.
+The common non-fixed outcomes map as follows:
+
+- **`accepted-risk`** - the user knowingly accepts the risk.
+- **`deferred`** - it has an owner or scheduled future step.
+- **`open`** - it needs missing access or context before it can be fixed (do not mark blocked; keep it `open` and note the blocker in the finding description).
+- **`not-applicable`** - the original finding was disproven after review.
 
 ## Completion policy
 

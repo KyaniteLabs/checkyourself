@@ -53,6 +53,7 @@
 - [ ] P0 cap at 49
 - [ ] P1 cap at 74
 - [ ] Missing evidence cap at 84
+- [ ] Missing key launch-gate evidence cap at 90
 - [ ] No cap
 
 ## 6. Coverage Sweep
