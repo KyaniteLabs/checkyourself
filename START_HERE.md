@@ -14,7 +14,7 @@ Use this in Cursor, Windsurf, Claude Code, Codex, Replit, or any assistant that 
 2. Tell the AI: “Use the checkyourself folder as your operating context. Start with `CONTEXT.md`.”
 3. Ask it to run the read-only diagnostic.
 4. Approve fixes one at a time or in safe batches.
-5. Recheck until every finding is resolved, deferred, accepted, blocked, or proven not applicable.
+5. Recheck until every finding is `fixed`, `accepted-risk`, `deferred`, `not-applicable`, or `suppressed`.
 
 ### Path 2 - Chat-only tools
 

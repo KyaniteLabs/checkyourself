@@ -1,12 +1,41 @@
 # CheckYourself
 
-> Local-first production-readiness audit for AI-built apps: read-only checks, 0–100 score, guided fixes.
+> Local-first production-readiness audit for AI-built apps: read-only checks, 0–100 score, stable rule IDs, guided fixes.
 
-## What it is
-A folder-based ICM tool + Python CLI + stdio MCP server that audits an AI-built app before launch: read-only review, evidence-based 0–100 score, ranked fixes, learning plan.
+## Getting Started
 
-## Install / use
-Drop the folder into your project, or run `python3 tools/checkyourself.py mcp` as an MCP server.
+- [README.md](README.md) — overview, quick start, what it checks, CLI/MCP setup, FAQ
+- [START_HERE.md](START_HERE.md) — entry point for AI assistants starting a new audit session
+- [CONTEXT.md](CONTEXT.md) — project context file that orients the AI assistant to the audit workspace
+- [AGENTS.md](AGENTS.md) — agent behavioral rules, roast-lite voice, safety model, and approval gates
 
-## Links
-- Repository: https://github.com/KyaniteLabs/checkyourself
+## Core Reference
+
+- [rules.md](rules.md) — all detection rules with stable IDs (e.g. CY-SECRET-001) and severity levels
+- [docs/cli.md](docs/cli.md) — CLI command reference (scan, diagnostic, diff, score, coverage, backlog, next)
+- [docs/mcp.md](docs/mcp.md) — MCP server setup, tool list, scan-root confinement, expected agent flow
+- [CHANGELOG.md](CHANGELOG.md) — version history including the v1.7.0 diff command and stable rule IDs
+
+## Schemas
+
+The `schemas/` directory contains JSON schema contracts for every structured output:
+
+- [schemas/scan.schema.json](schemas/scan.schema.json) — findings from a scan run
+- [schemas/diff.schema.json](schemas/diff.schema.json) — diff output (added/resolved/regressed findings)
+- [schemas/score-result.schema.json](schemas/score-result.schema.json) — scored report with severity caps
+- [schemas/checkyourself-report.schema.json](schemas/checkyourself-report.schema.json) — full diagnostic report
+- [schemas/coverage.schema.json](schemas/coverage.schema.json) — coverage evidence structure
+- [schemas/backlog.schema.json](schemas/backlog.schema.json) — ranked fix backlog
+- [schemas/next-batch.schema.json](schemas/next-batch.schema.json) — safest first fix batch
+
+## Diagnostic Reference
+
+- [02_RUN_DIAGNOSTIC/coverage-matrix.md](02_RUN_DIAGNOSTIC/coverage-matrix.md) — coverage surface matrix used during the diagnostic pass
+
+## Advanced Hardening
+
+- [90_ADVANCED/README.md](90_ADVANCED/README.md) — deep-dive hardening library; agents load sections on demand when a finding needs deeper guidance
+
+## Agent Skill
+
+- [skills/checkyourself/SKILL.md](skills/checkyourself/SKILL.md) — installable skill for Claude Code and Codex skill aggregators

@@ -105,8 +105,8 @@ Return a concise report with these sections unless the user requested a concrete
 **Expected handling:** Inspect plan, cardinality, indexes, locks, data shape, and application call patterns.
 
 ## References to load on demand
-- `references/data-storage-hardening.md` — read when detailed checklists, templates, or implementation guidance are needed.
-- `references/production-readiness-gates.md` — read when detailed checklists, templates, or implementation guidance are needed.
+- `../../references/data-storage-hardening.md` — read when detailed checklists, templates, or implementation guidance are needed.
+- `../../references/production-readiness-gates.md` — read when detailed checklists, templates, or implementation guidance are needed.
 
 ## Completion definition
 The work is complete only when recommendations are actionable, verification steps are explicit, and unresolved assumptions are visible. Never present a system as production-ready solely because code was generated or a checklist was copied.

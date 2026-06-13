@@ -133,7 +133,7 @@ The folder workflow is the main product. The CLI is the deterministic engine for
 python3 tools/checkyourself.py /path/to/your/project
 ```
 
-It detects stack signals, flags obvious deterministic risks, writes a prefilled context file, emits schemas, checks coverage, computes the score, records score history, ranks the backlog, and exposes a thin MCP wrapper:
+It detects stack signals, flags obvious deterministic risks (each finding carries a stable rule ID like `CY-SECRET-001` for reliable CI gating), writes a prefilled context file, emits schemas, checks coverage, computes the score, records score history, ranks the backlog, and exposes a thin MCP wrapper. The `diff` command compares two scan results to surface regressions and track progress over time:
 
 ```bash
 python3 tools/checkyourself.py describe --format json
@@ -143,6 +143,7 @@ python3 tools/checkyourself.py scan . --deep --format json --no-write
 python3 tools/checkyourself.py coverage --emit
 python3 tools/checkyourself.py score --findings CHECKYOURSELF_SCAN.generated.json --format json
 python3 tools/checkyourself.py scan . --ci
+python3 tools/checkyourself.py diff --old baseline.json --new current.json --ci
 python3 tools/checkyourself.py mcp
 ```
 

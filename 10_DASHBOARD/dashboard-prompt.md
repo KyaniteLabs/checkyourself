@@ -15,10 +15,10 @@ Rules:
 - Do not create a second dashboard format.
 - Keep the dashboard compact and human-readable.
 - Make it accessible for ADHD, autism, and dyslexia: plain section labels, short sentences, stable layout, high contrast, and no motion-dependent meaning.
-- Detect the user's language and project language. If either is not English, include that language plus English labels for technical terms.
+- Use English labels by default. If a second language is needed, ask the user to confirm before adding it to the dashboard.
 - Show the complete remediation backlog, not only the first approval batch.
 - Make clear that the first approval batch is only the safe starting point.
-- Include a status for every finding: open, proposed, approved, fixed, verified, deferred, accepted-risk, or not-applicable.
+- Include a status for every finding using only the canonical values: `open`, `proposed`, `approved`, `fixed`, `accepted-risk`, `deferred`, `not-applicable`, or `suppressed`.
 
 Sections to include:
 1. Header with project name, date, score, and confidence.
