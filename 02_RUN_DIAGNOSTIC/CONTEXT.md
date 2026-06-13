@@ -28,7 +28,10 @@ Use this stage for the full read-only CheckYourself diagnostic.
 6. Produce the Production Reality Report using
    `05_OUTPUT_TEMPLATES/production-reality-report.md`.
 7. Select the safest first approval batch from the complete backlog.
-8. Offer guided fix mode, dashboard mode, and learning plan only after the
+8. On a recheck, compare the new scan against the prior baseline with
+   `python3 tools/checkyourself.py diff --old <baseline.json> --new <current.json> --ci`
+   to confirm risk went down and no P0/P1 regressed.
+9. Offer guided fix mode, dashboard mode, and learning plan only after the
    report exists.
 
 ## Outputs
