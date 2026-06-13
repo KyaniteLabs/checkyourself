@@ -35,3 +35,5 @@ The goal is maximum practical coverage, not fake certainty. If the AI cannot ins
 ## Completeness rule
 
 The report must include a **Coverage Sweep** table. Every row above must be represented as Pass, Finding, Unknown, or Not applicable. The remediation backlog must include every row marked Finding and any high-impact Unknown that blocks confidence.
+
+In the coverage JSON written for the CLI, use exactly these status values: `Pass`, `Finding`, `Unknown`, `NotApplicable`.

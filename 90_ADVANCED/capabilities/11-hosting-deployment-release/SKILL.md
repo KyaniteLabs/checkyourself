@@ -104,8 +104,8 @@ Return a concise report with these sections unless the user requested a concrete
 **Expected handling:** Evaluate traffic routing, telemetry, blast radius, automatic rollback, and state compatibility.
 
 ## References to load on demand
-- `references/deployment-release.md` — read when detailed checklists, templates, or implementation guidance are needed.
-- `templates/release-checklist.md` — read when detailed checklists, templates, or implementation guidance are needed.
+- `../../references/deployment-release.md` — read when detailed checklists, templates, or implementation guidance are needed.
+- `../../templates/release-checklist.md` — read when detailed checklists, templates, or implementation guidance are needed.
 
 ## Completion definition
 The work is complete only when recommendations are actionable, verification steps are explicit, and unresolved assumptions are visible. Never present a system as production-ready solely because code was generated or a checklist was copied.

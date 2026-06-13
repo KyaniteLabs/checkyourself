@@ -63,7 +63,9 @@ Default to progressive context loading:
 3. Load `90_ADVANCED/` only when a specific risk surface needs deeper guidance.
 4. Do not paste long source files, reference docs, logs, schemas, dependency trees, or generated artifacts into the chat unless the user asks.
 5. Keep the findings register complete but compact. Expand details for P0/P1 findings and the next approval batch.
-6. Generate the HTML dashboard only when the user explicitly asks for it.
+6. Generate the HTML dashboard only when the user explicitly asks for it. There is one rich dashboard path, `10_DASHBOARD/dashboard-template.html`; offer the inline Markdown dashboard for lower token cost.
+
+Never hide findings to save tokens. Compress the representation instead: use stable finding IDs, short evidence references, and expanded detail only where severity or user intent requires it.
 
 ## Security closure receipts
 
@@ -166,12 +168,3 @@ instead of pretending they are perfect.
 For every recommended learning source, record why_this_source_is_trusted,
 authority_level, and checked_at. Treat the written source as canonical when the
 video is useful but less authoritative.
-
-
-## Token efficiency and dashboard behavior
-
-Be comprehensive without causing context bloat. Load the minimum required files for the current step, then load deeper references only when a finding or user request requires them.
-
-Default diagnostic output is Markdown plus the complete findings/backlog. The optional HTML/CSS dashboard must be offered but not generated unless the user asks for it. There is one rich dashboard path: `10_DASHBOARD/dashboard-template.html`. If the user wants lower token cost, return the inline Markdown dashboard instead.
-
-Never hide findings to save tokens. Compress the representation instead: use finding IDs, short evidence references, and expanded detail only where severity or user intent requires it.

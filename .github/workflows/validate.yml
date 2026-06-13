@@ -30,7 +30,7 @@ jobs:
           git diff --check "$EMPTY_TREE"..HEAD
 
       - name: Compile Python tools
-        run: python -m py_compile tools/validate_public.py tools/checkyourself.py tests/test_checkyourself_cli.py
+        run: python -m py_compile tools/validate_public.py tools/checkyourself.py tests/test_checkyourself_cli.py tests/test_validate_public.py
 
       - name: Run unit tests
         run: python -m unittest discover -s tests
@@ -53,6 +53,8 @@ jobs:
           python tools/checkyourself.py validate --kind next /tmp/checkyourself-next.json
           python tools/checkyourself.py coverage --emit --format json > /tmp/checkyourself-coverage.json
           python tools/checkyourself.py validate --kind coverage /tmp/checkyourself-coverage.json
+          python tools/checkyourself.py diff --old /tmp/checkyourself-scan.json --new /tmp/checkyourself-deep-scan.json --format json > /tmp/checkyourself-diff.json
+          python tools/checkyourself.py validate --kind diff /tmp/checkyourself-diff.json
 
       - name: Smoke-test MCP wrapper
         run: |

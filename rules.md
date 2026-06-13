@@ -42,15 +42,18 @@
 - Do not broad-search build output, dependency folders, generated files, or vendored code unless that path is the explicit subject.
 - Do not claim all public repositories are clean without exact namespace, repository count, timestamp, fork policy, and current evidence.
 
-## Token efficiency
+## Token efficiency and context loading
 
 - Read the smallest useful context first.
 - Keep broad sweeps compact.
 - Use tables for the complete findings/backlog.
-- Expand details only for blockers and the next approval batch.
-- Summarize evidence; do not dump raw files or logs.
-- Dashboard output is opt-in.
+- Use stable finding IDs and compact evidence references instead of repeating detail.
+- Expand details only for blockers, high-risk findings, and the next approval batch.
+- Summarize evidence; do not dump raw files, logs, source, or standards excerpts into reports.
+- Do not load the entire advanced library unless a finding needs it.
+- Dashboard output is opt-in; do not generate the HTML dashboard unless the user asks.
 - If the user does not want HTML, provide the inline Markdown dashboard fallback instead of another visual file.
+- Keep the audit complete even when the initial explanation is compact.
 - Exclude `target/`, `node_modules/`, `vendor/`, generated schemas, and build artifacts from broad scans and searches unless they are the affected surface.
 
 ## Decision priority
@@ -62,13 +65,3 @@
 5. Small useful fixes.
 6. Learning value.
 7. Optimization.
-
-
-## Token and context rules
-
-- Do not load the entire advanced library unless the user asks for it.
-- Do not generate the HTML dashboard unless the user asks for it.
-- Do not paste large source files or standards excerpts into reports.
-- Do use IDs, compact tables, and short evidence references.
-- Do expand details for high-risk findings and user-approved fixes.
-- Do keep the audit complete even when the initial explanation is compact.

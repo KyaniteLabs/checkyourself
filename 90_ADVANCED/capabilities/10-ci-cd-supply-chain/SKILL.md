@@ -103,8 +103,8 @@ Return a concise report with these sections unless the user requested a concrete
 **Expected handling:** Check token permissions, trigger safety, secret exposure, caching risk, artifact integrity, and deploy gates.
 
 ## References to load on demand
-- `references/supply-chain-ci-cd.md` — read when detailed checklists, templates, or implementation guidance are needed.
-- `references/security-standards.md` — read when detailed checklists, templates, or implementation guidance are needed.
+- `../../references/supply-chain-ci-cd.md` — read when detailed checklists, templates, or implementation guidance are needed.
+- `../../references/security-standards.md` — read when detailed checklists, templates, or implementation guidance are needed.
 
 ## Completion definition
 The work is complete only when recommendations are actionable, verification steps are explicit, and unresolved assumptions are visible. Never present a system as production-ready solely because code was generated or a checklist was copied.

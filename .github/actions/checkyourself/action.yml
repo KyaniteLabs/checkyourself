@@ -22,30 +22,45 @@ inputs:
 runs:
   using: composite
   steps:
+    # Inputs are passed through env vars, never interpolated into run: bodies.
+    # ${{ }} expansion inside scripts is a script-injection sink when callers
+    # wire inputs from untrusted event data (PR titles, branch names).
     - name: Run CheckYourself scan
       shell: bash
+      env:
+        CY_PROJECT: ${{ inputs.project }}
+        CY_DEEP: ${{ inputs.deep }}
+        CY_OUTPUT: ${{ inputs.output }}
       run: |
         set -euo pipefail
-        args=(scan "${{ inputs.project }}" --format json --no-write)
-        if [ "${{ inputs.deep }}" = "true" ]; then
+        args=(scan "$CY_PROJECT" --format json --no-write)
+        if [ "$CY_DEEP" = "true" ]; then
           args+=(--deep)
         fi
-        python3 "${GITHUB_ACTION_PATH}/../../../tools/checkyourself.py" "${args[@]}" > "${{ inputs.output }}"
+        python3 "${GITHUB_ACTION_PATH}/../../../tools/checkyourself.py" "${args[@]}" > "$CY_OUTPUT"
 
     - name: Validate CheckYourself scan
       shell: bash
-      run: python3 "${GITHUB_ACTION_PATH}/../../../tools/checkyourself.py" validate --kind scan "${{ inputs.output }}"
+      env:
+        CY_OUTPUT: ${{ inputs.output }}
+      run: python3 "${GITHUB_ACTION_PATH}/../../../tools/checkyourself.py" validate --kind scan "$CY_OUTPUT"
 
     - name: Enforce P0 gate
       if: ${{ inputs.fail-on-p0 == 'true' }}
       shell: bash
+      env:
+        CY_OUTPUT: ${{ inputs.output }}
       run: |
         python3 - <<'PY'
         import json
+        import os
         from pathlib import Path
 
-        data = json.loads(Path("${{ inputs.output }}").read_text(encoding="utf-8"))
+        data = json.loads(Path(os.environ["CY_OUTPUT"]).read_text(encoding="utf-8"))
         p0 = int(data.get("counts", {}).get("P0", 0))
         if p0:
             raise SystemExit(f"CheckYourself found {p0} unresolved P0 finding(s).")
+        limits = data.get("scan_limits") or {}
+        if limits.get("truncated"):
+            print(f"::warning::CheckYourself scan truncated at {limits.get('max_files')} files; findings may be incomplete.")
         PY

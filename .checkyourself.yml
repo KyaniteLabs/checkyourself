@@ -1,0 +1,17 @@
+# CheckYourself suppressions for CheckYourself itself (dogfood).
+#
+# This is a reviewed false positive: the scanner flags its own detector
+# definitions because they literally contain the dangerous-code patterns the
+# tool looks for (eval, dangerouslySetInnerHTML, verify=False) as regex
+# strings, not live calls. The suppression is path-scoped, so a real unsafe
+# call added anywhere else in the repo is still reported.
+#
+# Test fixtures avoid triggering CY-SECRET-001 by building credential shapes
+# via string concatenation, so no secret suppression is needed.
+version: 1
+suppress:
+  - id: CY-CODE-001
+    reason: tools/checkyourself.py defines the dangerous-pattern regexes (eval, dangerouslySetInnerHTML, verify=False) as detector strings, not as live calls.
+    files: ["tools/checkyourself.py"]
+    reviewed_by: maintainer
+    reviewed_at: "2026-06-12"
