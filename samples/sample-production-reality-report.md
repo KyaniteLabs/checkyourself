@@ -24,7 +24,7 @@ The UI appears functional, but the production-readiness risk is high because the
 **Score:** 42 / 100
 **Confidence:** Medium
 
-A P0 cap was applied because the diagnostic could not verify server-side ownership checks for user-specific records.
+The unresolved P0 (unverified server-side ownership checks) caps the ceiling at 49. Per-category penalties for the missing ownership check, absent tests, no rollback plan, and no error monitoring brought the score down to 42.
 
 ## 4. P0 findings
 
