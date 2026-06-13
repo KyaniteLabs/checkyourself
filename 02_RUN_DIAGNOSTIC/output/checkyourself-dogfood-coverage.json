@@ -125,7 +125,8 @@
       "category": "C6",
       "status": "Pass",
       "evidence_reviewed": [
-        "GitHub Actions run 26630676966 passed after v1.6.0; workflow validates public shape, CLI contracts, MCP wrapper, tests, and gitleaks."
+        "GitHub Actions 'Validate CheckYourself' passes on v1.7.0 (.github/workflows/validate.yml): public-shape validation, CLI/MCP/diff contract smoke tests, 60 unit tests, and gitleaks.",
+        "Supply chain: .github/dependabot.yml covers github-actions and docker; composite action passes inputs via env vars; CY-SUPPLY-* detectors check action pinning, lockfile presence, and npm ci."
       ],
       "missing_evidence": [],
       "not_applicable_reason": ""

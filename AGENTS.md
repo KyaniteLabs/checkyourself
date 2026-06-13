@@ -100,8 +100,14 @@ Use the CLI for deterministic receipts:
 - `coverage --emit` and `coverage --check` for the 20-surface evidence matrix;
 - `score` for reproducible Production Reality Score math;
 - `backlog` and `next` for approval-batch ordering;
+- `diff` to compare two scans and gate on regressions (added/resolved/regressed findings, with a `--ci` flag);
 - `validate` and `schema` for output contracts;
 - `mcp` when the host supports local stdio MCP tools.
+
+Scan findings carry stable, semantic rule IDs (`CY-SECRET-001`, `CY-CONFIG-001`,
+…) that stay constant across runs, so suppressions, diffs, and CI gates remain
+valid. The score is evidence-gated: missing or hand-waved coverage cannot reach
+a launch-ready number, and absence of findings is treated as Unknown, not Pass.
 
 The MCP server is a thin wrapper over the same CLI functions. Do not invent a
 separate scoring or backlog path in the agent.
