@@ -113,22 +113,22 @@
   <header>
     <section class="panel hero" aria-labelledby="dashboard-title">
       <div>
-        <p class="eyebrow">CheckYourself // Production Reality</p>
+        <p class="eyebrow">CheckYourself // Production Reality // v1.7.0</p>
         <h1 id="dashboard-title">CheckYourself Dogfood Self-Audit</h1>
-        <p>CheckYourself audited the public GitHub repo after the CLI/MCP release. The final pass fixed package-script redaction, added support/security triage, proved all 20 coverage surfaces, and reached 100/100.</p>
+        <p>CheckYourself audited itself after the v1.7.0 hardening pass. That pass found and fixed real defects in the tool — a score-gaming vector, a secret-scanner miss, out-of-tree symlink reads, and an MCP path-confinement gap — then re-earned 100/100 under stricter, harder-to-game scoring.</p>
         <p class="language-note">Language mode: English first, second language inferred at run time and confirmed with the user.</p>
         <ul class="stack" aria-label="Detected stack">
           <li class="badge">Markdown-first workspace</li>
           <li class="badge">File-first context routing</li>
-          <li class="badge">Python CLI</li>
+          <li class="badge">Python stdlib CLI</li>
           <li class="badge">Local MCP wrapper</li>
+          <li class="badge">Deterministic detectors, stable rule IDs</li>
           <li class="badge">Static HTML/CSS dashboard</li>
-          <li class="badge">Private Creator Kit sidecar</li>
         </ul>
       </div>
       <div class="callout">
-        <p><strong>Ship status:</strong> Public repository is live, CLI/MCP contracts pass, and no open findings remain.</p>
-        <p><strong>Next decision:</strong> Tag the first release when launch copy is final.</p>
+        <p><strong>Ship status:</strong> v1.7.0 released and tagged on both remotes; CLI, MCP, and diff contracts pass; no open findings remain.</p>
+        <p><strong>Next decision:</strong> None blocking. Future work is product growth, not launch remediation.</p>
       </div>
     </section>
 
@@ -140,7 +140,7 @@
         <div class="score-bar" role="meter" aria-label="Score 100 out of 100" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><div></div></div>
       </div>
       <p><strong>Confidence:</strong> high</p>
-      <p>No P0/P1/P2/P3 findings remain open. Coverage is complete and the score has no caps.</p>
+      <p>No P0/P1/P2/P3 findings remain open. Coverage is complete with real evidence and the score has no caps — earned under v1.7.0's anti-gaming rules.</p>
     </aside>
   </header>
 
@@ -155,7 +155,7 @@
   <section class="two-col">
     <div class="panel">
       <h2>Do-not-ship</h2>
-      <div class="callout"><p>No launch blockers remain after CLI/MCP verification, review-comment remediation, coverage scoring, and secret scans.</p></div>
+      <div class="callout"><p>No launch blockers remain. The v1.7.0 hardening pass closed every P0/P1 it found, verified by 60 unit tests, strict CI on both remotes, coverage-backed scoring, and a clean secret scan.</p></div>
     </div>
     <div class="panel">
       <h2>Accessible Reading Mode</h2>
@@ -182,16 +182,16 @@
           <tr><td>Auth and permissions</td><td><span class="status neutral">N/A</span></td><td>No auth, account, role, session, or admin runtime.</td><td></td></tr>
           <tr><td>Data storage and migrations</td><td><span class="status neutral">N/A</span></td><td>No database, migrations, or persisted user records.</td><td></td></tr>
           <tr><td>User/tenant isolation</td><td><span class="status neutral">N/A</span></td><td>No multitenant runtime or user data boundary.</td><td></td></tr>
-          <tr><td>Secrets and runtime config</td><td><span class="status pass">Pass</span></td><td>Gitleaks passed; package scripts redact secrets; private Creator Kit is ignored.</td><td>CY-REVIEW-001</td></tr>
-          <tr><td>Security and threat model</td><td><span class="status pass">Pass</span></td><td>SECURITY.md exists; secret-redaction tests cover JSON and Markdown output.</td><td>CY-REVIEW-001</td></tr>
+          <tr><td>Secrets and runtime config</td><td><span class="status pass">Pass</span></td><td>Gitleaks clean; detection and redaction share one token list; scanner never reads through symlinks; one reviewed suppression in .checkyourself.yml.</td><td>AUDIT-02</td></tr>
+          <tr><td>Security and threat model</td><td><span class="status pass">Pass</span></td><td>Symlink and MCP path containment added; composite action hardened against script injection; redaction covered by tests.</td><td>AUDIT-03, AUDIT-04, AUDIT-06</td></tr>
           <tr><td>Privacy and data governance</td><td><span class="status pass">Pass</span></td><td>Local-first, no telemetry, and docs warn against sharing sensitive data.</td><td></td></tr>
-          <tr><td>Tests and quality gates</td><td><span class="status pass">Pass</span></td><td>10 unit tests, schema validation, py_compile, gitleaks, and MCP smoke pass.</td><td></td></tr>
-          <tr><td>CI/CD and supply chain</td><td><span class="status pass">Pass</span></td><td>GitHub Actions validates public shape, CLI contracts, MCP wrapper, tests, and gitleaks.</td><td></td></tr>
+          <tr><td>Tests and quality gates</td><td><span class="status pass">Pass</span></td><td>60 unit tests, schema validation, py_compile, gitleaks, and MCP smoke pass.</td><td></td></tr>
+          <tr><td>CI/CD and supply chain</td><td><span class="status pass">Pass</span></td><td>Strict CI on both remotes validates public shape, CLI/diff contracts, MCP wrapper, tests, and gitleaks; Dependabot covers actions and docker.</td><td></td></tr>
           <tr><td>Hosting/deploy/rollback</td><td><span class="status pass">Pass</span></td><td>Public GitHub repo is live; git history is rollback for static repo changes.</td><td></td></tr>
           <tr><td>Cloud/IaC</td><td><span class="status neutral">N/A</span></td><td>No cloud runtime or IaC ships in the public product.</td><td></td></tr>
           <tr><td>Performance/context control</td><td><span class="status pass">Pass</span></td><td>Progressive context loading and dashboard opt-in are documented.</td><td></td></tr>
           <tr><td>Scaling/load/resilience</td><td><span class="status neutral">N/A</span></td><td>No service workload; context-size control is documented.</td><td></td></tr>
-          <tr><td>Observability/incident response</td><td><span class="status pass">Pass</span></td><td>SUPPORT.md, SECURITY.md, issue template, and Actions logs define triage surfaces.</td><td>CY-OPS-001</td></tr>
+          <tr><td>Observability/incident response</td><td><span class="status pass">Pass</span></td><td>SUPPORT.md, SECURITY.md, issue template, and Actions logs define triage surfaces.</td><td></td></tr>
           <tr><td>Availability/recovery</td><td><span class="status neutral">N/A</span></td><td>Static open-source repo; recovery is GitHub history, cloneability, and future releases.</td><td></td></tr>
           <tr><td>AI/RAG/agent governance</td><td><span class="status pass">Pass</span></td><td>AGENTS, rules, coverage matrix, scoring method, schemas, and fixture govern behavior.</td><td></td></tr>
           <tr><td>Learning needs</td><td><span class="status pass">Pass</span></td><td>Learning templates, output, changelog, and dogfood reports tie findings to learning.</td><td></td></tr>
@@ -202,14 +202,17 @@
 
   <section class="panel" aria-labelledby="backlog-title">
     <h2 id="backlog-title">Complete Backlog</h2>
-    <p>Every finding remains here until it is fixed, verified, deferred with a reason, accepted as risk, or proven not applicable.</p>
+    <p>These are the defects the v1.7.0 hardening pass found in CheckYourself itself. Every one is fixed and covered by a regression test.</p>
     <div class="table-wrap" tabindex="0" role="region" aria-label="Backlog table">
       <table>
         <thead><tr><th>Order</th><th>ID</th><th>Severity</th><th>Finding</th><th>Status</th><th>Next step</th></tr></thead>
         <tbody>
-          <tr><td>1</td><td>CY-REVIEW-001</td><td><span class="status p1">P1</span></td><td>Package scripts could leak credential-shaped values into generated output.</td><td><span class="status pass">fixed</span></td><td>Keep the redaction regression test in the CLI suite.</td></tr>
-          <tr><td>2</td><td>CY-OPS-001</td><td><span class="status p3">P3</span></td><td>Maintainer support/security triage was not documented.</td><td><span class="status pass">fixed</span></td><td>Use GitHub Issues and security handling docs for incoming reports.</td></tr>
-          <tr><td>3</td><td>CY-EVIDENCE-001</td><td><span class="status p3">P3</span></td><td>Dogfood artifacts reflected the old 92 score.</td><td><span class="status pass">fixed</span></td><td>Refresh dogfood proof after future major interface changes.</td></tr>
+          <tr><td>1</td><td>AUDIT-01</td><td><span class="status p0">P0</span></td><td>Thin or omitted coverage could reach a perfect, high-confidence score.</td><td><span class="status pass">fixed</span></td><td>Anti-gaming scoring; regression test guards it.</td></tr>
+          <tr><td>2</td><td>AUDIT-02</td><td><span class="status p1">P1</span></td><td>Secret scanner stopped after the first hits, missing later credentials in a file.</td><td><span class="status pass">fixed</span></td><td>Full-file scan; multi-credential regression test.</td></tr>
+          <tr><td>3</td><td>AUDIT-03</td><td><span class="status p1">P1</span></td><td>Symlinked files were read out-of-tree (an adversarial repo could exfiltrate host files).</td><td><span class="status pass">fixed</span></td><td>Symlinks skipped and disclosed in scan_limits.</td></tr>
+          <tr><td>4</td><td>AUDIT-04</td><td><span class="status p1">P1</span></td><td>MCP scan accepted any host path and ignored misspelled arguments.</td><td><span class="status pass">fixed</span></td><td>Scan-root confinement; strict argument validation.</td></tr>
+          <tr><td>5</td><td>AUDIT-05</td><td><span class="status p2">P2</span></td><td>The 6,000-file scan cap truncated silently.</td><td><span class="status pass">fixed</span></td><td>Truncation disclosed; configurable --max-files.</td></tr>
+          <tr><td>6</td><td>AUDIT-06</td><td><span class="status p2">P2</span></td><td>The composite GitHub Action interpolated inputs into shell (injection sink).</td><td><span class="status pass">fixed</span></td><td>Inputs passed through env vars.</td></tr>
         </tbody>
       </table>
     </div>
@@ -218,37 +221,37 @@
   <section class="two-col">
     <div class="panel">
       <h2>Remediation Waves</h2>
-      <p><strong>Wave 1:</strong> Fix review comment. Item: CY-REVIEW-001.</p>
-      <p><strong>Wave 2:</strong> Close maintainer process evidence. Item: CY-OPS-001.</p>
-      <p><strong>Wave 3:</strong> Refresh dogfood proof. Item: CY-EVIDENCE-001.</p>
+      <p><strong>Wave 1 — integrity:</strong> close the scoring gaming vector. Item: AUDIT-01.</p>
+      <p><strong>Wave 2 — safety:</strong> secret-scan completeness and untrusted-input containment. Items: AUDIT-02, AUDIT-03, AUDIT-04.</p>
+      <p><strong>Wave 3 — supply chain:</strong> truncation disclosure and CI input hardening. Items: AUDIT-05, AUDIT-06.</p>
     </div>
     <div class="panel">
       <h2>Current Approval Batch</h2>
-      <p>No approval batch remains. The final dogfood pass is complete.</p>
+      <p>No approval batch remains. The v1.7.0 hardening pass is complete and released on both remotes.</p>
     </div>
   </section>
 
   <section class="panel" aria-labelledby="learning-title">
     <h2 id="learning-title">Learning Priorities</h2>
-    <p>Each item is tied to the final dogfood pass and includes a source plus a relevant video.</p>
+    <p>Each item is tied to the v1.7.0 hardening pass and includes a source plus a relevant video.</p>
     <div class="learning-list">
       <article class="learning-item">
-        <h3>1. Redact generated output, not just findings</h3>
-        <p>A tool can detect a secret and still leak it somewhere else. Every generated output path needs redaction.</p>
-        <p><strong>Next:</strong> When adding a new output field, ask whether it could contain credentials and add a regression test.</p>
-        <p><strong>Success:</strong> The test suite proves a fake token never appears in JSON or Markdown output.</p>
-        <div class="resources"><a href="https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository">Source: GitHub Docs</a><a href="https://www.youtube.com/watch?v=l0YsEk_59fQ">Watch: GitHub secret scanning</a></div>
+        <h3>1. A score is only as honest as it is hard to game</h3>
+        <p>Absence of evidence is not proof of safety. A maturity score must treat missing or hand-waved coverage as Unknown, never as an automatic pass.</p>
+        <p><strong>Next:</strong> When you add a scoring path, ask how someone would fake a perfect result, then close that path.</p>
+        <p><strong>Success:</strong> Thin coverage scores low; only complete, evidenced coverage reaches 100/high.</p>
+        <div class="resources"><a href="../../02_RUN_DIAGNOSTIC/scoring-method.md">Source: CheckYourself scoring method</a><a href="https://www.youtube.com/watch?v=YEaKXjHENyQ">Watch: evidence-based evaluation</a></div>
       </article>
       <article class="learning-item">
-        <h3>2. A 100 score needs coverage evidence</h3>
-        <p>A clean scan is not the same as a complete audit. The score reaches 100 only when coverage proves the relevant surfaces.</p>
-        <p><strong>Next:</strong> Pair every final score with a coverage file and a command that reproduces the score.</p>
-        <p><strong>Success:</strong> The score command returns 100/high with no caps and a complete coverage check.</p>
-        <div class="resources"><a href="../../02_RUN_DIAGNOSTIC/scoring-method.md">Source: CheckYourself scoring method</a><a href="https://www.youtube.com/watch?v=YEaKXjHENyQ">Watch: OpenAI evals</a></div>
+        <h3>2. Treat the input you scan as hostile</h3>
+        <p>A tool that reads untrusted projects can be turned against its host: a symlinked file or an unconfined path becomes an exfiltration primitive.</p>
+        <p><strong>Next:</strong> Never follow symlinks, confine every read and write to the target tree, and disclose anything you skip.</p>
+        <p><strong>Success:</strong> An adversarial fixture cannot make the scanner read or report files outside the project.</p>
+        <div class="resources"><a href="https://owasp.org/www-community/attacks/Path_Traversal">Source: OWASP path traversal</a><a href="https://www.youtube.com/watch?v=l0YsEk_59fQ">Watch: secret scanning</a></div>
       </article>
     </div>
   </section>
-  <footer>Generated by CheckYourself from the Markdown report. The Markdown report remains the source of truth.</footer>
+  <footer>CheckYourself v1.7.0 self-audit · generated 2026-06-12 · The Markdown report remains the source of truth.</footer>
 </main>
 </body>
 </html>
