@@ -225,7 +225,7 @@ class CheckYourselfCliTests(unittest.TestCase):
                 "\n".join([
                     "version: 1",
                     "suppress:",
-                    "  - id: CY-001",
+                    "  - id: CY-SECRET-001",
                     "    reason: test fixture uses a fake credential shape",
                     '    files: ["app.py"]',
                     "    reviewed_by: unit-test",
@@ -241,7 +241,7 @@ class CheckYourselfCliTests(unittest.TestCase):
         data = json.loads(result.stdout)
         self.assertEqual(data["counts"]["P0"], 0)
         suppressed = [finding for finding in data["findings"] if finding["status"] == "suppressed"]
-        self.assertEqual([finding["id"] for finding in suppressed], ["CY-001"])
+        self.assertEqual([finding["id"] for finding in suppressed], ["CY-SECRET-001"])
         self.assertEqual(data["suppression_count"], 1)
 
     def test_package_scripts_are_redacted_from_json_and_markdown(self) -> None:
@@ -345,7 +345,10 @@ class CheckYourselfCliTests(unittest.TestCase):
             self.assertEqual(score_result.returncode, 0, score_result.stderr)
             score = json.loads(score_result.stdout)
             self.assertEqual(score["score_mode"], "scan-derived-estimate")
-            self.assertGreaterEqual(score["score"], 90)
+            # Estimates must never report a launch-ready number: missing
+            # coverage evidence caps every estimate at 84.
+            self.assertLessEqual(score["score"], 84)
+            self.assertIn(84, [cap["cap"] for cap in score["caps_applied"]])
             self.assertFalse(score["coverage_complete"])
             self.assertEqual(score["confidence"], "low")
             self.assertTrue(score["manual_evidence_needed"])
@@ -397,6 +400,384 @@ class CheckYourselfCliTests(unittest.TestCase):
         text = action.read_text(encoding="utf-8")
         self.assertIn("runs:", text)
         self.assertIn("fail-on-p0", text)
+
+    def test_composite_action_passes_inputs_through_env_not_interpolation(self) -> None:
+        action = ROOT / ".github" / "actions" / "checkyourself" / "action.yml"
+        text = action.read_text(encoding="utf-8")
+        # Untrusted inputs must reach the shell via env vars, never via ${{ }}
+        # expansion inside a run: body (script-injection sink).
+        self.assertNotIn('"${{ inputs.project }}"', text)
+        self.assertIn("CY_PROJECT: ${{ inputs.project }}", text)
+        self.assertIn('os.environ["CY_OUTPUT"]', text)
+
+    def test_scan_reports_truncation_when_file_cap_is_hit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            for i in range(5):
+                (project / f"f{i}.py").write_text("x = 1\n", encoding="utf-8")
+            result = self.run_cli("scan", str(project), "--max-files", "2", "--format", "json", "--no-write")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertTrue(data["scan_limits"]["truncated"])
+        self.assertEqual(data["files_scanned"], 2)
+        self.assertGreater(data["scan_limits"]["files_beyond_limit"], 0)
+
+    def test_scan_does_not_read_symlinked_files_out_of_tree(self) -> None:
+        # Built by concatenation so the committed source never contains a
+        # credential-shaped literal (keeps gitleaks clean).
+        aws_shape = "AKIA" + "IOSFODNN7EXAMPLEXX"
+        with tempfile.TemporaryDirectory() as outside, tempfile.TemporaryDirectory() as tmp:
+            secret = Path(outside) / "real_secret.env"
+            secret.write_text(f"AWS_SECRET_ACCESS_KEY={aws_shape}\n", encoding="utf-8")
+            project = Path(tmp)
+            (project / "config.env").symlink_to(secret)
+            (project / "app.py").write_text("print('ok')\n", encoding="utf-8")
+            result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertGreaterEqual(data["scan_limits"]["symlinks_skipped"], 1)
+        self.assertNotIn("config.env", json.dumps(data["findings"]))
+
+    def test_secret_scan_reports_multiple_credentials_in_one_file(self) -> None:
+        # Built by concatenation so the committed source never contains a
+        # credential-shaped literal (keeps gitleaks clean).
+        key_one = "AKIA" + "1234567890ABCDEF"
+        key_two = "AKIA" + "ZZZZZZZZZZZZZZZZ"
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "creds.env").write_text(
+                f"{key_one}\nfiller=1\n{key_two}\n",
+                encoding="utf-8",
+            )
+            result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        secret = next(f for f in data["findings"] if f["id"] == "CY-SECRET-001")
+        located = " ".join(secret["evidence"])
+        self.assertIn(":1", located)
+        self.assertIn(":3", located)
+
+    def test_findings_use_stable_semantic_rule_ids(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "app.py").write_text("print('hi')\n", encoding="utf-8")
+            result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        ids = {f["id"] for f in json.loads(result.stdout)["findings"]}
+        self.assertIn("CY-TEST-001", ids)
+        self.assertNotIn("CY-001", ids)
+
+    def test_debug_flag_and_default_credentials_are_flagged(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "settings.py").write_text("DEBUG = True\n", encoding="utf-8")
+            (project / "docker-compose.yml").write_text(
+                "services:\n  db:\n    environment:\n      POSTGRES_PASSWORD: postgres\n",
+                encoding="utf-8",
+            )
+            result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        ids = {f["id"] for f in json.loads(result.stdout)["findings"]}
+        self.assertIn("CY-CONFIG-001", ids)
+        self.assertIn("CY-CONFIG-002", ids)
+
+    def test_cors_wildcard_and_dangerous_sink_are_flagged(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "server.js").write_text(
+                'app.use(cors({ origin: "*" }));\nconst r = eval(userInput);\n',
+                encoding="utf-8",
+            )
+            result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        ids = {f["id"] for f in json.loads(result.stdout)["findings"]}
+        self.assertIn("CY-API-001", ids)
+        self.assertIn("CY-CODE-001", ids)
+
+    def test_missing_lockfile_is_flagged(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "package.json").write_text('{"name": "x"}\n', encoding="utf-8")
+            result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        ids = {f["id"] for f in json.loads(result.stdout)["findings"]}
+        self.assertIn("CY-SUPPLY-002", ids)
+
+    def test_test_path_secrets_still_detected_but_heuristics_skip_tests(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            tests_dir = project / "tests"
+            tests_dir.mkdir()
+            # A real credential shape in a test file must still surface.
+            # Built by concatenation so the committed test source never
+            # contains a credential-shaped literal (keeps gitleaks clean).
+            aws_shape = "AKIA" + "1234567890ABCDEF"
+            (tests_dir / "test_thing.py").write_text(f"KEY = '{aws_shape}'\nDEBUG = True\n", encoding="utf-8")
+            result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        ids = {f["id"] for f in json.loads(result.stdout)["findings"]}
+        self.assertIn("CY-SECRET-001", ids)  # secret still found
+        self.assertNotIn("CY-CONFIG-001", ids)  # debug flag heuristic skips test paths
+
+    def test_coverage_backed_score_blocks_thin_pass_gaming(self) -> None:
+        surfaces = [
+            {"id": f"S{i:02d}", "surface": f"s{i}", "status": "Pass", "evidence_reviewed": ["x"]}
+            for i in range(1, 11)
+        ]
+        coverage = {"schema": "checkyourself-coverage/1", "surfaces": surfaces}
+        with tempfile.TemporaryDirectory() as tmp:
+            findings_path = Path(tmp) / "findings.json"
+            coverage_path = Path(tmp) / "coverage.json"
+            findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
+            coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
+            result = self.run_cli(
+                "score", "--findings", str(findings_path),
+                "--coverage", str(coverage_path), "--no-history", "--format", "json",
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        score = json.loads(result.stdout)
+        self.assertFalse(score["coverage_complete"])
+        self.assertNotEqual(score["confidence"], "high")
+        self.assertLess(score["score"], 100)
+
+    def test_coverage_backed_full_evidence_reaches_high_confidence(self) -> None:
+        from importlib import util as _util
+        spec = _util.spec_from_file_location("cy", CLI)
+        cy = _util.module_from_spec(spec)
+        spec.loader.exec_module(cy)
+        surfaces = []
+        for sid, surface, category in cy.COVERAGE_SURFACES:
+            surfaces.append({
+                "id": sid, "surface": surface, "category": category,
+                "status": "Pass", "evidence_reviewed": [f"{surface}: verified in src/app.py:10"],
+            })
+        coverage = {"schema": "checkyourself-coverage/1", "surfaces": surfaces}
+        with tempfile.TemporaryDirectory() as tmp:
+            findings_path = Path(tmp) / "findings.json"
+            coverage_path = Path(tmp) / "coverage.json"
+            findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
+            coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
+            result = self.run_cli(
+                "score", "--findings", str(findings_path),
+                "--coverage", str(coverage_path), "--no-history", "--format", "json",
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        score = json.loads(result.stdout)
+        self.assertTrue(score["coverage_complete"])
+        self.assertEqual(score["confidence"], "high")
+        self.assertEqual(score["score"], 100)
+
+    def test_diff_detects_regression_and_gates_in_ci(self) -> None:
+        old = {"findings": [{"id": "CY-TEST-001", "severity": "P1", "category": "C5", "finding": "No tests", "status": "open"}]}
+        new = {"findings": [
+            {"id": "CY-TEST-001", "severity": "P1", "category": "C5", "finding": "No tests", "status": "open"},
+            {"id": "CY-SECRET-001", "severity": "P0", "category": "C3", "finding": "Secret", "status": "open"},
+        ]}
+        with tempfile.TemporaryDirectory() as tmp:
+            old_path = Path(tmp) / "old.json"
+            new_path = Path(tmp) / "new.json"
+            old_path.write_text(json.dumps(old), encoding="utf-8")
+            new_path.write_text(json.dumps(new), encoding="utf-8")
+            json_result = self.run_cli("diff", "--old", str(old_path), "--new", str(new_path), "--format", "json")
+            ci_result = self.run_cli("diff", "--old", str(old_path), "--new", str(new_path), "--ci")
+        self.assertEqual(json_result.returncode, 0, json_result.stderr)
+        diff = json.loads(json_result.stdout)
+        self.assertEqual([f["id"] for f in diff["added"]], ["CY-SECRET-001"])
+        self.assertTrue(diff["regression"])
+        self.assertEqual(ci_result.returncode, 1)
+
+    def test_mcp_rejects_unknown_arguments_and_unknown_tools(self) -> None:
+        messages = "\n".join([
+            json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25"}}),
+            json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "scan", "arguments": {"path": "/etc"}}}),
+            json.dumps({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "does_not_exist", "arguments": {}}}),
+            "",
+        ])
+        result = subprocess.run(
+            [sys.executable, str(CLI), "mcp"],
+            text=True, input=messages, capture_output=True, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        responses = {json.loads(line)["id"]: json.loads(line) for line in result.stdout.splitlines()}
+        self.assertIn("error", responses[2])
+        self.assertEqual(responses[2]["error"]["code"], -32602)
+        self.assertIn("error", responses[3])
+        self.assertIn("unknown tool", responses[3]["error"]["message"])
+
+    def test_mcp_scan_is_confined_to_scan_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            messages = "\n".join([
+                json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25"}}),
+                json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "scan", "arguments": {"project": "/etc"}}}),
+                "",
+            ])
+            result = subprocess.run(
+                [sys.executable, str(CLI), "mcp"],
+                text=True, input=messages, capture_output=True, check=False,
+                cwd=tmp, env={**__import__("os").environ, "CHECKYOURSELF_SCAN_ROOT": tmp},
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        responses = {json.loads(line)["id"]: json.loads(line) for line in result.stdout.splitlines()}
+        call = responses[2]["result"]
+        self.assertTrue(call["isError"])
+        self.assertIn("outside the allowed scan root", call["structuredContent"]["error"])
+
+    def test_unknown_command_suggests_closest_match(self) -> None:
+        result = self.run_cli("scna", ".")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("scan", result.stderr)
+
+    def test_stdin_score_does_not_write_history_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            result = subprocess.run(
+                [sys.executable, str(CLI), "score", "--findings", "-", "--format", "json"],
+                text=True, input=json.dumps({"findings": []}), capture_output=True, check=False, cwd=tmp,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse((Path(tmp) / ".checkyourself-score-history.json").exists())
+
+    def test_corrupt_score_history_is_preserved_not_destroyed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            findings_path = project / "findings.json"
+            findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
+            history_path = project / "history.json"
+            history_path.write_text("{ this is not valid json", encoding="utf-8")
+            result = self.run_cli("score", "--findings", str(findings_path), "--history", str(history_path), "--format", "json")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue((project / "history.json.corrupt.bak").exists())
+            history = json.loads(history_path.read_text(encoding="utf-8"))
+            self.assertEqual(len(history), 1)
+
+    def test_validate_public_handles_non_dict_dashboard_sample(self) -> None:
+        validator = ROOT / "tools" / "validate_public.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "samples").mkdir()
+            (project / "samples" / "sample-dashboard-data.json").write_text("[]", encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(validator), str(project)],
+                text=True, capture_output=True, check=False,
+            )
+        # Must not crash with a traceback; a clean failure message is fine.
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_diff_artifact_validates_against_schema(self) -> None:
+        old = {"findings": []}
+        new = {"findings": [{"id": "CY-CI-001", "severity": "P2", "category": "C6", "finding": "No CI", "status": "open"}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            old_path = Path(tmp) / "old.json"
+            new_path = Path(tmp) / "new.json"
+            diff_path = Path(tmp) / "diff.json"
+            old_path.write_text(json.dumps(old), encoding="utf-8")
+            new_path.write_text(json.dumps(new), encoding="utf-8")
+            diff_result = self.run_cli("diff", "--old", str(old_path), "--new", str(new_path), "--format", "json")
+            self.assertEqual(diff_result.returncode, 0, diff_result.stderr)
+            diff_path.write_text(diff_result.stdout, encoding="utf-8")
+            validate = self.run_cli("validate", "--kind", "diff", str(diff_path))
+            self.assertEqual(validate.returncode, 0, validate.stderr)
+
+    def test_stable_rule_id_triple_for_secret_tests_and_ci(self) -> None:
+        # The exact ID-and-severity contract: a credential shape is always
+        # CY-SECRET-001 (P0), missing tests CY-TEST-001 (P1), missing CI
+        # CY-CI-001 (P2), and findings sort deterministically by severity.
+        token = "sk-" + ("z" * 32)
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "app.py").write_text(f'API_KEY = "{token}"\n', encoding="utf-8")
+            result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(
+            [(f["id"], f["severity"]) for f in data["findings"]],
+            [("CY-SECRET-001", "P0"), ("CY-TEST-001", "P1"), ("CY-CI-001", "P2")],
+        )
+
+    def test_identifier_continuations_are_not_secret_names(self) -> None:
+        # `tokenizer` and `passwordResetUrlPath` continue past the credential
+        # token, so neither may produce a secret finding of any confidence.
+        # Built by concatenation so the committed test source never pairs a
+        # credential keyword with an assignment (keeps gitleaks clean).
+        continuation_field = "password" + "ResetUrlPath"
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "app.py").write_text(
+                "\n".join([
+                    'tokenizer = "abcdefghijklmnopqrstuvwxyz123456"',
+                    f'{continuation_field} = "reset/abcdefghijklmnop"',
+                    "",
+                ]),
+                encoding="utf-8",
+            )
+            result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        ids = {f["id"] for f in json.loads(result.stdout)["findings"]}
+        self.assertNotIn("CY-SECRET-001", ids)
+        self.assertNotIn("CY-SECRET-002", ids)
+
+    def test_scan_ci_flag_exits_nonzero_only_on_p0(self) -> None:
+        token = "sk-" + ("w" * 32)
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "app.py").write_text(f'API_KEY = "{token}"\n', encoding="utf-8")
+            gated = self.run_cli("scan", str(project), "--ci", "--no-write", "--quiet")
+            (project / "app.py").write_text("print('ok')\n", encoding="utf-8")
+            clean = self.run_cli("scan", str(project), "--ci", "--no-write", "--quiet")
+
+        self.assertEqual(gated.returncode, 1, gated.stderr)
+        self.assertEqual(clean.returncode, 0, clean.stderr)
+
+    def test_scan_refuses_to_write_context_through_symlink(self) -> None:
+        with tempfile.TemporaryDirectory() as outside, tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "app.py").write_text("print('ok')\n", encoding="utf-8")
+            target = Path(outside) / "target.md"
+            target.write_text("", encoding="utf-8")
+            out_link = project / "context.md"
+            out_link.symlink_to(target)
+            result = self.run_cli("scan", str(project), "--out", str(out_link), "--quiet")
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("refusing to write through symlink", result.stderr)
+
+    def test_risk_path_hints_match_segments_not_substrings(self) -> None:
+        # `rapid/` must not register as an API surface and `user-agent.ts`
+        # must not register as an AI-agent surface.
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            for folder, name in (("rapid", "notes.ts"), ("src", "user-agent.ts"), ("api", "route.ts")):
+                (project / folder).mkdir()
+                (project / folder / name).write_text("export const x = 1;\n", encoding="utf-8")
+            result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        surfaces = json.loads(result.stdout)["risk_surfaces"]
+        self.assertEqual(surfaces.get("API routes or handlers"), ["api/route.ts"])
+        self.assertNotIn("AI agents", surfaces)
+
+    def test_unknown_category_labels_are_normalized_for_scoring(self) -> None:
+        # A label like "security" is not a scoring category; it must be
+        # re-inferred (here to C3) instead of silently escaping penalties.
+        findings = {
+            "findings": [{
+                "id": "F-001",
+                "severity": "P1",
+                "category": "security",
+                "finding": "Hardcoded secret in source",
+                "status": "open",
+            }]
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "findings.json"
+            path.write_text(json.dumps(findings), encoding="utf-8")
+            result = self.run_cli("score", "--findings", str(path), "--no-history", "--format", "json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        score = json.loads(result.stdout)
+        c3 = next(cat for cat in score["per_category"] if cat["id"] == "C3")
+        self.assertIn("F-001", [p.get("finding_id") for p in c3["penalties"]])
 
 
 if __name__ == "__main__":

@@ -18,9 +18,14 @@ with evidence instead of vague reassurance.
 ## Optional visual output
 
 - `dashboard-output-instructions.md` — rules for when and how to generate it.
+- `dashboard-prompt.md` — paste-ready prompt for requesting the dashboard.
+- `dashboard-output.md` — expected dashboard output description.
+- `dashboard-data.example.json` — sample data shape for the dashboard template.
 
 Do not generate the dashboard unless the user asks for it with `dashboard yes`.
 
 Use the single canonical dashboard path in `10_DASHBOARD/dashboard-template.html`.
 If the user does not want HTML/CSS, use the inline Markdown fallback in
-`10_DASHBOARD/inline-dashboard.md`.
+`10_DASHBOARD/inline-dashboard.md`. Canonical dashboard documentation lives in
+`10_DASHBOARD/`; the files here are templates and pointers, not a second
+dashboard system.

@@ -1,0 +1,17 @@
+# Keep local state, secrets, and generated artifacts out of image layers.
+.git
+.github
+.omx
+.omc
+.worktrees
+.pytest_cache
+.ruff_cache
+.DS_Store
+.env
+.env.*
+*.pem
+*.key
+CHECKYOURSELF_*.generated.*
+.checkyourself-score-history.json
+checkyourself-creator-launch-kit copy/
+tests/

@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.invalid/schemas/capability.schema.json",
   "title": "Model-Agnostic Capability Frontmatter",
   "type": "object",
   "required": [

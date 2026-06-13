@@ -55,14 +55,29 @@ IGNORED_DIRS = {
 TEXT_EXTENSIONS = {
     ".js", ".jsx", ".ts", ".tsx", ".py", ".rb", ".go", ".java", ".cs", ".php",
     ".env", ".yaml", ".yml", ".json", ".toml", ".sh", ".rs", ".md", ".txt",
+    ".tf", ".tfvars", ".properties", ".ini", ".cfg", ".conf", ".xml",
+    ".vue", ".svelte", ".kt", ".swift", ".dart", ".gradle",
 }
 
-SECRET_NAME_RE = re.compile(
-    r"(api[_-]?key|secret|token|password|passwd|private[_-]?key|client[_-]?secret|access[_-]?key)",
-    re.I,
+CODE_EXTENSIONS = {
+    ".js", ".jsx", ".ts", ".tsx", ".py", ".rb", ".go", ".java", ".cs", ".php",
+    ".vue", ".svelte", ".kt", ".swift", ".dart",
+}
+
+CONFIG_EXTENSIONS = {".env", ".cfg", ".ini", ".conf", ".properties", ".toml", ".yaml", ".yml"}
+
+# One credential-name token list feeds both detection and redaction so the two
+# regexes cannot drift apart. The trailing (?![a-z]) rejects identifier
+# continuations such as `tokenizer` or `passwordResetUrl` (under re.I it
+# rejects any following ASCII letter) while still matching `feedbackToken:`.
+_CRED_NAME_TOKENS = (
+    r"api[_-]?key|api[_-]?token|access[_-]?key|access[_-]?token|auth[_-]?token|"
+    r"refresh[_-]?token|client[_-]?secret|secret[_-]?key|private[_-]?key|"
+    r"secret|token|password|passwd|credential"
 )
+SECRET_NAME_RE = re.compile(rf"(?i)({_CRED_NAME_TOKENS})(?![a-z])")
 SECRET_VALUE_RE = re.compile(
-    r"(?i)(api[_-]?key|secret|token|password|private[_-]?key|access[_-]?key)\s*[:=]\s*['\"]?"
+    rf"(?i)({_CRED_NAME_TOKENS})(?![a-z])\s*['\"]?\s*[:=]\s*['\"]?"
     r"([A-Za-z0-9_\-\./+=]{16,})"
 )
 SECRET_SHAPE_RES = [
@@ -74,6 +89,49 @@ SECRET_SHAPE_RES = [
     re.compile(r"xox[baprs]-[A-Za-z0-9-]{10,}"),
     re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
 ]
+
+DEBUG_FLAG_RES = [
+    re.compile(r"(?m)^\s*(?:DEBUG|FLASK_DEBUG|APP_DEBUG|DJANGO_DEBUG)\s*=\s*(?:True|true|1)\s*$"),
+    re.compile(r"\bapp\.run\([^)\n]*debug\s*=\s*True"),
+    re.compile(r"\bapp\.debug\s*=\s*True"),
+]
+
+CORS_WILDCARD_RES = [
+    re.compile(r"(?i)['\"]?access-control-allow-origin['\"]?\s*[:=,]\s*['\"]\*['\"]"),
+    re.compile(r"(?i)\borigin\s*:\s*['\"]\*['\"]"),
+    re.compile(r"(?i)\ballow_origins\s*=\s*\[?\s*['\"]\*['\"]"),
+    re.compile(r"\bCORS_ORIGIN_ALLOW_ALL\s*=\s*True\b"),
+]
+
+DANGEROUS_SINK_RES = [
+    (re.compile(r"(?<![\w.])eval\s*\("), "eval() on dynamic input"),
+    (re.compile(r"\bpickle\.loads?\s*\("), "pickle deserialization of untrusted data"),
+    (re.compile(r"\byaml\.load\s*\((?![^)\n]*Loader)"), "yaml.load without an explicit safe Loader"),
+    (re.compile(r"\bdangerouslySetInnerHTML\b"), "dangerouslySetInnerHTML"),
+    (re.compile(r"\bverify\s*=\s*False\b"), "TLS verification disabled (verify=False)"),
+    (re.compile(r"\brejectUnauthorized\s*:\s*false\b"), "TLS verification disabled (rejectUnauthorized: false)"),
+    (re.compile(r"NODE_TLS_REJECT_UNAUTHORIZED\W{0,4}0"), "TLS verification disabled (NODE_TLS_REJECT_UNAUTHORIZED=0)"),
+]
+
+DEFAULT_CRED_RE = re.compile(
+    r"(?im)^\s*['\"]?[A-Z0-9_]*(?:PASSWORD|PASSWD|PWD)['\"]?\s*[:=]\s*['\"]?"
+    r"(admin|password|passw0rd|changeme|change_me|123456|12345678|root|letmein|secret|"
+    r"postgres|mysql|mariadb|redis|guest|test|default)['\"]?\s*,?\s*$"
+)
+DEFAULT_CRED_URL_RE = re.compile(r"//(?:root:root|admin:admin|postgres:postgres|guest:guest|user:user)@")
+
+SOURCEMAP_RES = [
+    re.compile(r"\bproductionBrowserSourceMaps\s*:\s*true\b"),
+    re.compile(r"\bdevtool\s*:\s*['\"]source-map['\"]"),
+]
+
+LOCKFILE_NAMES = ("package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lockb", "bun.lock", "npm-shrinkwrap.json")
+
+LLM_DEPENDENCY_LABELS = {"OpenAI API", "Anthropic SDK", "LangChain", "LlamaIndex"}
+
+TEST_PATH_MARKERS = ("test", "tests", "spec", "specs", "__tests__", "fixture", "fixtures",
+                     "mock", "mocks", "example", "examples", "sample", "samples", "doc", "docs",
+                     "__mocks__", "e2e", "stories")
 
 STACK_FILES = {
     "package.json": "JavaScript/TypeScript project",
@@ -222,7 +280,8 @@ class Finding:
 
 
 def now_iso() -> str:
-    return _dt.datetime.now().astimezone().isoformat(timespec="seconds")
+    # UTC so history entries from laptops and CI machines stay comparable.
+    return _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
 
 
 def rel(root: Path, path: Path) -> str:
@@ -234,9 +293,17 @@ def rel(root: Path, path: Path) -> str:
 
 def read_text(path: Path, max_chars: int = 200_000) -> str:
     try:
+        # Never read through symlinks: an adversarial project could point a
+        # source-looking file at credentials outside the scanned tree.
+        if path.is_symlink():
+            return ""
         return path.read_text(encoding="utf-8", errors="ignore")[:max_chars]
     except OSError:
         return ""
+
+
+def looks_binary(text: str) -> bool:
+    return "\x00" in text[:2048]
 
 
 def redact_sensitive_text(value: str) -> str:
@@ -298,6 +365,12 @@ def parse_minimal_yaml_suppressions(text: str) -> List[dict]:
         if stripped == "suppress:":
             in_suppress = True
             continue
+        if in_suppress and not raw_line[:1].isspace() and not stripped.startswith("- "):
+            # A new zero-indent top-level key ends the suppress block.
+            if current:
+                suppressions.append(current)
+                current = None
+            in_suppress = False
         if not in_suppress:
             continue
         if stripped.startswith("- "):
@@ -335,11 +408,8 @@ def load_checkyourself_config(root: Path) -> dict:
 
 def evidence_path(evidence: str) -> str:
     first = evidence.split(" (", 1)[0]
-    if ":" in first:
-        path, maybe_line = first.rsplit(":", 1)
-        if maybe_line.isdigit():
-            return path
-    return first
+    match = re.match(r"^(.+):(\d+)$", first)
+    return match.group(1) if match else first
 
 
 def suppression_matches(finding: dict, suppression: dict) -> bool:
@@ -372,24 +442,55 @@ def apply_suppressions(findings: List[dict], suppressions: List[dict]) -> List[d
     return findings
 
 
-def iter_files(root: Path, limit: int = 6000) -> List[Path]:
+DEFAULT_MAX_FILES = 6000
+
+
+def keep_dir(parent: Path, name: str) -> bool:
+    if name in IGNORED_DIRS:
+        return False
+    if name.startswith(".") and name != ".github":
+        return False
+    # Never descend symlinked directories: they can escape the project tree.
+    return not (parent / name).is_symlink()
+
+
+def iter_files(root: Path, limit: int = DEFAULT_MAX_FILES) -> Tuple[List[Path], dict]:
+    root = root.resolve()
     files: List[Path] = []
+    stats = {
+        "max_files": limit,
+        "truncated": False,
+        "files_beyond_limit": 0,
+        "symlinks_skipped": 0,
+        "files_unreadable": 0,
+    }
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [
-            d for d in dirnames
-            if d not in IGNORED_DIRS and (not d.startswith(".") or d == ".github")
-        ]
+        parent = Path(dirpath)
+        # Sorting dirnames keeps walk order deterministic across filesystems.
+        dirnames[:] = sorted(d for d in dirnames if keep_dir(parent, d))
         for name in sorted(filenames):
-            if len(files) >= limit:
-                return files
-            p = Path(dirpath) / name
+            p = parent / name
+            if p.is_symlink():
+                stats["symlinks_skipped"] += 1
+                continue
             try:
-                if p.stat().st_size > 2_000_000:
+                real = p.resolve(strict=True)
+                real.relative_to(root)
+                if real.stat().st_size > 2_000_000:
                     continue
+            except ValueError:
+                # Resolves outside the scanned tree (e.g. via a parent link).
+                stats["symlinks_skipped"] += 1
+                continue
             except OSError:
+                stats["files_unreadable"] += 1
+                continue
+            if len(files) >= limit:
+                stats["truncated"] = True
+                stats["files_beyond_limit"] += 1
                 continue
             files.append(p)
-    return files
+    return files, stats
 
 
 def detect_stack(root: Path) -> Tuple[List[str], Dict[str, str], Dict[str, List[str]]]:
@@ -442,6 +543,18 @@ def is_env_example_name(name: str) -> bool:
     )
 
 
+def classify_env_file(name: str) -> Optional[str]:
+    """Classify a file name as an 'example' env file, a 'real' one, or neither."""
+    lower = name.lower()
+    if is_env_example_name(lower):
+        return "example"
+    if lower.endswith(".env") and any(t in lower for t in ("example", "sample", "template")):
+        return "example"
+    if lower == ".env" or lower.startswith(".env.") or lower.endswith(".env"):
+        return "real"
+    return None
+
+
 def is_placeholder_secret_value(value: str) -> bool:
     lower = value.lower().strip("\"'")
     placeholder_tokens = (
@@ -459,61 +572,98 @@ def is_placeholder_secret_value(value: str) -> bool:
     return any(token in lower for token in placeholder_tokens)
 
 
-def scan_env_and_secrets(root: Path, files: List[Path]) -> Tuple[List[str], List[str], List[str], List[str]]:
-    env_files: List[str] = []
-    real_env_files: List[str] = []
-    suspicious_high: List[str] = []
-    suspicious_low: List[str] = []
+SOURCEMAP_CONFIG_NAMES = {
+    "next.config.js", "next.config.mjs", "next.config.ts",
+    "webpack.config.js", "webpack.config.ts",
+}
+
+
+def scan_file_contents(root: Path, files: List[Path]) -> Dict[str, List[str]]:
+    """Single content pass over every scannable file, feeding all detectors.
+
+    Secrets are scanned everywhere, including tests and docs, because real
+    credentials get committed in both. The heuristic detectors (debug flags,
+    CORS, sinks, default credentials) skip test/doc/fixture paths to keep the
+    false-positive rate low.
+    """
+    results: Dict[str, List[str]] = {
+        "env_files": [],
+        "real_env_files": [],
+        "suspicious_high": [],
+        "suspicious_low": [],
+        "debug_flags": [],
+        "cors_wildcards": [],
+        "dangerous_sinks": [],
+        "default_credentials": [],
+        "sourcemap_configs": [],
+    }
     for p in files:
         rp = rel(root, p)
         name = p.name.lower()
-        is_example = is_env_example_name(name)
-        if name == ".env" or (name.startswith(".env.") and not is_example) or name.endswith(".env"):
-            real_env_files.append(rp)
-            env_files.append(rp)
-        elif is_example:
-            env_files.append(rp)
-        if p.suffix.lower() in TEXT_EXTENSIONS or name.startswith(".env"):
-            text = read_text(p, max_chars=60_000)
-            high_seen = False
-            low_seen = False
-            for line_no, line in enumerate(text.splitlines(), start=1):
-                stripped = line.strip()
-                shaped = any(r.search(line) for r in SECRET_SHAPE_RES)
+        suffix = p.suffix.lower()
+        kind = classify_env_file(name)
+        is_example = kind == "example"
+        if kind == "real":
+            results["real_env_files"].append(rp)
+            results["env_files"].append(rp)
+        elif kind == "example":
+            results["env_files"].append(rp)
+
+        if suffix not in TEXT_EXTENSIONS and not name.startswith(".env") and kind is None:
+            continue
+        text = read_text(p, max_chars=60_000)
+        if not text or looks_binary(text):
+            continue
+
+        # Match markers against whole path segments (and segment stems like
+        # `app.test.ts`) so `docker-compose.yml` is not mistaken for a doc path.
+        path_segments = [s.lower() for s in Path(rp).parts]
+        in_test_path = any(
+            seg == marker or seg.startswith(marker + ".") or marker == seg.split(".")[-1]
+            for seg in path_segments
+            for marker in TEST_PATH_MARKERS
+        )
+        is_code = suffix in CODE_EXTENSIONS
+        is_config = suffix in CONFIG_EXTENSIONS or kind is not None
+
+        for line_no, line in enumerate(text.splitlines(), start=1):
+            stripped = line.strip()
+            if any(r.search(line) for r in SECRET_SHAPE_RES):
+                results["suspicious_high"].append(secret_evidence(
+                    rp, line_no, "high-confidence credential shape",
+                    "credential_shape", "high", line,
+                ))
+            else:
                 value_match = SECRET_VALUE_RE.search(line)
-                name_match = SECRET_NAME_RE.search(line)
-                if shaped:
-                    suspicious_high.append(secret_evidence(
-                        rp,
-                        line_no,
-                        "high-confidence credential shape",
-                        "credential_shape",
-                        "high",
-                        line,
+                if (
+                    value_match
+                    and SECRET_NAME_RE.search(line)
+                    and not stripped.startswith(("#", "//", "*"))
+                    and not is_placeholder_secret_value(value_match.group(2))
+                ):
+                    results["suspicious_low"].append(secret_evidence(
+                        rp, line_no, "possible secret-like assignment",
+                        "secret_name_and_assignment", "low", line,
                     ))
-                    high_seen = True
-                elif value_match and name_match:
-                    if stripped.startswith(("#", "//", "*")):
-                        continue
-                    if is_example and is_placeholder_secret_value(value_match.group(2)):
-                        continue
-                    suspicious_low.append(secret_evidence(
-                        rp,
-                        line_no,
-                        "possible secret-like assignment",
-                        "secret_name_and_assignment",
-                        "low",
-                        line,
-                    ))
-                    low_seen = True
-                if high_seen and low_seen:
-                    break
-    return (
-        sorted(set(env_files)),
-        sorted(set(real_env_files)),
-        sorted(set(suspicious_high))[:50],
-        sorted(set(suspicious_low))[:50],
-    )
+
+            if in_test_path:
+                continue
+            if (is_config or suffix == ".py") and any(r.search(line) for r in DEBUG_FLAG_RES):
+                results["debug_flags"].append(f"{rp}:{line_no} ({compact_context(line)})")
+            if is_code or is_config:
+                if any(r.search(line) for r in CORS_WILDCARD_RES):
+                    results["cors_wildcards"].append(f"{rp}:{line_no} ({compact_context(line)})")
+                if not is_example and (DEFAULT_CRED_RE.search(line) or DEFAULT_CRED_URL_RE.search(line)):
+                    results["default_credentials"].append(f"{rp}:{line_no} ({compact_context(line)})")
+            if is_code:
+                for sink_re, label in DANGEROUS_SINK_RES:
+                    if sink_re.search(line):
+                        results["dangerous_sinks"].append(f"{rp}:{line_no} ({label}; {compact_context(line)})")
+                        break
+            if name in SOURCEMAP_CONFIG_NAMES and any(r.search(line) for r in SOURCEMAP_RES):
+                results["sourcemap_configs"].append(f"{rp}:{line_no} ({compact_context(line)})")
+
+    return {key: sorted(set(values))[:50] for key, values in results.items()}
 
 
 def find_tests(root: Path, files: List[Path]) -> List[str]:
@@ -541,8 +691,10 @@ def find_ci(root: Path) -> List[str]:
 def run_deep_checks(root: Path, ci: List[str], gitignore: str) -> List[Finding]:
     findings: List[Finding] = []
     mutable_actions: List[str] = []
+    npm_install_in_ci: List[str] = []
     action_re = re.compile(r"uses:\s*['\"]?([^@\s'\"]+)@([^@\s'\"]+)", re.I)
     pinned_sha_re = re.compile(r"^[0-9a-f]{40}$", re.I)
+    npm_install_re = re.compile(r"\bnpm\s+install\b(?!\s+-g)")
 
     for workflow in ci:
         if not workflow.startswith(".github/workflows/"):
@@ -550,17 +702,18 @@ def run_deep_checks(root: Path, ci: List[str], gitignore: str) -> List[Finding]:
         path = root / workflow
         for line_no, line in enumerate(read_text(path).splitlines(), start=1):
             match = action_re.search(line)
-            if not match:
-                continue
-            action, ref = match.groups()
-            if not pinned_sha_re.match(ref):
-                mutable_actions.append(
-                    f"{workflow}:{line_no} (uses {action}@{ref}; pin to a full commit SHA)"
-                )
+            if match:
+                action, ref = match.groups()
+                if not pinned_sha_re.match(ref):
+                    mutable_actions.append(
+                        f"{workflow}:{line_no} (uses {action}@{ref}; pin to a full commit SHA)"
+                    )
+            if npm_install_re.search(line):
+                npm_install_in_ci.append(f"{workflow}:{line_no} (use `npm ci` for reproducible installs)")
 
     if mutable_actions:
         findings.append(Finding(
-            "CY-000",
+            "CY-SUPPLY-001",
             "P2",
             "Mutable GitHub Action references",
             "One or more workflow steps use a version tag instead of an immutable commit SHA. "
@@ -572,7 +725,7 @@ def run_deep_checks(root: Path, ci: List[str], gitignore: str) -> List[Finding]:
 
     if ci and not any((root / path).exists() for path in (".github/dependabot.yml", ".github/dependabot.yaml", "renovate.json")):
         findings.append(Finding(
-            "CY-000",
+            "CY-SUPPLY-003",
             "P3",
             "No dependency update automation detected",
             "CI exists, but no Dependabot or Renovate configuration was found. Dependency risk can silently age.",
@@ -581,10 +734,22 @@ def run_deep_checks(root: Path, ci: List[str], gitignore: str) -> List[Finding]:
             recommended_fix="Add Dependabot or Renovate for the detected package ecosystems.",
         ))
 
+    if npm_install_in_ci:
+        findings.append(Finding(
+            "CY-SUPPLY-004",
+            "P3",
+            "CI installs dependencies without the lockfile contract",
+            "A workflow runs `npm install` instead of `npm ci`. Installs can drift from the lockfile, "
+            "so CI may pass with different dependency versions than production.",
+            npm_install_in_ci[:50],
+            category="C6",
+            recommended_fix="Use `npm ci` (or the pnpm/yarn frozen-lockfile equivalent) in CI.",
+        ))
+
     missing_gitignore = [pattern for pattern in (".env", "*.pem", "*.key") if pattern.lower() not in gitignore]
     if missing_gitignore:
         findings.append(Finding(
-            "CY-000",
+            "CY-SECRET-003",
             "P3",
             "Sensitive file patterns missing from .gitignore",
             "Common local secret file patterns are not explicitly ignored.",
@@ -596,13 +761,25 @@ def run_deep_checks(root: Path, ci: List[str], gitignore: str) -> List[Finding]:
     return findings
 
 
+def _segment_hit(needle: str, segment: str) -> bool:
+    """Match a risk hint against one path segment on word boundaries.
+
+    Substring matching produced noise (`rapid/` matched `api`, `user-agent.ts`
+    matched `agent`), so hints only match whole segments, simple plurals, and
+    boundary-delimited prefixes.
+    """
+    if segment in (needle, needle + "s", needle + "es"):
+        return True
+    return segment.startswith((needle + ".", needle + "-", needle + "_", needle + "s.", needle + "es."))
+
+
 def path_hints(root: Path, files: List[Path]) -> Dict[str, List[str]]:
     hints: Dict[str, List[str]] = {}
     for p in files:
         rp = rel(root, p)
-        lower = rp.lower()
+        segments = [s.lower() for s in Path(rp).parts]
         for needle, label in RISK_PATH_HINTS:
-            if needle in lower:
+            if any(_segment_hit(needle, segment) for segment in segments):
                 hints.setdefault(label, []).append(rp)
     return {k: sorted(set(v))[:40] for k, v in sorted(hints.items())}
 
@@ -610,8 +787,9 @@ def path_hints(root: Path, files: List[Path]) -> Dict[str, List[str]]:
 def tree_sample(root: Path, max_lines: int = 140) -> List[str]:
     lines: List[str] = []
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in IGNORED_DIRS]
-        cur = Path(dirpath)
+        parent = Path(dirpath)
+        dirnames[:] = sorted(d for d in dirnames if keep_dir(parent, d))
+        cur = parent
         depth = len(cur.relative_to(root).parts) if cur != root else 0
         if depth > 3:
             dirnames[:] = []
@@ -627,40 +805,39 @@ def tree_sample(root: Path, max_lines: int = 140) -> List[str]:
 
 
 def build_findings(
-    real_env_files: List[str],
-    env_files: List[str],
-    suspicious_high: List[str],
-    suspicious_low: List[str],
+    content: Dict[str, List[str]],
     tests: List[str],
     ci: List[str],
     gitignore: str,
     deps_found: Dict[str, List[str]],
+    missing_lockfile: bool = False,
     deep_findings: Optional[List[Finding]] = None,
 ) -> List[Finding]:
+    """Build scan findings with stable, semantic rule IDs.
+
+    IDs are part of the public contract: suppressions, diffs, and CI gates key
+    off them, so they must stay identical run-to-run and release-to-release.
+    """
     findings: List[Finding] = []
-    n = 0
+    real_env_files = content["real_env_files"]
+    env_files = content["env_files"]
 
-    def nid() -> str:
-        nonlocal n
-        n += 1
-        return f"CY-{n:03d}"
-
-    if suspicious_high:
+    if content["suspicious_high"]:
         findings.append(Finding(
-            nid(), "P0", "High-confidence credential shape in source",
+            "CY-SECRET-001", "P0", "High-confidence credential shape in source",
             "One or more files contain a credential-shaped value. "
             "Rotate anything real, move it to environment variables, and confirm it is gitignored.",
-            suspicious_high,
+            content["suspicious_high"],
             category="C3",
             recommended_fix="Rotate anything real, remove it from source, load it from environment variables, and confirm history exposure.",
         ))
 
-    if suspicious_low:
+    if content["suspicious_low"]:
         findings.append(Finding(
-            nid(), "P2", "Possible secret-like field without credential shape",
+            "CY-SECRET-002", "P2", "Possible secret-like field without credential shape",
             "A file contains a secret-like assignment, but no known credential shape was found. "
             "Review it before renaming fields or accepting it as benign.",
-            suspicious_low,
+            content["suspicious_low"],
             category="C3",
             recommended_fix="Verify whether the value is a credential. If it is benign, add a reviewed `.checkyourself.yml` suppression; if real, move it to environment variables.",
         ))
@@ -668,7 +845,7 @@ def build_findings(
     env_ignored = ".env" in gitignore
     if real_env_files and not env_ignored:
         findings.append(Finding(
-            nid(), "P0", "A real .env file may be committed",
+            "CY-ENV-001", "P0", "A real .env file may be committed",
             "A non-example .env file exists and `.env` is not in .gitignore. "
             "If this is tracked by git, secrets are in your history. Gitignore it and rotate.",
             real_env_files,
@@ -677,7 +854,7 @@ def build_findings(
         ))
     elif real_env_files:
         findings.append(Finding(
-            nid(), "P2", "Local .env present (verify it is not tracked)",
+            "CY-ENV-002", "P2", "Local .env present (verify it is not tracked)",
             "A non-example .env exists; `.env` is in .gitignore, but confirm it was never committed earlier.",
             real_env_files,
             category="C3",
@@ -687,7 +864,7 @@ def build_findings(
     has_example = any(Path(e).name.lower() in ENV_EXAMPLE_NAMES for e in env_files)
     if real_env_files and not has_example:
         findings.append(Finding(
-            nid(), "P1", "No .env.example for required configuration",
+            "CY-ENV-003", "P1", "No .env.example for required configuration",
             "The app uses environment variables but ships no .env.example. New contributors and "
             "deploys can miss required config. Add a documented example with no real values.",
             real_env_files,
@@ -695,9 +872,69 @@ def build_findings(
             recommended_fix="Add `.env.example` with variable names, safe placeholders, and setup notes.",
         ))
 
+    if content["default_credentials"]:
+        findings.append(Finding(
+            "CY-CONFIG-002", "P1", "Default or weak credentials in committed configuration",
+            "A committed file assigns a well-known default password or uses a default-credential "
+            "connection string. Anyone who reads the repo can log in.",
+            content["default_credentials"],
+            category="C3",
+            recommended_fix="Replace default credentials with strong generated values loaded from the environment, and rotate anything already deployed.",
+        ))
+
+    if content["debug_flags"]:
+        findings.append(Finding(
+            "CY-CONFIG-001", "P2", "Debug mode enabled in configuration",
+            "A debug flag is switched on in committed configuration. If this reaches production it can "
+            "leak stack traces, secrets, and internal state to users.",
+            content["debug_flags"],
+            category="C3",
+            recommended_fix="Default debug to off, enable it only via local environment overrides, and verify production config never sets it.",
+        ))
+
+    if content["cors_wildcards"]:
+        findings.append(Finding(
+            "CY-API-001", "P2", "CORS allows any origin",
+            "A wildcard CORS origin was found. Combined with credentials or sensitive responses, "
+            "any website can call your API on behalf of its visitors.",
+            content["cors_wildcards"],
+            category="C4",
+            recommended_fix="Replace the wildcard with an explicit allowlist of trusted origins and never combine `*` with credentials.",
+        ))
+
+    if content["dangerous_sinks"]:
+        findings.append(Finding(
+            "CY-CODE-001", "P2", "Dangerous code pattern in application source",
+            "The code uses a pattern that is unsafe with untrusted input, such as eval, unsafe "
+            "deserialization, raw HTML injection, or disabled TLS verification.",
+            content["dangerous_sinks"],
+            category="C4",
+            recommended_fix="Replace each flagged pattern with the safe equivalent, or document why the input can never be attacker-controlled.",
+        ))
+
+    if content["sourcemap_configs"]:
+        findings.append(Finding(
+            "CY-WEB-001", "P3", "Source maps enabled for production builds",
+            "Production source maps ship your original source to every visitor, making "
+            "reverse-engineering and secret-hunting easier.",
+            content["sourcemap_configs"],
+            category="C9",
+            recommended_fix="Disable production source maps, or restrict them to your error-tracking service.",
+        ))
+
+    if missing_lockfile:
+        findings.append(Finding(
+            "CY-SUPPLY-002", "P2", "No dependency lockfile committed",
+            "package.json exists but no lockfile was found. Every install can resolve different "
+            "dependency versions, so builds are not reproducible and supply-chain risk is unpinned.",
+            ["package.json present without package-lock.json, pnpm-lock.yaml, yarn.lock, or bun.lock"],
+            category="C6",
+            recommended_fix="Commit the lockfile for your package manager and use frozen-lockfile installs in CI.",
+        ))
+
     if not tests:
         findings.append(Finding(
-            nid(), "P1", "No automated tests detected",
+            "CY-TEST-001", "P1", "No automated tests detected",
             "No test files were found. At minimum, add tests around auth, money, and data-loss paths.",
             [],
             category="C5",
@@ -706,7 +943,7 @@ def build_findings(
 
     if not ci:
         findings.append(Finding(
-            nid(), "P2", "No CI pipeline detected",
+            "CY-CI-001", "P2", "No CI pipeline detected",
             "No CI configuration found. A CI gate catches regressions before they reach users.",
             [],
             category="C6",
@@ -715,7 +952,7 @@ def build_findings(
 
     if "Stripe/payments" in deps_found and not tests:
         findings.append(Finding(
-            nid(), "P1", "Payments present but no tests",
+            "CY-PAY-001", "P1", "Payments present but no tests",
             "A payments dependency was detected with no tests. Payment flows are high-blast-radius; "
             "add negative and webhook tests.",
             [],
@@ -723,35 +960,43 @@ def build_findings(
             recommended_fix="Add payment success, failure, idempotency, and webhook signature tests.",
         ))
 
-    for finding in deep_findings or []:
-        n += 1
-        finding.id = f"CY-{n:03d}"
-        findings.append(finding)
+    llm_deps = sorted(set(deps_found) & LLM_DEPENDENCY_LABELS)
+    if llm_deps and not tests:
+        findings.append(Finding(
+            "CY-AI-001", "P2", "LLM integration present but no tests",
+            "An LLM dependency was detected with no tests. Untested AI paths fail in expensive ways: "
+            "malformed outputs, runaway token spend, and prompt-injection regressions.",
+            [f"LLM dependency detected: {label}" for label in llm_deps],
+            category="C10",
+            recommended_fix="Add tests for output validation, failure handling, and cost guards around every model call.",
+        ))
 
+    findings.extend(deep_findings or [])
     findings.sort(key=lambda f: (SEVERITY_ORDER.get(f.severity, 9), f.id))
     return findings
 
 
-def scan(root: Path, deep: bool = False) -> dict:
+def scan(root: Path, deep: bool = False, max_files: int = DEFAULT_MAX_FILES) -> dict:
     root = root.resolve()
-    files = iter_files(root)
+    files, scan_limits = iter_files(root, limit=max_files)
     stack_signals, scripts, deps_found = detect_stack(root)
-    env_files, real_env_files, suspicious_high, suspicious_low = scan_env_and_secrets(root, files)
+    content = scan_file_contents(root, files)
     tests = find_tests(root, files)
     ci = find_ci(root)
     hints = path_hints(root, files)
     gitignore = gitignore_entries(root)
     deep_results = run_deep_checks(root, ci, gitignore) if deep else []
+    missing_lockfile = (root / "package.json").exists() and not any(
+        (root / name).exists() for name in LOCKFILE_NAMES
+    )
     findings = build_findings(
-        real_env_files,
-        env_files,
-        suspicious_high,
-        suspicious_low,
+        content,
         tests,
         ci,
         gitignore,
         deps_found,
-        deep_results,
+        missing_lockfile=missing_lockfile,
+        deep_findings=deep_results,
     )
     config = load_checkyourself_config(root)
     finding_dicts = apply_suppressions([f.to_dict() for f in findings], config.get("suppress") or [])
@@ -771,10 +1016,11 @@ def scan(root: Path, deep: bool = False) -> dict:
         "project": str(root),
         "deep": deep,
         "files_scanned": len(files),
+        "scan_limits": scan_limits,
         "stack_signals": stack_signals,
         "dependencies": {k: sorted(set(v)) for k, v in sorted(deps_found.items())},
         "scripts": scripts,
-        "env_files": env_files,
+        "env_files": content["env_files"],
         "tests": tests,
         "ci": ci,
         "risk_surfaces": hints,
@@ -797,6 +1043,15 @@ def render_markdown(root: Path, data: dict) -> str:
     add(f"- Generated at: {data['generated_at']}")
     add(f"- Project root: `{data['project']}`")
     add(f"- Files scanned: {data['files_scanned']}")
+    limits = data.get("scan_limits") or {}
+    if limits.get("truncated"):
+        add(f"- WARNING: scan truncated at {limits.get('max_files')} files; "
+            f"{limits.get('files_beyond_limit')} files were not scanned. "
+            "Findings may be incomplete — rerun with a higher --max-files.")
+    if limits.get("symlinks_skipped"):
+        add(f"- Note: {limits['symlinks_skipped']} symlinked path(s) were skipped and not scanned.")
+    if limits.get("files_unreadable"):
+        add(f"- Note: {limits['files_unreadable']} file(s) could not be read and were not scanned.")
     add("")
     add("## Scope guardrails")
     add("")
@@ -910,8 +1165,11 @@ def coverage_check(data: dict) -> dict:
         raise CliError("coverage artifact must contain a surfaces array")
 
     by_id = {str(item.get("id")): item for item in surfaces if isinstance(item, dict) and item.get("id")}
-    by_name = {str(item.get("surface") or item.get("category")): item for item in surfaces if isinstance(item, dict)}
+    # Key strictly on the surface name: falling back to category collapsed
+    # multiple surfaces onto one key and over-reported missing rows.
+    by_name = {str(item.get("surface")): item for item in surfaces if isinstance(item, dict) and item.get("surface")}
     valid_statuses = {"Pass", "Finding", "Unknown", "NotApplicable"}
+    pathlike_re = re.compile(r"[\w./\\-]+\.\w+|:\d+")
 
     for sid, surface, _category in COVERAGE_SURFACES:
         item = by_id.get(sid) or by_name.get(surface)
@@ -926,6 +1184,8 @@ def coverage_check(data: dict) -> dict:
         missing = item.get("missing_evidence") or []
         if status == "Pass" and not evidence:
             errors.append(f"{sid} is Pass but has no evidence_reviewed")
+        if status == "Pass" and evidence and not any(pathlike_re.search(str(e)) for e in evidence):
+            warnings.append(f"{sid} Pass evidence has no file or file:line reference; prefer concrete receipts")
         if status == "Unknown" and not missing:
             warnings.append(f"{sid} is Unknown but missing_evidence is empty")
         if status == "NotApplicable" and not item.get("not_applicable_reason"):
@@ -964,7 +1224,10 @@ def normalize_findings(data: Any) -> List[dict]:
         severity = str(raw.get("severity") or "P3")
         status = str(raw.get("status") or "open")
         fid = str(raw.get("id") or raw.get("finding_id") or f"F-{i:03d}")
-        category = str(raw.get("category") or infer_category(title + " " + detail))
+        raw_category = str(raw.get("category") or "")
+        # Unknown category labels (e.g. "security") would be counted toward
+        # caps but never penalized per-category, so normalize them here.
+        category = raw_category if raw_category in SCORE_CATEGORIES else infer_category(title + " " + detail)
         evidence = raw.get("evidence") if isinstance(raw.get("evidence"), list) else []
         normalized.append({
             "id": fid,
@@ -1019,6 +1282,13 @@ def default_fix_for(title: str, category: str) -> str:
 
 
 def category_coverage(coverage_data: Optional[dict]) -> Tuple[Dict[str, dict], bool]:
+    """Fold surface-level coverage into per-category scoring state.
+
+    Anti-gaming rules: a surface omitted from the artifact counts as Unknown
+    (never as full credit), Pass without evidence downgrades to Unknown, and
+    NotApplicable without a reason downgrades to Unknown. Omitting or
+    hand-waving a surface must never score better than honestly reporting it.
+    """
     category_state: Dict[str, dict] = {
         cid: {
             "status": "MissingCoverage",
@@ -1035,35 +1305,59 @@ def category_coverage(coverage_data: Optional[dict]) -> Tuple[Dict[str, dict], b
     if not isinstance(surfaces, list):
         return category_state, False
 
+    name_to_id = {surface: sid for sid, surface, _category in COVERAGE_SURFACES}
+    id_to_category = {sid: category for sid, _surface, category in COVERAGE_SURFACES}
+    scored_surface_ids = {sid for sid, _surface, category in COVERAGE_SURFACES if category in SCORE_CATEGORIES}
+
     category_state = {
-        cid: {"status": "NotApplicable", "evidence_reviewed": [], "missing_evidence": [], "surfaces": []}
+        cid: {"status": None, "evidence_reviewed": [], "missing_evidence": [], "surfaces": []}
         for cid in SCORE_CATEGORIES
     }
-    represented = set()
-    status_rank = {"Finding": 3, "Unknown": 2, "Pass": 1, "NotApplicable": 0}
+    status_rank = {"Finding": 4, "Unknown": 3, "Pass": 2, "NotApplicable": 1}
+    present_ids = set()
 
     for item in surfaces:
         if not isinstance(item, dict):
             continue
-        category = str(item.get("category") or "")
+        sid = str(item.get("id") or name_to_id.get(str(item.get("surface") or ""), ""))
+        category = str(item.get("category") or id_to_category.get(sid, ""))
         if category not in SCORE_CATEGORIES:
+            if sid:
+                present_ids.add(sid)
             continue
-        represented.add(str(item.get("id") or item.get("surface") or category))
+        if sid:
+            present_ids.add(sid)
         state = category_state[category]
         status = item.get("status") or "Unknown"
-        current = state["status"]
-        if status_rank.get(status, 2) > status_rank.get(current, 0):
+        evidence = [str(x) for x in item.get("evidence_reviewed") or []]
+        if status == "Pass" and not evidence:
+            status = "Unknown"
+            state["missing_evidence"].append(f"{sid or 'surface'} marked Pass without evidence_reviewed")
+        if status == "NotApplicable" and not str(item.get("not_applicable_reason") or "").strip():
+            status = "Unknown"
+            state["missing_evidence"].append(f"{sid or 'surface'} marked NotApplicable without a reason")
+        if state["status"] is None or status_rank.get(status, 3) > status_rank.get(state["status"], 0):
             state["status"] = status
-        state["surfaces"].append(str(item.get("id") or item.get("surface") or category))
-        state["evidence_reviewed"].extend(str(x) for x in item.get("evidence_reviewed") or [])
+        state["surfaces"].append(sid or str(item.get("surface") or category))
+        state["evidence_reviewed"].extend(evidence)
         state["missing_evidence"].extend(str(x) for x in item.get("missing_evidence") or [])
 
-    complete = len({sid for sid, _, _ in COVERAGE_SURFACES}) <= len(
-        {str(item.get("id")) for item in surfaces if isinstance(item, dict) and item.get("id")}
-    )
+    for sid in sorted(scored_surface_ids - present_ids):
+        category = id_to_category[sid]
+        state = category_state[category]
+        state["missing_evidence"].append(f"surface {sid} missing from coverage artifact")
+        if state["status"] is None or status_rank.get("Unknown", 3) > status_rank.get(state["status"], 0):
+            state["status"] = "Unknown"
+
     for state in category_state.values():
+        if state["status"] is None:
+            state["status"] = "MissingCoverage"
+            state["missing_evidence"].append("no coverage entries supplied for this category")
         state["evidence_reviewed"] = sorted(set(state["evidence_reviewed"]))
         state["missing_evidence"] = sorted(set(state["missing_evidence"]))
+
+    required_ids = {sid for sid, _surface, _category in COVERAGE_SURFACES}
+    complete = required_ids <= present_ids
     return category_state, complete
 
 
@@ -1104,7 +1398,15 @@ def inferred_coverage_from_scan(scan_data: dict, findings: List[dict]) -> Dict[s
     if c3_findings:
         set_state("C3", "Finding", [f["id"] for f in c3_findings], [], ["S08"])
     else:
-        set_state("C3", "Pass", ["scan found no open secret/runtime-config findings"], [], ["S08"])
+        # A regex scanner finding nothing is absence of evidence, not evidence
+        # of safe secret handling, so this stays Unknown rather than Pass.
+        set_state(
+            "C3",
+            "Unknown",
+            ["scan found no open secret/runtime-config findings (absence of evidence only)"],
+            ["manual secret-handling and runtime-config review still needed"],
+            ["S08"],
+        )
 
     tests = scan_data.get("tests") if isinstance(scan_data.get("tests"), list) else []
     if tests:
@@ -1196,11 +1498,12 @@ def score_from_inputs(findings_data: Any, coverage_data: Optional[dict] = None) 
 
     critical_gap = False
     high_score_gap = False
-    apply_missing_coverage_caps = coverage_data is not None
+    # Evidence caps apply in every score mode: an estimate without coverage
+    # evidence must never report a launch-ready number.
     for cid, state in coverage_by_category.items():
-        if apply_missing_coverage_caps and state["status"] in {"Unknown", "MissingCoverage"} and cid in CRITICAL_CATEGORIES:
+        if state["status"] in {"Unknown", "MissingCoverage"} and cid in CRITICAL_CATEGORIES:
             critical_gap = True
-        if apply_missing_coverage_caps and state["status"] in {"Unknown", "MissingCoverage"} and cid in HIGH_SCORE_GATE_CATEGORIES:
+        if state["status"] in {"Unknown", "MissingCoverage"} and cid in HIGH_SCORE_GATE_CATEGORIES:
             high_score_gap = True
     if critical_gap:
         cap_value = min(cap_value, 84)
@@ -1210,9 +1513,13 @@ def score_from_inputs(findings_data: Any, coverage_data: Optional[dict] = None) 
         caps.append({"cap": 90, "reason": "score above 90 requires evidence for tests, secrets, deploy/rollback, observability, auth, and data boundaries"})
 
     score = min(raw_score, cap_value)
+    any_gap = any(
+        state["status"] in {"Unknown", "MissingCoverage"}
+        for state in coverage_by_category.values()
+    )
     if score_mode != "coverage-backed":
         confidence = "low"
-    elif coverage_complete and not critical_gap and not any(c["reason"].startswith("coverage") for c in caps):
+    elif coverage_complete and not critical_gap and not any_gap:
         confidence = "high"
     elif coverage_complete and not critical_gap:
         confidence = "medium"
@@ -1232,7 +1539,7 @@ def score_from_inputs(findings_data: Any, coverage_data: Optional[dict] = None) 
         "per_category": per_category,
         "findings_scored": [f["id"] for f in unresolved],
         "coverage_complete": coverage_complete,
-        "manual_evidence_needed": [] if coverage_data is not None else missing_manual_evidence(coverage_by_category),
+        "manual_evidence_needed": missing_manual_evidence(coverage_by_category),
     }
 
 
@@ -1273,6 +1580,52 @@ def next_from_findings(findings_data: Any) -> dict:
         "generated_at": now_iso(),
         "next_approval_batch": batch,
         "finding_ids": [item["finding_id"] for item in batch],
+    }
+
+
+def diff_findings(old_data: Any, new_data: Any) -> dict:
+    """Compare two findings artifacts (scan output, report, or finding list).
+
+    Stable rule IDs make this meaningful: the same risk keeps the same ID
+    across runs, so added/resolved is a real delta, not ID-shuffle noise.
+    """
+    old_findings = {f["id"]: f for f in normalize_findings(old_data)}
+    new_findings = {f["id"]: f for f in normalize_findings(new_data)}
+    added_ids = sorted(set(new_findings) - set(old_findings))
+    resolved_ids = sorted(set(old_findings) - set(new_findings))
+    persisting_ids = sorted(set(old_findings) & set(new_findings))
+
+    evidence_changes: List[dict] = []
+    for fid in persisting_ids:
+        old_evidence = set(old_findings[fid].get("evidence") or [])
+        new_evidence = set(new_findings[fid].get("evidence") or [])
+        if old_evidence != new_evidence:
+            evidence_changes.append({
+                "id": fid,
+                "evidence_added": sorted(new_evidence - old_evidence),
+                "evidence_resolved": sorted(old_evidence - new_evidence),
+            })
+
+    def open_counts(findings: Dict[str, dict]) -> Dict[str, int]:
+        counts = {sev: 0 for sev in ("P0", "P1", "P2", "P3")}
+        for f in findings.values():
+            if f.get("status") not in RESOLVED_STATUSES:
+                counts[f["severity"]] = counts.get(f["severity"], 0) + 1
+        return counts
+
+    old_counts = open_counts(old_findings)
+    new_counts = open_counts(new_findings)
+    return {
+        "tool": TOOL_NAME,
+        "schema": "checkyourself-diff/1",
+        "generated_at": now_iso(),
+        "added": [new_findings[fid] for fid in added_ids],
+        "resolved": [old_findings[fid] for fid in resolved_ids],
+        "unchanged": persisting_ids,
+        "evidence_changes": evidence_changes,
+        "old_counts": old_counts,
+        "new_counts": new_counts,
+        "regression": any(new_counts[sev] > old_counts[sev] for sev in ("P0", "P1")),
     }
 
 
@@ -1334,6 +1687,7 @@ def describe_capabilities() -> dict:
         ("score", "Compute a deterministic Production Reality Score from findings and optional coverage, with score history.", {"findings": "json path", "coverage": "optional json path", "history": "optional path"}, SCORE_SCHEMA_ID),
         ("backlog", "Rank remediation backlog and first approval batch.", {"findings": "json path"}, "checkyourself-backlog/1"),
         ("next", "Return the next safest unresolved approval batch.", {"findings": "json path"}, "checkyourself-next-batch/1"),
+        ("diff", "Compare two findings artifacts and report added, resolved, and regressed findings.", {"old": "json path", "new": "json path"}, "checkyourself-diff/1"),
         ("validate", "Validate an artifact against a bundled JSON schema subset.", {"kind": "schema kind", "file": "json path"}, "checkyourself-validation/1"),
         ("schema", "Print a bundled schema by name.", {"name": "schema name"}, "json-schema"),
         ("init", "Create starter generated coverage/context files without overwriting by default.", {"project": "path"}, "checkyourself-init/1"),
@@ -1362,8 +1716,13 @@ def describe_capabilities() -> dict:
             "caps": [
                 {"cap": 49, "condition": "any unresolved P0"},
                 {"cap": 74, "condition": "any unresolved P1"},
-                {"cap": 84, "condition": "missing evidence in C1/C2/C3"},
-                {"cap": 90, "condition": "score above 90 without evidence for key launch gates"},
+                {"cap": 84, "condition": "missing evidence in C1/C2/C3 (applies in every score mode)"},
+                {"cap": 90, "condition": "score above 90 without evidence for key launch gates (applies in every score mode)"},
+            ],
+            "score_modes": [
+                {"mode": "coverage-backed", "trigger": "a coverage artifact was supplied", "max_confidence": "high"},
+                {"mode": "scan-derived-estimate", "trigger": "findings input is a checkyourself-scan/1 object and no coverage supplied", "max_confidence": "low"},
+                {"mode": "finding-only-estimate", "trigger": "plain findings without scan context or coverage", "max_confidence": "low"},
             ],
             "confidence_labels": ["high", "medium", "low"],
         },
@@ -1391,13 +1750,13 @@ def schema_registry() -> Dict[str, str]:
         "report": "checkyourself-report.schema.json",
         "dashboard": "dashboard-data.schema.json",
         "dashboard-data": "dashboard-data.schema.json",
-        "dashboard-html": "checkyourself-dashboard.schema.json",
         "learning-plan": "learning-plan.schema.json",
         "scan": "scan.schema.json",
         "coverage": "coverage.schema.json",
         "score": "score-result.schema.json",
         "backlog": "backlog.schema.json",
         "next": "next-batch.schema.json",
+        "diff": "diff.schema.json",
         "capabilities": "capabilities.schema.json",
     }
 
@@ -1508,7 +1867,7 @@ def init_project(project: Path, force: bool = False) -> dict:
         if path.exists() and not force:
             skipped.append(str(path))
             continue
-        path.write_text(body, encoding="utf-8")
+        safe_write_text(path, body)
         created.append(str(path))
     return {
         "tool": TOOL_NAME,
@@ -1517,6 +1876,17 @@ def init_project(project: Path, force: bool = False) -> dict:
         "created": created,
         "skipped": skipped,
     }
+
+
+def safe_write_text(path: Path, body: str) -> None:
+    """Write a generated file, refusing to write through a symlink.
+
+    Generated files land inside scanned (potentially untrusted) directories;
+    a pre-planted symlink at the expected name could redirect the write.
+    """
+    if path.is_symlink():
+        raise CliError(f"refusing to write through symlink: {path}")
+    path.write_text(body, encoding="utf-8")
 
 
 def write_json(data: Any) -> None:
@@ -1528,6 +1898,10 @@ def write_text_result(data: dict) -> None:
     if schema == SCAN_SCHEMA_ID:
         c = data["counts"]
         print(f"Scanned {data['files_scanned']} files. Findings — P0: {c['P0']}, P1: {c['P1']}, P2: {c['P2']}, P3: {c['P3']}")
+        limits = data.get("scan_limits") or {}
+        if limits.get("truncated"):
+            print(f"  WARNING: scan truncated at {limits.get('max_files')} files; "
+                  f"{limits.get('files_beyond_limit')} files were not scanned. Rerun with --max-files.")
         for f in data["findings"]:
             print(f"  [{f['severity']}] {f['id']} {f['finding']}")
         print("Next: run the full CheckYourself diagnostic, then use score/backlog/next for deterministic receipts.")
@@ -1548,7 +1922,9 @@ def resolve_history_path(findings_path: str, requested: Optional[str]) -> Option
     if requested:
         return Path(requested)
     if findings_path == "-":
-        return Path.cwd() / DEFAULT_SCORE_HISTORY_PATH
+        # Piped findings should not silently litter the CWD with a history
+        # file; stdin scoring writes history only when --history is explicit.
+        return None
     return Path(findings_path).resolve().parent / DEFAULT_SCORE_HISTORY_PATH
 
 
@@ -1572,30 +1948,38 @@ def append_score_history(path: Optional[Path], result: dict, note: str = "") -> 
             if isinstance(parsed, list):
                 history = [item for item in parsed if isinstance(item, dict)]
         except json.JSONDecodeError:
+            # Never silently destroy the audit trail: preserve the corrupt
+            # file and warn before starting a fresh history.
+            backup = path.with_name(path.name + ".corrupt.bak")
+            try:
+                path.replace(backup)
+                print(f"warning: score history was corrupt; preserved at {backup}", file=sys.stderr)
+            except OSError:
+                print("warning: score history was corrupt and could not be backed up", file=sys.stderr)
             history = []
     history.append(entry)
-    path.write_text(json.dumps(history, indent=2) + "\n", encoding="utf-8")
+    safe_write_text(path, json.dumps(history, indent=2) + "\n")
 
 
 def command_scan(args: argparse.Namespace) -> int:
     root = Path(args.project).resolve()
     if not root.is_dir():
         raise CliError(f"project root not found: {root}")
-    data = scan(root, deep=getattr(args, "deep", False))
+    data = scan(root, deep=getattr(args, "deep", False), max_files=getattr(args, "max_files", DEFAULT_MAX_FILES))
     json_stdout = args.format == "json" or args.json == "-" or (args.no_write and args.json is not None)
 
     if not args.no_write:
         out = Path(args.out)
         if not out.is_absolute():
             out = Path.cwd() / out
-        out.write_text(render_markdown(root, data), encoding="utf-8")
+        safe_write_text(out, render_markdown(root, data))
         if not args.quiet and not json_stdout:
             print(f"Wrote context: {out}")
         if args.json is not None and args.json != "-":
             jout = Path(args.json)
             if not jout.is_absolute():
                 jout = Path.cwd() / jout
-            jout.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            safe_write_text(jout, json.dumps(data, indent=2) + "\n")
             if not args.quiet and not json_stdout:
                 print(f"Wrote JSON:    {jout}")
 
@@ -1643,8 +2027,7 @@ def command_coverage(args: argparse.Namespace) -> int:
     if not out_path and args.format == "text":
         out_path = DEFAULT_COVERAGE_PATH
     if out_path:
-        path = Path(out_path)
-        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        safe_write_text(Path(out_path), json.dumps(data, indent=2) + "\n")
     if args.format == "json":
         write_json(data)
     else:
@@ -1684,6 +2067,25 @@ def command_next(args: argparse.Namespace) -> int:
         write_json(result)
     else:
         write_text_result(result)
+    return 0
+
+
+def command_diff(args: argparse.Namespace) -> int:
+    result = diff_findings(load_json_arg(args.old), load_json_arg(args.new))
+    if args.format == "json":
+        write_json(result)
+    else:
+        added = result["added"]
+        resolved = result["resolved"]
+        print(f"Added: {len(added)}, Resolved: {len(resolved)}, Unchanged: {len(result['unchanged'])}")
+        for f in added:
+            print(f"  + [{f['severity']}] {f['id']} {f['finding']}")
+        for f in resolved:
+            print(f"  - [{f['severity']}] {f['id']} {f['finding']}")
+        if result["regression"]:
+            print("REGRESSION: open P0/P1 count increased against the baseline.")
+    if args.ci and result["regression"]:
+        return 1
     return 0
 
 
@@ -1773,11 +2175,15 @@ def mcp_tools() -> List[dict]:
             "inputSchema": object_schema({
                 "project": {
                     "type": "string",
-                    "description": "Project root path to inspect. Defaults to the MCP server process current directory when omitted.",
+                    "description": "Project root path to inspect, confined to CHECKYOURSELF_SCAN_ROOT (default: the MCP server process current directory).",
                 },
                 "deep": {
                     "type": "boolean",
                     "description": "Run slower validation checks for detected surfaces, such as mutable GitHub Action references. Defaults to false.",
+                },
+                "max_files": {
+                    "type": "integer",
+                    "description": "Maximum files to scan before truncating (default 6000). The result reports truncation in scan_limits.",
                 },
             }),
             "annotations": read_only_annotations("Scan Project"),
@@ -1862,6 +2268,21 @@ def mcp_tools() -> List[dict]:
             "outputSchema": {"type": "object", "description": "Next-batch result using schema checkyourself-next-batch/1."},
         },
         {
+            "name": "diff",
+            "title": "Diff Findings",
+            "description": description(
+                "Compare two inline findings artifacts (scan results, reports, or finding lists) and return added, "
+                "resolved, and unchanged findings, evidence-level changes, severity count deltas, and a regression flag "
+                "that is true when open P0/P1 counts increased. Use this to gate changes against a baseline."
+            ),
+            "inputSchema": object_schema({
+                "old": findings_schema("treat as the baseline"),
+                "new": findings_schema("treat as the current state"),
+            }, ["old", "new"]),
+            "annotations": read_only_annotations("Diff Findings"),
+            "outputSchema": {"type": "object", "description": "Diff result using schema checkyourself-diff/1."},
+        },
+        {
             "name": "validate",
             "title": "Validate Artifact",
             "description": description(
@@ -1902,11 +2323,42 @@ def mcp_tools() -> List[dict]:
     ]
 
 
+def mcp_scan_root() -> Path:
+    return Path(os.environ.get("CHECKYOURSELF_SCAN_ROOT") or os.getcwd()).resolve()
+
+
+def resolve_mcp_scan_path(requested: str) -> Path:
+    """Confine MCP-initiated scans to a configured root.
+
+    The MCP server is driven by agents with attacker-influenceable arguments,
+    so an absolute path like /etc or ~/.aws must not be scannable unless the
+    operator deliberately widened the boundary via CHECKYOURSELF_SCAN_ROOT.
+    """
+    base = mcp_scan_root()
+    candidate = Path(requested) if requested else base
+    if not candidate.is_absolute():
+        candidate = base / candidate
+    resolved = candidate.resolve()
+    try:
+        resolved.relative_to(base)
+    except ValueError:
+        raise CliError(
+            f"scan path {resolved} is outside the allowed scan root {base}. "
+            "Set CHECKYOURSELF_SCAN_ROOT to widen the boundary deliberately.",
+            code=2,
+        )
+    if not resolved.is_dir():
+        raise CliError(f"project root not found: {resolved}", code=2)
+    return resolved
+
+
 def call_mcp_tool(name: str, arguments: dict) -> dict:
     if name == "describe":
         return describe_capabilities()
     if name == "scan":
-        return scan(Path(arguments.get("project") or "."), deep=bool(arguments.get("deep")))
+        project = resolve_mcp_scan_path(str(arguments.get("project") or ""))
+        max_files = int(arguments.get("max_files") or DEFAULT_MAX_FILES)
+        return scan(project, deep=bool(arguments.get("deep")), max_files=max_files)
     if name == "coverage_emit":
         return coverage_emit(str(arguments.get("project") or ""))
     if name == "coverage_check":
@@ -1917,6 +2369,8 @@ def call_mcp_tool(name: str, arguments: dict) -> dict:
         return backlog_from_findings(arguments.get("findings") or {})
     if name == "next":
         return next_from_findings(arguments.get("findings") or {})
+    if name == "diff":
+        return diff_findings(arguments.get("old") or {}, arguments.get("new") or {})
     if name == "validate":
         return validate_artifact(str(arguments.get("kind")), arguments.get("artifact"))
     if name == "schema":
@@ -1978,6 +2432,24 @@ def handle_mcp_message(message: dict) -> Optional[dict]:
         arguments = params.get("arguments") or {}
         if not isinstance(arguments, dict):
             return mcp_error(request_id, -32602, "tools/call arguments must be an object")
+        tools_by_name = {tool["name"]: tool for tool in mcp_tools()}
+        if name not in tools_by_name:
+            return mcp_error(request_id, -32602, f"unknown tool: {name}. Known tools: {', '.join(sorted(tools_by_name))}")
+        input_schema = tools_by_name[name].get("inputSchema") or {}
+        allowed = set((input_schema.get("properties") or {}).keys())
+        unknown = sorted(set(arguments) - allowed)
+        if unknown:
+            # Silently ignoring a misspelled argument (e.g. `path` instead of
+            # `project`) made the tool scan the wrong directory and report
+            # success. Reject unknown keys loudly instead.
+            return mcp_error(
+                request_id, -32602,
+                f"unknown argument(s) for {name}: {', '.join(unknown)}. "
+                f"Allowed: {', '.join(sorted(allowed)) or 'none'}",
+            )
+        missing = sorted(set(input_schema.get("required") or []) - set(arguments))
+        if missing:
+            return mcp_error(request_id, -32602, f"missing required argument(s) for {name}: {', '.join(missing)}")
         try:
             data = call_mcp_tool(name, arguments)
             return mcp_success(request_id, mcp_tool_result(data))
@@ -2000,6 +2472,11 @@ def run_mcp_server() -> int:
         except json.JSONDecodeError as exc:
             response = mcp_error(None, -32700, f"parse error: {exc}")
         else:
+            if not isinstance(message, dict):
+                # JSON-RPC batch arrays would otherwise crash on .get().
+                sys.stdout.write(json.dumps(mcp_error(None, -32600, "batch requests are not supported; send one JSON-RPC object per line"), separators=(",", ":")) + "\n")
+                sys.stdout.flush()
+                continue
             try:
                 response = handle_mcp_message(message)
             except Exception as exc:  # pragma: no cover - defensive protocol boundary.
@@ -2025,6 +2502,8 @@ def add_scan_args(parser: argparse.ArgumentParser) -> None:
                         help="Run slower validation checks for detected surfaces, such as mutable CI actions and dependency-update coverage.")
     parser.add_argument("--no-write", action="store_true", help="Print the summary only; write no files.")
     parser.add_argument("--quiet", action="store_true", help="Suppress the console summary.")
+    parser.add_argument("--max-files", type=int, default=DEFAULT_MAX_FILES,
+                        help=f"Maximum files to scan before truncating (default {DEFAULT_MAX_FILES}). Truncation is disclosed in scan_limits.")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -2080,6 +2559,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--format", choices=("text", "json"), default="text")
     p.set_defaults(func=command_next)
 
+    p = sub.add_parser("diff", help="Compare two findings artifacts and report added/resolved/regressed findings.")
+    p.add_argument("--old", required=True, help="Baseline findings JSON path, or - for stdin.")
+    p.add_argument("--new", required=True, help="Current findings JSON path, or - for stdin.")
+    p.add_argument("--ci", action="store_true", help="Exit non-zero when open P0/P1 counts increased.")
+    p.add_argument("--format", choices=("text", "json"), default="text")
+    p.set_defaults(func=command_diff)
+
     p = sub.add_parser("validate", help="Validate a JSON artifact against a bundled schema.")
     p.add_argument("--kind", required=True, choices=sorted(schema_registry().keys()))
     p.add_argument("file", help="JSON artifact path, or - for stdin.")
@@ -2109,8 +2595,15 @@ def legacy_scan_main(argv: Sequence[str]) -> int:
 
 def main(argv: Optional[List[str]] = None) -> int:
     raw = list(sys.argv[1:] if argv is None else argv)
-    commands = {"describe", "scan", "diagnostic", "schema", "coverage", "score", "backlog", "next", "validate", "init", "mcp"}
+    commands = {"describe", "scan", "diagnostic", "schema", "coverage", "score", "backlog", "next", "diff", "validate", "init", "mcp"}
     try:
+        if raw and raw[0] not in commands and not raw[0].startswith("-") and not Path(raw[0]).exists():
+            # A misspelled command would otherwise be treated as a project
+            # path, silently scanning nothing useful.
+            import difflib
+            close = difflib.get_close_matches(raw[0], sorted(commands), n=1)
+            hint = f" Did you mean: {close[0]}?" if close else ""
+            raise CliError(f"unknown command or path: {raw[0]}.{hint}")
         if not raw or raw[0] not in commands:
             return legacy_scan_main(raw)
         parser = build_parser()

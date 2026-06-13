@@ -22,7 +22,7 @@ Load only what is needed for the current step.
 ## Compact reporting rules
 
 - Keep the full findings register complete but concise.
-- Use stable finding IDs like `F-001`, `F-002`, `F-003`.
+- Use stable finding IDs: the CLI scanner emits semantic IDs like `CY-SECRET-001`; use `F-001`, `F-002` style for findings you author yourself.
 - Put expanded detail on P0/P1 findings and the next approval batch.
 - Summarize P2/P3 items compactly unless the user asks for detail.
 - Avoid repeating the same evidence in multiple sections.

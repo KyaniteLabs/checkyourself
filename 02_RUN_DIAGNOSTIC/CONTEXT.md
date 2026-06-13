@@ -13,13 +13,22 @@ Use this stage for the full read-only CheckYourself diagnostic.
 ## Process
 
 1. Read `rules.md`, `coverage-matrix.md`, and `scoring-method.md`.
-2. Inspect evidence before assumptions.
-3. Represent every coverage-matrix row as Pass, Finding, Unknown, or N/A.
-4. Rank findings by harm and reversibility using `risk-taxonomy.md`.
-5. Produce the Production Reality Report using
+2. Get deterministic receipts first when Python 3 is available:
+   `python3 tools/checkyourself.py scan <project> --format json --no-write`
+   for stack signals and deterministic findings, then
+   `python3 tools/checkyourself.py coverage --emit` for the coverage skeleton,
+   and after filling it with evidence,
+   `python3 tools/checkyourself.py score --findings <scan.json> --coverage <coverage.json>`.
+   Treat scanner findings as confirmed evidence. Do not invent a separate
+   scoring or backlog path. If Python is unavailable, run the same sweep
+   manually and say the score is hand-computed using `scoring-method.md`.
+3. Inspect evidence before assumptions.
+4. Represent every coverage-matrix row as Pass, Finding, Unknown, or N/A.
+5. Rank findings by harm and reversibility using `risk-taxonomy.md`.
+6. Produce the Production Reality Report using
    `05_OUTPUT_TEMPLATES/production-reality-report.md`.
-6. Select the safest first approval batch from the complete backlog.
-7. Offer guided fix mode, dashboard mode, and learning plan only after the
+7. Select the safest first approval batch from the complete backlog.
+8. Offer guided fix mode, dashboard mode, and learning plan only after the
    report exists.
 
 ## Outputs

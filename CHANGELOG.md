@@ -1,5 +1,91 @@
 # Changelog
 
+## 1.7.0 — 2026-06-12
+
+Major reliability, security, and detection-depth pass.
+
+### Detection
+
+- Gave every scan finding a **stable, semantic rule ID** (`CY-SECRET-001`,
+  `CY-CONFIG-001`, …) instead of position-dependent `CY-NNN` numbers, so
+  suppressions, diffs, and CI gates stay valid across runs and releases.
+- Added deterministic detectors: debug flags in committed config
+  (`CY-CONFIG-001`), default/weak credentials (`CY-CONFIG-002`), CORS wildcard
+  (`CY-API-001`), dangerous code sinks — eval, unsafe deserialization, disabled
+  TLS, raw HTML injection (`CY-CODE-001`), production source maps (`CY-WEB-001`),
+  missing lockfile (`CY-SUPPLY-002`), `npm install` in CI (`CY-SUPPLY-004`), and
+  untested LLM integrations (`CY-AI-001`).
+- Expanded secret scanning to more config formats (`.tf`, `.tfvars`,
+  `.properties`, `.ini`, `.cfg`, `.conf`, `.xml`, `.vue`, `.svelte`, and more)
+  and made the secret regexes share one credential-name token list so detection
+  and redaction can never drift apart.
+- Fixed a false negative where the secret scanner stopped after the first
+  high- and low-confidence hit, missing later credentials in the same file.
+- Reduced false positives: risk-surface path hints and test/doc-path skips now
+  match whole path segments instead of substrings (`docker-compose.yml` is no
+  longer treated as a doc, `user-agent.ts` no longer flags as an AI agent path).
+
+### Scoring integrity
+
+- Closed a scoring-gaming vector: a coverage artifact that omits surfaces or
+  marks them `Pass`/`NotApplicable` without evidence can no longer reach a
+  perfect, high-confidence score. Omitted surfaces count as `Unknown`, thin
+  `Pass` entries downgrade to `Unknown`, and `confidence: "high"` requires all
+  20 surfaces present with real evidence.
+- Evidence caps (84/90) now apply in every score mode, so estimates can never
+  report a launch-ready number. A scan finding no secrets is treated as absence
+  of evidence (`Unknown`), not proof of safe handling (`Pass`).
+
+### New capability
+
+- Added a `diff` command and MCP tool: compare two findings artifacts and report
+  added, resolved, and regressed findings, with a `regression` flag and `--ci`
+  gate so CI can block *new* P0/P1 risk instead of only absolute counts.
+
+### Security
+
+- The scanner no longer follows symlinks or reads files outside the scanned
+  tree; skipped symlinks and unreadable files are disclosed in `scan_limits`.
+- Large scans now disclose truncation (`scan_limits.truncated`, configurable via
+  `--max-files`) instead of silently returning a partial result.
+- MCP scans are confined to `CHECKYOURSELF_SCAN_ROOT`, and unknown/misspelled
+  tool arguments and tool names are rejected rather than silently ignored.
+- The composite GitHub Action passes inputs through environment variables to
+  remove a script-injection sink; the Dockerfile runs as a non-root user with a
+  `.dockerignore`; Dependabot now covers the Docker ecosystem.
+- Generated files are never written through a symlink, and a corrupt score
+  history file is preserved as `.corrupt.bak` rather than silently overwritten.
+
+### Documentation and content
+
+- Canonicalized the finding resolution-status vocabulary across every doc to
+  the report-schema set (now including `suppressed`); removed the unschema'd
+  `verified`, `blocked`, and `Scheduled` statuses.
+- Deepened the advanced hardening references with 2026-current, checkable
+  guidance: AI/RAG and agent governance (prompt injection, PII in traces,
+  token-cost controls, output validation), privacy (DSAR/erasure mechanics,
+  consent, breach timelines), deployment (edge/serverless gotchas, platform
+  config checks), and API hardening (webhook signatures, idempotency).
+- Fixed all 38 capability-file reference pointers to resolve from their actual
+  location, expanded `llms.txt` into a real link map, wired the orphaned
+  `identity.md`/`examples.md`/`reference/` files into the context router, added
+  a deterministic-receipts step to the diagnostic stage, and removed the legacy
+  `optional-html-dashboard` folder that v1.4.2 had already claimed to remove.
+- Made the dashboard bilingual behavior ask-first, matching the repo-wide rule.
+- Refreshed the dogfood receipts: the self-audit now scores 100/100 under the
+  stricter v1.7.0 anti-gaming rules, with one reviewed, path-scoped
+  suppression documented in `.checkyourself.yml`.
+
+### Fixes and housekeeping
+
+- Score-history timestamps are UTC for cross-machine comparability; scoring from
+  stdin no longer litters the working directory with a history file.
+- Retired the unused `dashboard-html` schema (the `dashboard-data` schema's
+  `oneOf` already covers the template mode) and added a `diff` schema.
+- Hardened `validate_public.py` against non-dict samples, added directory
+  ignores and a size cap, and gave it its own test suite.
+- Aligned `NOTICE.md` and reference docs with the Apache-2.0 license.
+
 ## 1.6.3
 
 - Calibrated env example detection so files like `.env.dogfood.example` are

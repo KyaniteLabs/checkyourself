@@ -105,8 +105,8 @@ Return a concise report with these sections unless the user requested a concrete
 **Expected handling:** Specify validation, disabled/loading states, accessible labels, error handling, server contract, and tests.
 
 ## References to load on demand
-- `references/frontend-hardening.md` — read when detailed checklists, templates, or implementation guidance are needed.
-- `references/standards-baseline.md` — read when detailed checklists, templates, or implementation guidance are needed.
+- `../../references/frontend-hardening.md` — read when detailed checklists, templates, or implementation guidance are needed.
+- `../../references/standards-baseline.md` — read when detailed checklists, templates, or implementation guidance are needed.
 
 ## Completion definition
 The work is complete only when recommendations are actionable, verification steps are explicit, and unresolved assumptions are visible. Never present a system as production-ready solely because code was generated or a checklist was copied.

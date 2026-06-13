@@ -108,8 +108,8 @@ Return a concise report with these sections unless the user requested a concrete
 **Expected handling:** Design actor tiers, token/cost accounting, burst limits, 429 UX, abuse cases, and monitoring.
 
 ## References to load on demand
-- `references/performance-caching-rate-limits.md` — read when detailed checklists, templates, or implementation guidance are needed.
-- `templates/performance-test-plan.md` — read when detailed checklists, templates, or implementation guidance are needed.
+- `../../references/performance-caching-rate-limits.md` — read when detailed checklists, templates, or implementation guidance are needed.
+- `../../templates/performance-test-plan.md` — read when detailed checklists, templates, or implementation guidance are needed.
 
 ## Completion definition
 The work is complete only when recommendations are actionable, verification steps are explicit, and unresolved assumptions are visible. Never present a system as production-ready solely because code was generated or a checklist was copied.
