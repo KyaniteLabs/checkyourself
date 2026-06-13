@@ -19,14 +19,14 @@ It is not a moral judgment and not a guarantee. It is an evidence-based estimate
 | Frontend UX, accessibility, and client safety | 8 |
 | AI/RAG/agent governance, if applicable | 6 |
 
-If a category does not apply, redistribute its points across the most relevant categories and state why.
+If a category does not apply, mark it `NotApplicable` and provide an explicit `not_applicable_reason`. Its weight slot is not redistributed; the CLI awards the full weight for that category automatically when a valid reason is present. Do not adjust other category weights. Hand-scored totals must treat a NotApplicable category as if it received full credit for that weight, matching the behavior of `score --findings --coverage`.
 
 ## Caps
 
 - Any unresolved P0 caps the final score at 49.
 - Any unresolved P1 caps the final score at 74.
-- Missing evidence in a critical category caps the final score at 84.
-- A score above 90 requires credible evidence for tests, secrets handling, deployment/rollback, observability, auth, and data boundaries.
+- Missing evidence in a critical category caps the final score at 84. This cap applies in every score mode, including estimates.
+- A score above 90 requires credible evidence for tests, secrets handling, deployment/rollback, observability, auth, and data boundaries. This cap applies in every score mode, including estimates.
 
 ## Confidence labels
 

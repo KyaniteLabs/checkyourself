@@ -1,7 +1,8 @@
 # CheckYourself Context Router
 
 This file is the file-first entrypoint for agents using CheckYourself. It keeps
-the repo ICM-compatible without making users read methodology notes first.
+the repo compatible with staged-context (ICM-style) loading without making
+users read methodology notes first.
 
 CheckYourself is a public, folder-based diagnostic system. It uses staged
 Markdown context instead of a runtime framework. Load only the stage needed for
@@ -32,6 +33,10 @@ when the user asks for files or when a handoff artifact is useful.
 | "Make a dashboard" | `10_DASHBOARD/CONTEXT.md` | Existing report only | Optional HTML dashboard or inline Markdown fallback |
 | "Use advanced guidance" | `90_ADVANCED/CONTEXT.md` | Relevant capability only | Specialist checklist or plan |
 
+For product voice and tone, load `identity.md`. For example user requests and
+the expected response shape, load `examples.md`. For the underlying diagnostic,
+learning-plan, and risk-surface philosophy, load the files in `reference/`.
+
 ## Output Handoffs
 
 Use these folders for durable handoffs when file output is requested:
@@ -50,7 +55,7 @@ asks to update the templates.
 The public repository should include the CheckYourself product files and should
 exclude:
 
-- `checkyourself-creator-launch-kit copy/`
+- the private creator/launch-kit sidecar folder
 - `.omx/`
 - `.DS_Store`
 - local generated report/dashboard files unless intentionally committed

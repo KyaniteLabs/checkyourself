@@ -33,7 +33,7 @@ findings:
     title: ""
     plain_risk: ""
     evidence: ""
-    status: "open|proposed|approved|fixed|verified|deferred|accepted-risk|not-applicable"
+    status: "open|proposed|approved|fixed|accepted-risk|deferred|not-applicable|suppressed"
 remediation_waves:
   - wave: "Wave 1"
     goal: ""

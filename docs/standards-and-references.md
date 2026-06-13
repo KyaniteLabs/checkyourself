@@ -22,11 +22,7 @@ Use these as external anchors when the AI needs deeper production-hardening cont
 
 - WCAG: https://www.w3.org/WAI/standards-guidelines/wcag/
 
-## Video publishing
-
-- HyperFrames: https://github.com/heygen-com/hyperframes
-
 ## Licensing
 
-- MIT License text: https://opensource.org/license/mit
-- SPDX MIT identifier: https://spdx.org/licenses/MIT.html
+- Apache License 2.0 text: https://www.apache.org/licenses/LICENSE-2.0
+- SPDX Apache-2.0 identifier: https://spdx.org/licenses/Apache-2.0.html

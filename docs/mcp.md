@@ -26,7 +26,7 @@ The current MCP spec defines stdio messages as newline-delimited JSON-RPC over
 stdin/stdout. The server writes logs only to stderr and writes only valid MCP
 messages to stdout. See the official MCP transport and tools specs:
 [`Transports`](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports)
-and [`Tools`](https://modelcontextprotocol.io/specification/2025-06-18/server/tools).
+and [`Tools`](https://modelcontextprotocol.io/specification/2025-11-25/server/tools).
 
 ## Tools Exposed
 
@@ -39,6 +39,7 @@ and [`Tools`](https://modelcontextprotocol.io/specification/2025-06-18/server/to
 | `score` | `checkyourself score --findings FILE [--coverage FILE]` logic, with inline objects and no history write |
 | `backlog` | `checkyourself backlog --findings FILE` logic |
 | `next` | `checkyourself next --findings FILE` logic |
+| `diff` | compare two findings objects (`old`, `new`); returns added/resolved/regressed findings and a `regression` boolean flag |
 | `validate` | `checkyourself validate --kind KIND FILE` logic, with an inline object |
 | `schema` | `checkyourself schema NAME` |
 
@@ -71,6 +72,12 @@ Use this shape in MCP clients that accept a local stdio server command:
 7. Call `backlog`.
 8. Call `next`.
 9. Ask before making any fix.
+
+## Security Boundaries
+
+MCP scans are confined to the directory set by the `CHECKYOURSELF_SCAN_ROOT` environment variable. If the variable is not set, the server defaults to its own working directory at startup. Scan paths that resolve outside that root are rejected with an error before any file access occurs.
+
+Unknown tool arguments are also rejected rather than silently ignored. MCP host operators should set `CHECKYOURSELF_SCAN_ROOT` to the narrowest directory the agent legitimately needs to inspect, and should treat any rejection as a signal that the host is sending unexpected input.
 
 ## What This Is Not
 

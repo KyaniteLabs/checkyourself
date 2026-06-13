@@ -153,7 +153,8 @@ Global conventions:
 Reuse the existing schemas where they already fit; add the missing machine contracts.
 
 **Reuse:** `schemas/checkyourself-report.schema.json`, `schemas/dashboard-data.schema.json`,
-`schemas/checkyourself-dashboard.schema.json`, `schemas/learning-plan.schema.json`.
+`schemas/learning-plan.schema.json`. (A separate `checkyourself-dashboard.schema.json`
+was reused initially and retired in v1.7.0; `dashboard-data.schema.json` covers both modes.)
 
 **Add:**
 - `schemas/scan.schema.json` — the `checkyourself-scan/1` object `scan` emits.
