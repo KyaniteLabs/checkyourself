@@ -30,7 +30,8 @@ Each finding should end in one of these states:
 - `fixed` — change made and verified;
 - `accepted-risk` — user consciously chose not to fix now;
 - `deferred` — user schedules it for later with a reason/date;
-- `not-applicable` — later evidence showed it does not apply.
+- `not-applicable` — later evidence showed it does not apply;
+- `suppressed` — reviewed false positive scoped in `.checkyourself.yml`.
 
 ## Mandatory categories
 
