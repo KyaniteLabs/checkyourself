@@ -114,7 +114,8 @@
               "fixed",
               "accepted-risk",
               "deferred",
-              "not-applicable"
+              "not-applicable",
+              "suppressed"
             ]
           }
         }
@@ -167,9 +168,10 @@
               "fixed",
               "accepted-risk",
               "deferred",
-              "not-applicable"
+              "not-applicable",
+              "suppressed"
             ],
-            "description": "Every finding remains in the backlog until fixed, accepted-risk, deferred, or not-applicable."
+            "description": "Every finding remains in the backlog until fixed, accepted-risk, deferred, not-applicable, or suppressed with reviewed evidence."
           }
         }
       }

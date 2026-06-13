@@ -151,17 +151,37 @@ def is_ignored(patterns: set[str], rel: str) -> bool:
     return clean in patterns or Path(clean).name in patterns
 
 
+IGNORED_DIR_NAMES = {
+    ".git", ".omx", ".omc", "checkyourself-creator-launch-kit copy",
+    "node_modules", "dist", "build", ".venv", "venv", "__pycache__",
+    ".pytest_cache", ".ruff_cache", ".worktrees",
+}
+MAX_VALIDATED_FILE_BYTES = 5_000_000
+
+_public_files_cache: dict[Path, list[Path]] = {}
+
+
 def public_files(root: Path) -> list[Path]:
-    ignored_roots = {".git", ".omx", "checkyourself-creator-launch-kit copy"}
+    # Several validators walk the tree; cache one walk instead of re-globbing.
+    cached = _public_files_cache.get(root)
+    if cached is not None:
+        return cached
     files: list[Path] = []
     for path in root.rglob("*"):
-        if not path.is_file():
+        if not path.is_file() or path.is_symlink():
             continue
         rel_parts = path.relative_to(root).parts
-        if rel_parts and rel_parts[0] in ignored_roots:
+        if any(part in IGNORED_DIR_NAMES for part in rel_parts):
+            continue
+        try:
+            if path.stat().st_size > MAX_VALIDATED_FILE_BYTES:
+                continue
+        except OSError:
             continue
         files.append(path)
-    return sorted(files)
+    result = sorted(files)
+    _public_files_cache[root] = result
+    return result
 
 
 def validate_required(root: Path, errors: list[str]) -> None:
@@ -212,7 +232,13 @@ def validate_json(root: Path, errors: list[str]) -> None:
         path = root / rel
         if not path.exists():
             continue
-        data = json.loads(text(path))
+        try:
+            data = json.loads(text(path))
+        except json.JSONDecodeError:
+            continue  # Already reported as invalid JSON by the loop above.
+        if not isinstance(data, dict):
+            errors.append(f"dashboard data example must be a JSON object: {rel}")
+            continue
         compact_shape = {"app_name", "score", "confidence", "counts", "coverage", "findings"}
         template_shape = {"project", "score", "counts", "coverage", "backlog", "learning_plan"}
         if not (compact_shape <= data.keys() or template_shape <= data.keys()):
@@ -225,7 +251,13 @@ def validate_manifest(root: Path, errors: list[str]) -> None:
     if not manifest_path.exists() or not changelog_path.exists():
         return
 
-    manifest = json.loads(text(manifest_path))
+    try:
+        manifest = json.loads(text(manifest_path))
+    except json.JSONDecodeError:
+        return  # Already reported as invalid JSON by validate_json.
+    if not isinstance(manifest, dict):
+        errors.append("checkyourself.manifest.json must be a JSON object")
+        return
     version = manifest.get("version")
     if version and f"## {version}" not in text(changelog_path):
         errors.append(f"manifest version {version} is missing from CHANGELOG.md")
