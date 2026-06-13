@@ -2,26 +2,74 @@ on:
   push:
     branches: [main]
   pull_request:
+
 jobs:
   test:
     runs-on: docker
     steps:
       - uses: actions/checkout@v4
-      - name: Debug info
-        run: echo "CI started" && pwd && ls -la
-      - name: Install Python
-        run: apt-get update -qq && apt-get install -y -qq python3 python3-pip
-      - name: Install dependencies
+
+      - name: Install Python and tools
         run: |
-          if [ -f requirements.txt ]; then pip install --break-system-packages -r requirements.txt || true; fi
-          if [ -f pyproject.toml ]; then pip install --break-system-packages -e ".[dev]" 2>/dev/null || true; fi
+          apt-get update -qq
+          apt-get install -y -qq python3 python3-pip git curl tar
+
       - name: Lint
         run: |
-          pip install --break-system-packages ruff 2>/dev/null
-          ruff check . || true
-      - name: Test
+          pip install --break-system-packages -q ruff
+          ruff check tools/ tests/
+
+      - name: Compile Python tools
+        run: python3 -m py_compile tools/checkyourself.py tools/validate_public.py tests/test_checkyourself_cli.py tests/test_validate_public.py
+
+      - name: Unit tests
+        run: python3 -m unittest discover -s tests
+
+      - name: Validate public repository shape
+        run: python3 tools/validate_public.py
+
+      - name: Agent CLI contracts
         run: |
-          if [ -f pytest.ini ] || [ -f setup.cfg ] || [ -d tests ]; then
-            pip install --break-system-packages pytest 2>/dev/null
-            pytest || true
-          fi
+          set -euo pipefail
+          python3 tools/checkyourself.py describe --format json > /tmp/cap.json
+          python3 tools/checkyourself.py validate --kind capabilities /tmp/cap.json
+          python3 tools/checkyourself.py scan . --format json --no-write > /tmp/scan.json
+          python3 tools/checkyourself.py validate --kind scan /tmp/scan.json
+          python3 tools/checkyourself.py scan . --deep --format json --no-write > /tmp/deep.json
+          python3 tools/checkyourself.py validate --kind scan /tmp/deep.json
+          python3 tools/checkyourself.py score --findings /tmp/scan.json --format json --no-history > /tmp/score.json
+          python3 tools/checkyourself.py validate --kind score /tmp/score.json
+          python3 tools/checkyourself.py backlog --findings /tmp/scan.json --format json > /tmp/backlog.json
+          python3 tools/checkyourself.py validate --kind backlog /tmp/backlog.json
+          python3 tools/checkyourself.py next --findings /tmp/scan.json --format json > /tmp/next.json
+          python3 tools/checkyourself.py validate --kind next /tmp/next.json
+          python3 tools/checkyourself.py diff --old /tmp/scan.json --new /tmp/deep.json --format json > /tmp/diff.json
+          python3 tools/checkyourself.py validate --kind diff /tmp/diff.json
+          python3 tools/checkyourself.py coverage --emit --format json > /tmp/cov.json
+          python3 tools/checkyourself.py validate --kind coverage /tmp/cov.json
+
+      - name: MCP wrapper smoke
+        run: |
+          set -euo pipefail
+          {
+            printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}'
+            printf '%s\n' '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+            printf '%s\n' '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
+            printf '%s\n' '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"describe","arguments":{}}}'
+          } | python3 tools/checkyourself.py mcp > /tmp/mcp.out
+          python3 - <<'PY'
+          import json
+          lines = [json.loads(line) for line in open("/tmp/mcp.out", encoding="utf-8")]
+          assert [line["id"] for line in lines] == [1, 2, 3], lines
+          assert any(tool["name"] == "score" for tool in lines[1]["result"]["tools"])
+          assert lines[2]["result"]["structuredContent"]["schema"] == "checkyourself-capabilities/1"
+          print("MCP smoke OK")
+          PY
+
+      - name: Secret scan (gitleaks)
+        run: |
+          set -euo pipefail
+          GITLEAKS_VERSION=8.30.1
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o /tmp/gitleaks.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          /tmp/gitleaks dir . --no-banner --redact --exit-code 1
