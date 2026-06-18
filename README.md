@@ -4,7 +4,7 @@
 
 # CheckYourself
 
-> **Check yourself before you wreck yourself.** A pre-launch reality check for AI-built apps.
+> **Check yourself before you wreck yourself.** A local-first, AI-powered production-readiness audit for apps before they ship.
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 [![Version 1.7.0](https://img.shields.io/badge/version-1.7.0-blue.svg)](CHANGELOG.md)
@@ -13,33 +13,64 @@
 [![Zero dependencies](https://img.shields.io/badge/python-stdlib%20only-black.svg)](#local-cli-and-mcp)
 [![MCP ready](https://img.shields.io/badge/MCP-ready-black.svg)](docs/mcp.md)
 
-CheckYourself turns your AI assistant into a pre-launch production reviewer. Point it at your project, ask for a read-only diagnostic, and get a scored, evidence-backed report of what will break when real users, data, and deploys show up — before they do.
+CheckYourself turns your AI coding assistant into a pre-launch production reviewer. Point it at your project, run a read-only diagnostic, and get a scored, evidence-backed report of what will break when real users, data, and deploys show up — before they do.
 
-It maps your app, checks the places AI-built projects usually get humbled, gives you a 0-100 Production Reality Score, ranks every finding, suggests the safest first fixes, and builds a learning plan from the exact gaps in your project.
-
-It is not a linter with a clipboard. It is not a shame machine. It is a calm, evidence-first second opinion with just enough side-eye to keep your launch honest.
+It maps your app, checks the surfaces AI-built projects usually get humbled on, gives you a 0–100 Production Reality Score with severity caps, ranks every finding, proposes the safest first fixes, and builds a learning plan from the exact gaps it found.
 
 **No SaaS. No account. No model lock-in. No telemetry. No code changes unless you approve them.**
 
-## Why CheckYourself, not just "review my app"
+---
 
-Asking your AI to "review my app" gives you a different answer every time and stops after the first three obvious things. CheckYourself makes the audit *repeatable and hard to fake*:
+## What is this?
 
-- **Complete, not shallow.** A 20-surface coverage sweep that refuses to stop at the first few findings — every surface ends as Pass, Finding, Unknown, or Not-applicable, with evidence.
-- **A score you can't game.** Severity caps keep real risk from hiding behind polish, missing evidence counts as Unknown (never an automatic pass), and an estimate can never report a launch-ready number. [How the score works.](docs/checkyourself-score-explained.md)
-- **Stable, citable findings.** Every deterministic finding has a fixed rule ID (`CY-SECRET-001`, `CY-CONFIG-001`, …) so you can suppress it, track it, and gate CI on it across runs.
-- **Regression-aware.** `diff` compares two runs and fails CI when new P0/P1 risk appears — so you gate on *what changed*, not just an absolute count.
-- **Local-first and inspectable.** Plain Markdown plus a zero-dependency Python CLI. Nothing leaves your machine; secret values are redacted before they ever reach output.
+CheckYourself is a **production-readiness audit toolkit** for AI-built applications. It is a plain-Markdown prompt-and-pipeline system with a zero-dependency Python CLI that runs entirely on your machine. It works with any AI assistant — Claude, ChatGPT, Cursor, Windsurf, Copilot, local models, and more — to give you a repeatable, evidence-first second opinion before launch.
 
-## Quick Start
+It is not a linter with a clipboard. It is not a shame machine. It is a calm, hard-to-fake audit with just enough side-eye to keep your launch honest.
 
-Get the folder (clone it as a sibling of your project, or copy it in):
+---
+
+## Features
+
+- **20-surface coverage sweep** — every surface ends as Pass, Finding, Unknown, or Not-applicable, with evidence. The audit never stops at the first three obvious things.
+- **Production Reality Score (0–100)** — severity caps keep real risk from hiding behind polish; missing evidence counts as Unknown (never an automatic pass); an estimate can never report a launch-ready number. [How the score works →](docs/checkyourself-score-explained.md)
+- **Stable, citable rule IDs** — every deterministic finding gets a fixed ID (`CY-SECRET-001`, `CY-CONFIG-001`, …) so you can suppress, track, and gate CI on it across runs.
+- **Regression-aware diff** — compare two runs and fail CI when new P0/P1 risk appears. Gate on *what changed*, not just an absolute count.
+- **Safest first fix batch** — ranks the backlog by harm, reversibility, and learning value, then proposes a small approval-ready batch with verification and rollback notes.
+- **Guided fix loop** — approve fixes one batch at a time, verify receipts, rescore, repeat.
+- **Bespoke learning plan** — turns the gaps in your project into practical next lessons with trusted sources and relevant videos.
+- **Optional dashboard** — self-contained HTML/CSS view or compact inline Markdown when tokens matter.
+- **Model-agnostic** — works with ChatGPT, Claude Projects, Cursor, Windsurf, Replit, Lovable, Bolt, local models, and any tool that speaks MCP.
+- **Local-first and inspectable** — plain Markdown output, stdlib-only Python CLI, redacted secrets, nothing leaves your machine.
+- **MCP server** — expose CheckYourself as a tool via the Model Context Protocol for agentic workflows. [MCP docs →](docs/mcp.md)
+
+---
+
+## Installation
+
+### Option 1: Clone the repo
 
 ```bash
 git clone https://github.com/KyaniteLabs/checkyourself.git
+cd checkyourself
 ```
 
-Kick the tires read-only in one command — no dependencies, nothing leaves your machine:
+### Option 2: Use via Docker (for MCP)
+
+```bash
+docker build -t checkyourself .
+```
+
+### Option 3: Copy into your project
+
+Copy the `checkyourself/` folder as a sibling of (or inside) your project. No `pip install`, no dependencies — the CLI is Python stdlib only.
+
+**Requirements:** Python 3.10+
+
+---
+
+## Quick Start
+
+Run a one-command, read-only scan — no dependencies, nothing leaves your machine:
 
 ```bash
 python3 checkyourself/tools/checkyourself.py scan /path/to/your/project
@@ -57,9 +88,13 @@ After the diagnostic, create a learning plan based on the gaps you found.
 
 Then: review the score, findings, backlog, and safest first fix batch → approve fixes one batch at a time → recheck, rescore, and learn what to avoid next time.
 
-## What a check looks like
+---
 
-You get a plain-English report, not a wall of lint. Here is the shape of it:
+## Usage
+
+### What a check looks like
+
+You get a plain-English report, not a wall of lint:
 
 ```text
 Production Reality Score: 49 / 100   (one unresolved P0 caps the score at 49)
@@ -82,44 +117,61 @@ P2 — fix when you can
 Safest first fix batch: CY-SECRET-001  (reversible, high-impact, with verification)
 ```
 
-Deterministic detector findings carry stable `CY-` IDs you can suppress and gate
-on; findings that need your AI's judgment (like the `[auth]` one above) are
-tagged by surface instead. Then it ranks the full backlog, proposes a small
-approval-ready first batch with verification and rollback notes, and — once you
-approve — fixes, re-verifies, and rescores. See a full example in
-[`samples/sample-production-reality-report.md`](samples/sample-production-reality-report.md).
+Deterministic detector findings carry stable `CY-` IDs you can suppress and gate on; findings that need your AI's judgment (like the `[auth]` one above) are tagged by surface instead. See a full example in [`samples/sample-production-reality-report.md`](samples/sample-production-reality-report.md).
 
-## How It Works
+### How it works
 
 ![CheckYourself workflow: map the app, check reality, pick the safest fix, verify receipts, learn what to avoid next time, then recheck before launch](assets/checkyourself-user-workflow.png)
 
 CheckYourself moves in a loop:
 
-1. **Map the app** - infer what it is, who it serves, and what stack it uses.
-2. **Check reality** - sweep the production risk surfaces with evidence.
-3. **Pick the safest fix** - rank the backlog by harm, reversibility, and learning value.
-4. **Verify the receipts** - run the checks that prove the fix actually helped.
-5. **Learn what to avoid next time** - turn the gaps into a practical learning plan.
+1. **Map the app** — infer what it is, who it serves, and what stack it uses.
+2. **Check reality** — sweep the production risk surfaces with evidence.
+3. **Pick the safest fix** — rank the backlog by harm, reversibility, and learning value.
+4. **Verify the receipts** — run the checks that prove the fix actually helped.
+5. **Learn what to avoid next time** — turn the gaps into a practical learning plan.
 
 Then it rechecks before launch, because vibes are not a deployment strategy.
 
-## What You Get
+### What you get
 
-- **Production Reality Report** - plain-English diagnosis, detected stack, score, unknowns, findings, evidence, and backlog.
-- **Production Reality Score** - 0-100, with severity caps so serious risk cannot hide behind nice polish.
-- **Complete Findings Register** - not just the first three obvious problems.
-- **Safest First Fix Batch** - a small approval-ready batch with verification and rollback notes.
-- **Guided Fix Loop** - approve, fix, verify, rescore, repeat.
-- **Bespoke Learning Plan** - practical next lessons tied to your actual app, with trusted sources and relevant videos when available.
-- **Optional Dashboard** - a self-contained HTML/CSS view, or a compact inline Markdown version when tokens matter.
+| Output | Description |
+|---|---|
+| **Production Reality Report** | Plain-English diagnosis with detected stack, score, unknowns, findings, evidence, and backlog. |
+| **Production Reality Score** | 0–100, with severity caps so serious risk cannot hide behind polish. |
+| **Complete Findings Register** | Every surface checked, not just the first few obvious problems. |
+| **Safest First Fix Batch** | Small approval-ready batch with verification and rollback notes. |
+| **Guided Fix Loop** | Approve, fix, verify, rescore, repeat. |
+| **Bespoke Learning Plan** | Practical lessons tied to your actual gaps, with trusted sources. |
+| **Optional Dashboard** | Self-contained HTML/CSS or compact inline Markdown. |
 
-See a sample report in [`samples/sample-production-reality-report.md`](samples/sample-production-reality-report.md).
+### Works with your AI tool
 
-## Dashboard Preview
+CheckYourself is model-agnostic. Adapter guides for popular tools:
 
-CheckYourself audits itself. This is the real dogfood dashboard from that self-audit — a coverage-backed **100 / 100**, earned under the same caps and evidence rules it holds your app to (and re-earned under v1.7.0's stricter, harder-to-game scoring):
+- [ChatGPT](06_ADAPTERS/chatgpt.md)
+- [Claude Projects](06_ADAPTERS/claude-projects.md)
+- [Cursor / Windsurf](06_ADAPTERS/cursor-windsurf.md)
+- [Replit / Lovable / Bolt](06_ADAPTERS/replit-lovable-bolt.md)
+- [Local agents](06_ADAPTERS/local-agents.md)
+- [MCP-compatible tools](docs/mcp.md)
 
-![CheckYourself dogfood dashboard showing the self-audit score, launch status, risk counts, and coverage sweep](10_DASHBOARD/output/checkyourself-dogfood-dashboard-live-20260612.png)
+### CLI commands
+
+```bash
+# Run a read-only scan
+python3 tools/checkyourself.py scan /path/to/project
+
+# Compare two report runs (regression detection)
+python3 tools/checkyourself.py diff report-before.md report-after.md
+
+# Start MCP server
+python3 tools/checkyourself.py mcp
+```
+
+Full CLI documentation: [`docs/cli.md`](docs/cli.md)
+
+### Dashboard
 
 The dashboard is optional. The Markdown report stays the source of truth because it is cheaper, easier to diff, and easier for agents to update.
 
@@ -135,156 +187,109 @@ For the lower-token version:
 dashboard inline
 ```
 
-Dashboard docs live in [`10_DASHBOARD/`](10_DASHBOARD/README.md).
+![CheckYourself dogfood dashboard showing the self-audit score, launch status, risk counts, and coverage sweep](10_DASHBOARD/output/checkyourself-dogfood-dashboard-live-20260612.png)
 
-## What It Checks
+Dashboard docs: [`10_DASHBOARD/`](10_DASHBOARD/README.md)
 
-CheckYourself looks for launch trouble across the surfaces that matter:
+### What it checks
 
-- product purpose, users, and harm model;
-- frontend UX, accessibility, and client safety;
-- backend/API behavior, validation, uploads, and webhooks;
-- auth, permissions, sessions, roles, and admin paths;
-- data storage, migrations, backups, and tenant/user isolation;
-- secrets, environment variables, and runtime configuration;
-- tests, quality gates, and regression coverage;
-- CI/CD, dependencies, supply chain, and release safety;
-- deployment, rollback, hosting, and environments;
-- observability, logs, errors, alerts, and incident response;
-- performance, scaling, caching, and rate limits;
-- privacy, compliance, retention, and consent;
-- AI/RAG/agent governance when applicable.
+CheckYourself sweeps the surfaces that matter for launch:
 
-The optional CLI also runs **deterministic detectors** with stable rule IDs so the cheap, high-signal footguns get caught the same way every time: committed secrets and `.env` files, debug flags left on, default or weak credentials, wildcard CORS, dangerous code sinks, shipped source maps, missing lockfiles, unpinned CI actions, and untested payment or LLM integrations. Reviewed false positives can be suppressed in `.checkyourself.yml` without silencing the rest.
+- **Product** — purpose, users, harm model
+- **Frontend** — UX, accessibility, client safety
+- **Backend / API** — behavior, validation, uploads, webhooks
+- **Auth & access** — permissions, sessions, roles, admin paths
+- **Data** — storage, migrations, backups, tenant/user isolation
+- **Secrets & config** — environment variables, runtime configuration
+- **Testing** — automated tests, quality gates, regression coverage
+- **CI/CD & supply chain** — pipelines, dependencies, release safety
+- **Deployment** — rollback, health checks, observability
 
-The advanced hardening library is in [`90_ADVANCED/`](90_ADVANCED/). You do not need to read it first; agents load it only when a finding needs deeper guidance.
-
-## Works With Your AI Tool
-
-CheckYourself is plain Markdown plus a small optional Python CLI, so it works with tools that can read text or project files:
-
-| Category | Examples |
-| --- | --- |
-| AI IDEs and editors | Cursor, Windsurf, GitHub Copilot, Codex |
-| Chat assistants | ChatGPT, Claude, Gemini |
-| App builders | Replit, Lovable, Bolt |
-| Local and custom agents | any local model or agent that reads files |
-
-Tool-specific setup guides live in [`06_ADAPTERS/`](06_ADAPTERS/README.md).
-
-## Claude And Codex Skill
-
-CheckYourself also ships as an installable agent skill at [`skills/checkyourself/SKILL.md`](skills/checkyourself/SKILL.md).
-
-Use this path when submitting CheckYourself to Claude/Codex skill aggregators, or when installing it as a reusable production-readiness audit workflow. The skill preserves the same safety model: read-only first, complete coverage sweep, evidence-backed score, safest first fix batch, and optional dashboard only on request.
-
-## Local CLI And MCP
-
-The folder workflow is the main product. The CLI is the deterministic engine for agents, CI, and local receipts:
-
-```bash
-python3 tools/checkyourself.py /path/to/your/project
-```
-
-It detects stack signals, flags obvious deterministic risks (each finding carries a stable rule ID like `CY-SECRET-001` for reliable CI gating), writes a prefilled context file, emits schemas, checks coverage, computes the score, records score history, ranks the backlog, and exposes a thin MCP wrapper. The `diff` command compares two scan results to surface regressions and track progress over time:
-
-```bash
-python3 tools/checkyourself.py describe --format json
-python3 tools/checkyourself.py scan . --format json --no-write
-python3 tools/checkyourself.py diagnostic . --format json --no-write
-python3 tools/checkyourself.py scan . --deep --format json --no-write
-python3 tools/checkyourself.py coverage --emit
-python3 tools/checkyourself.py score --findings CHECKYOURSELF_SCAN.generated.json --format json
-python3 tools/checkyourself.py scan . --ci
-python3 tools/checkyourself.py diff --old baseline.json --new current.json --ci
-python3 tools/checkyourself.py mcp
-```
-
-The CLI does not replace the full diagnostic. It handles deterministic work so your AI can spend its attention on judgment. Scan-only scores are clearly marked as low-confidence estimates; coverage-backed scores require filled evidence.
-
-Reviewed false positives can be suppressed in `.checkyourself.yml`, and suppressed findings remain visible in JSON without counting against caps. That means the tool can learn from real projects without forcing cosmetic renames just to appease a regex with an attitude problem.
-
-For CI, use the included composite action at
-`.github/actions/checkyourself`. It runs the scan, validates the JSON contract,
-and can fail pull requests on unresolved P0 findings.
-
-Read [`docs/cli.md`](docs/cli.md) for the command reference and [`docs/mcp.md`](docs/mcp.md) for MCP setup. There is no hosted API unless CheckYourself becomes a service product with accounts, shared history, hosted runs, or billing.
-
-## Personality
-
-CheckYourself has a point of view:
-
-- **Receipts over reassurance.** A pass needs evidence.
-- **Roast-lite agent voice.** The side-eye is built into `AGENTS.md` and the chat bootstrap: one sharp reality check, then evidence, impact, fix, verification.
-- **Small fixes beat heroic rewrites.** The safest batch goes first.
-- **Learning is part of the product.** If your app had the gap, your plan explains the gap.
-- **Accessible by default.** Short sections, literal labels, high contrast, no motion-dependent meaning, and runtime language support when the user wants it.
-- **The checker learns from receipts.** Real remediation postmortems become durable agent rules when they expose a gap.
-
-The vibe is: a launch coach, a security-minded friend, and a code reviewer who knows when to say, "Not yet. Here is why."
-
-Recent agent self-improvement notes live in [`docs/agent-self-improvement.md`](docs/agent-self-improvement.md).
-
-## Safety Model
-
-CheckYourself starts read-only.
-
-It inspects, explains, ranks, and recommends before touching code. Fixes require explicit approval, stay small and reversible, include verification, and update the score only after evidence changes.
-
-For regulated, financial, health, legal, life-safety, security-critical, or high-volume systems, CheckYourself should recommend qualified expert review. It is a strong pre-launch pass, not a substitute for professional accountability.
-
-## Support And Security
-
-Use [SUPPORT.md](SUPPORT.md) for bugs, docs gaps, CLI/MCP problems, accessibility issues, and stale examples.
-
-Use [SECURITY.md](SECURITY.md) for vulnerability handling. Do not post live secrets, customer data, proprietary code, or unredacted `.env` values in public issues.
-
-## FAQ
-
-### Is CheckYourself a prompt?
-
-No. It includes prompts, but the product is a staged audit workspace: rules, context files, scoring, templates, schemas, examples, dashboard support, an optional CLI, and an advanced hardening library.
-
-### Do I need the command line?
-
-No. The CLI is optional. File-aware AI tools can start at [`CONTEXT.md`](CONTEXT.md). Chat-only tools can use [`PASTE_THIS_INTO_YOUR_AI.md`](PASTE_THIS_INTO_YOUR_AI.md).
-
-### Is it free?
-
-Yes. CheckYourself is Apache 2.0 licensed.
-
-### Is it affiliated with any specific AI model or IDE?
-
-No. It is model-agnostic and tool-agnostic.
-
-### How is it different from a linter?
-
-Linters catch style and narrow code issues. CheckYourself asks whether the app is actually ready to face users, data, auth, deploys, failures, privacy, and production pressure.
-
-### How is it different from just asking my AI to review my app?
-
-See [Why CheckYourself](#why-checkyourself-not-just-review-my-app) above. Short version: a staged workflow turns a one-off opinion into a repeatable, gateable receipt.
-
-### Does it work in CI?
-
-Yes. The composite action at `.github/actions/checkyourself` runs the scan, validates the JSON contract, and can fail pull requests on unresolved P0 findings. Use `diff --ci` to fail only on *new* P0/P1 risk against a baseline.
-
-## Contributing
-
-Issues and pull requests are welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`CHANGELOG.md`](CHANGELOG.md).
-
-## License
-
-Apache 2.0. See [`LICENSE`](LICENSE).
+Full risk taxonomy: [`02_RUN_DIAGNOSTIC/risk-taxonomy.md`](02_RUN_DIAGNOSTIC/risk-taxonomy.md)
 
 ---
 
-## Part of KyaniteLabs
+## Safety model
 
-More from [KyaniteLabs](https://kyanitelabs.tech). Related projects:
+CheckYourself is **read-only by default**. It will never modify your code without explicit approval.
 
-- **[devarch-framework](https://github.com/KyaniteLabs/devarch-framework)** — git-repository archaeology framework
-- **[dev-learning-archaeologist](https://github.com/KyaniteLabs/dev-learning-archaeologist)** — forensic git-history learning diagnostic
-- **[Epoch](https://github.com/KyaniteLabs/Epoch)** — time-estimation MCP server (PERT) for AI agents
+- The CLI `scan` command reads files and writes output to stdout or a file you specify.
+- The diagnostic prompts instruct the AI to ask before making any changes.
+- Secrets and credential-shaped values are **redacted** in all output.
+- No telemetry, no phone-home, no external API calls.
 
-→ More at **[kyanitelabs.tech](https://kyanitelabs.tech)**
+---
+
+## FAQ
+
+### What languages and frameworks does CheckYourself support?
+
+CheckYourself is **language-agnostic**. It works by reading your project's file structure, configuration, and source code through your AI assistant's analysis capabilities. It has been tested with JavaScript/TypeScript (React, Next.js, Vue, Svelte), Python (Django, Flask, FastAPI), Ruby (Rails), Go, and more. If your AI can read it, CheckYourself can audit it.
+
+### How does the Production Reality Score work?
+
+The score starts at 100 and is reduced by findings. Each severity level (P0, P1, P2) has a cap — a single unresolved P0 can cap the score at 49. Missing evidence counts as Unknown and is never treated as a pass. An estimated score (where surfaces have not been fully verified) can never report as launch-ready. Full details: [`docs/checkyourself-score-explained.md`](docs/checkyourself-score-explained.md).
+
+### Can I use CheckYourself in CI?
+
+Yes. The CLI `diff` command compares two report runs and exits non-zero when new P0 or P1 findings appear, making it suitable for CI gates. You can also gate on specific `CY-` rule IDs. See [`docs/cli.md`](docs/cli.md) for examples.
+
+### Is my code or data sent anywhere?
+
+No. CheckYourself runs entirely on your machine. The CLI is Python stdlib-only with no network calls. Secret-shaped values are redacted before they appear in any output. Your code never leaves your machine unless you choose to share the report.
+
+### What is the difference between the full diagnostic and the CLI scan?
+
+The CLI `scan` command (`tools/checkyourself.py scan`) performs a deterministic, read-only sweep of your project — it checks file structure, configuration patterns, and known risk markers. The **full diagnostic** (via your AI assistant using the prompts in `CONTEXT.md`) adds AI judgment on top: it interprets your app's purpose, evaluates auth flows, infers missing tests, and produces the complete scored report with a learning plan. Use the CLI for quick checks; use the full diagnostic before launch.
+
+---
+
+## Project structure
+
+```
+checkyourself/
+├── CONTEXT.md              # Master context file for AI assistants
+├── 00_START_HERE/          # Entry point for first-time users
+├── 01_PROJECT_CONTEXT/     # App mapping templates
+├── 02_RUN_DIAGNOSTIC/      # Diagnostic prompts, risk taxonomy, scoring
+├── 03_GUIDED_FIX_MODE/     # Fix approval and verification flow
+├── 04_LEARNING_PLAN/       # Learning plan generation
+├── 05_OUTPUT_TEMPLATES/    # Report, dashboard, and plan templates
+├── 06_ADAPTERS/            # Guides for specific AI tools
+├── 10_DASHBOARD/           # Dashboard generation and templates
+├── 90_ADVANCED/            # Schemas, capabilities, references
+├── docs/                   # Deep-dive documentation
+├── schemas/                # JSON schemas for structured output
+├── samples/                # Example reports and data
+├── tools/                  # Python CLI and validators
+├── tests/                  # CLI tests
+└── skills/                 # Skill definitions
+```
+
+---
+
+## Contributing
+
+Contributions are welcome. Please read [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a pull request.
+
+Bug reports and feature requests: [open an issue](https://github.com/KyaniteLabs/checkyourself/issues).
+
+---
+
+## License
+
+Apache License 2.0 — see [`LICENSE`](LICENSE) for the full text.
+
+Copyright © Kyanite Labs.
+
+---
+
+## Links
+
+- [Changelog](CHANGELOG.md)
+- [Security policy](SECURITY.md)
+- [Support](SUPPORT.md)
+- [MCP documentation](docs/mcp.md)
+- [CLI documentation](docs/cli.md)
+- [Scoring explained](docs/checkyourself-score-explained.md)
+- [Agent self-improvement](docs/agent-self-improvement.md)
