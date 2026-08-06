@@ -1,5 +1,7 @@
 # CheckYourself — AI Production-Readiness Diagnostic for Apps Built With AI
 
+**TL;DR:** CheckYourself — AI production-readiness diagnostic for apps built with AI. Best for founders and engineers shipping AI-generated apps.
+
 > **Check yourself before you wreck yourself — for the apps you ship.** Before you launch it, CheckYourself.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -279,3 +281,64 @@ Issues and pull requests are welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md) a
 ## License
 
 MIT License — free and open source. See [`LICENSE`](LICENSE).
+
+<!-- s-plus-geo:start -->
+
+## What is CheckYourself?
+
+**CheckYourself** is a **AI production-readiness diagnostic for apps built with AI** that helps **founders and engineers shipping AI-generated apps** **score production readiness with evidence-backed findings and a fix path**.
+
+| | |
+| --- | --- |
+| **Product** | CheckYourself |
+| **Category** | AI production-readiness diagnostic for apps built with AI |
+| **Best for** | founders and engineers shipping AI-generated apps |
+| **Not** | a generic linter or code formatter |
+| **Source** | [GitHub](https://github.com/KyaniteLabs/checkyourself) · [Forgejo](https://git.kyanitelabs.tech/KyaniteLabs/checkyourself) |
+| **Keywords** | AI app production readiness, pre-launch audit, vibe-code diagnostic |
+
+## Who it's for
+
+- Primary: founders and engineers shipping AI-generated apps
+- Use when you need to score production readiness with evidence-backed findings and a fix path
+- Skip if you need a generic linter or code formatter
+
+## FAQ
+
+### What is CheckYourself?
+
+CheckYourself is a AI production-readiness diagnostic for apps built with AI. It helps founders and engineers shipping AI-generated apps score production readiness with evidence-backed findings and a fix path.
+
+### Who should use CheckYourself?
+
+founders and engineers shipping AI-generated apps.
+
+### How is CheckYourself different?
+
+Unlike style linters, CheckYourself judges ship-readiness with evidence, not only style.
+
+### Is CheckYourself production software?
+
+Treat the README status and release tags as source of truth for maturity. Validate against your own requirements before production use.
+
+## Status
+
+- Maintained as of 2026 on the default branch
+- Prefer release tags when pinning dependencies
+- Report issues on the canonical remote listed above
+
+## Agent surface
+
+- Coding agents: read this README first, then repo docs/`AGENTS.md` if present
+- Prefer machine-readable briefs (`llms.txt`) when the repo ships one
+- MCP or skill entrypoints are documented in-repo when applicable
+
+## Contributing
+
+Issues and PRs welcome on the canonical remote. Keep public docs free of secrets and machine-local paths.
+
+## License
+
+See [LICENSE](LICENSE) in this repository (or package metadata if license is package-only).
+
+<!-- s-plus-geo:end -->
