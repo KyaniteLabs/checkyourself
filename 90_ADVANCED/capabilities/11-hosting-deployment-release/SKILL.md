@@ -1,7 +1,7 @@
 ---
 id: prodhardening.hosting_deployment_release
 name: hosting-deployment-release
-version: 1.0.0
+version: 1.1.0
 status: stable
 layer: "11 Hosting & Deployment"
 summary: "Choose hosting and deployment patterns, design safe releases, configure health checks, and plan rollbacks."
@@ -106,6 +106,20 @@ Return a concise report with these sections unless the user requested a concrete
 ## References to load on demand
 - `../../references/deployment-release.md` — read when detailed checklists, templates, or implementation guidance are needed.
 - `../../templates/release-checklist.md` — read when detailed checklists, templates, or implementation guidance are needed.
+- Load the `wiggins-twelve-factor` skill (MIT) for the full Twelve-Factor App doctrine — stateless processes, config in env, build/release/run separation, disposability, dev/prod parity, logs as event streams.
 
+## Enriched doctrine (from Twelve-Factor App)
+
+Named decision rules that sharpen this capability. These rules **extend** — never override — the operating contract, work protocol, and verification gates above.
+
+- **One codebase, many deploys.** A single VCS-tracked codebase fans out to many deploys (staging, prod) — never a forked prod codebase. Drift between deploys lives in config, not in copies of the code.
+- **Immutable release artifact.** *Build* produces an artifact that never changes; *release* = artifact + config, itself immutable and permanently rollback-able; *run* executes it. Sharpening work-protocol item 2: the goal is promotable, rollback-able releases, not merely separated stages.
+- **Same artifact, env-only divergence.** Config lives in the environment (Factor III), not the code. The identical build artifact promotes dev → staging → prod with zero code changes — env vars are the only contract between app and deploy environment. (Secret handling itself: `08-config-secrets-runtime`.)
+- **Stateless, share-nothing processes are the precondition for safe deploy.** Any process can be killed or restarted; all state lives in backing stores. Without this, rolling/blue-green deploys and horizontal scaling cannot be safe — treat unmanaged statefulness as a deploy blocker.
+- **Disposability: fast startup, graceful shutdown.** Robustness = start fast and exit cleanly on `SIGTERM` (finish in-flight work, release resources, then exit). This is the mechanism behind zero-downtime deploys, elastic scale, and safe restarts — the *why* behind work-protocol item 3's drain behavior.
+- **Dev/prod parity — especially backing services.** Keep dev/staging/prod as similar as possible: same dependencies, same backing-service *kinds* (don't run SQLite in dev and Postgres in prod). Divergence is where deploy-time breakage hides.
+- **Logs are event streams.** The app writes to stdout and never manages log files, rotation, or destinations; the deploy platform aggregates. This decouples the release artifact from log infrastructure.
+
+*Source: The Twelve-Factor App (Adam Wiggins & contributors), MIT-licensed — derivative-safe to publish with attribution retained.*
 ## Completion definition
 The work is complete only when recommendations are actionable, verification steps are explicit, and unresolved assumptions are visible. Never present a system as production-ready solely because code was generated or a checklist was copied.
