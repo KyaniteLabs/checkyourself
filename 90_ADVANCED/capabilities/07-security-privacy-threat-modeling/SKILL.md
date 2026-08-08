@@ -1,7 +1,7 @@
 ---
 id: prodhardening.security_privacy_threat_modeling
 name: security-privacy-threat-modeling
-version: 1.0.0
+version: 1.1.0
 status: stable
 layer: "07 Security & Privacy"
 summary: "Find and reduce application, API, infrastructure, privacy, and AI security risks before release."
@@ -108,6 +108,23 @@ Return a concise report with these sections unless the user requested a concrete
 ## References to load on demand
 - `../../references/security-standards.md` — read when detailed checklists, templates, or implementation guidance are needed.
 - `../../templates/threat-model.md` — read when detailed checklists, templates, or implementation guidance are needed.
+- [OWASP Top 10:2025](https://owasp.org/Top10/2025/) — the canonical root-cause threat-categorization reference (© OWASP Foundation, CC BY-SA 4.0).
 
+## Enriched doctrine (from OWASP Top 10:2025)
+
+The OWASP Top 10:2025 as a named threat-categorization checklist — map every finding to these root-cause categories. These rules **extend** — never override — the operating contract, work protocol, and verification gates above. (2025 changes called out: A03 Supply Chain and A10 Exceptional Conditions are new; SSRF is folded into A01.)
+
+- **A01 Broken Access Control (#1).** Enforce authorization on every request, deny by default, validate server-side. SSRF is now folded here — treat server-side request targets as a privilege boundary. The most prevalent category.
+- **A02 Security Misconfiguration (#2, up from #5).** Secure defaults, no default credentials, disable unused features/ports, repeatable hardening. App behavior is increasingly config-driven, so misconfiguration is rising.
+- **A03 Software Supply Chain Failures (#3, NEW).** Verify integrity across dependencies, build systems, and distribution infrastructure: pinned dependencies, signed artifacts, SBOM. Lowest frequency but highest average exploit + impact. → hands off to `10-ci-cd-supply-chain`.
+- **A04 Cryptographic Failures (#4).** Encrypt sensitive data in transit and at rest; use vetted algorithms and key management; never roll your own crypto. Leads to sensitive-data exposure or system compromise.
+- **A05 Injection (#5).** Separate data from commands: parameterized queries, output encoding, prepared statements. Spans XSS (high-frequency / low-impact) to SQLi (low-frequency / high-impact); the most CVEs of any category.
+- **A06 Insecure Design (#6).** Threat-model abuse cases in at design time; security is an architecture property, not a bolted-on control. Catch it at shaping, not in review.
+- **A07 Authentication Failures (#7).** Use standardized auth frameworks; enforce MFA, session invalidation, credential rotation, replay protection. Framework adoption is measurably reducing occurrences.
+- **A08 Software / Data Integrity Failures (#8).** Maintain trust boundaries and verify the integrity of code and data artifacts (signed updates, verified CI trust) at a level below the supply chain.
+- **A09 Security Logging & Alerting Failures (#9).** Logging without alerting has minimal value — alerts are what induce action. Log security-relevant events AND raise actionable alerts. → hands off to `15-observability-sre-incident-response`.
+- **A10 Mishandling of Exceptional Conditions (#10, NEW).** Fail secure (closed), not open. Handle exceptions without leaking internals or granting access; watch logic errors and fail-open paths.
+
+*Source: OWASP Top 10:2025, © OWASP Foundation, CC BY-SA 4.0 (attribution + share-alike). Independent Kyanite Labs synthesis — names the root-cause categories and restates the guidance; does not reproduce the document.*
 ## Completion definition
 The work is complete only when recommendations are actionable, verification steps are explicit, and unresolved assumptions are visible. Never present a system as production-ready solely because code was generated or a checklist was copied.
