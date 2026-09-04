@@ -13,6 +13,121 @@ ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "tools" / "checkyourself.py"
 
 
+GOLDEN_REPORT = {
+    "project": "Example App",
+    "executive_summary": "Demo-ready, with launch work still required.",
+    "app_purpose": "A small app for authenticated users to manage records.",
+    "detected_stack": [
+        {
+            "area": "Backend",
+            "technology": "Python",
+            "evidence": "app.py",
+            "confidence": "high",
+        }
+    ],
+    "unknowns_and_assumptions": [
+        {
+            "unknown": "Production deployment target",
+            "why_it_matters": "Rollback evidence depends on the target.",
+            "how_to_resolve": "Confirm the deployment owner and platform.",
+            "blocks_score": True,
+        }
+    ],
+    "score": 72,
+    "confidence": "medium",
+    "score_breakdown": [
+        {
+            "category": "Testing and quality gates",
+            "weight": 10,
+            "awarded": 7,
+            "evidence": "tests/test_app.py",
+            "what_would_improve_it": "Add integration coverage.",
+        }
+    ],
+    "score_caps": ["P1 cap at 74"],
+    "coverage": [
+        {
+            "category": "Testing and quality gates",
+            "checked": True,
+            "evidence_reviewed": ["tests/test_app.py:1"],
+            "missing_evidence": [],
+            "follow_up_needed": False,
+        }
+    ],
+    "findings": [
+        {
+            "id": "F-001",
+            "severity": "P1",
+            "finding": "Rollback is not proven",
+            "plain_english_risk": "A bad deploy may take longer to recover from.",
+            "evidence": ["deploy.md:1"],
+            "recommended_fix": "Document and rehearse rollback.",
+            "status": "open",
+        }
+    ],
+    "evidence_table": [
+        {
+            "evidence": "Rollback documentation",
+            "file_location": "deploy.md:1",
+            "supports_finding": "F-001",
+            "confidence": "medium",
+        }
+    ],
+    "remediation_backlog": [
+        {
+            "finding_id": "F-001",
+            "severity": "P1",
+            "fix_summary": "Document and rehearse rollback.",
+            "why_this_order": "Recovery is a launch gate.",
+            "verification": "Follow the runbook in a staging drill.",
+            "rollback": "Revert the documentation change.",
+            "learning_value": "Release safety",
+            "status": "open",
+        }
+    ],
+    "first_approval_batch": ["F-001"],
+    "full_remediation_path": [
+        {
+            "wave": "Wave 1",
+            "included_findings": ["F-001"],
+            "goal": "Remove the launch blocker.",
+            "exit_criteria": "Rollback drill passes.",
+        }
+    ],
+    "deferred_items": [],
+    "questions": ["Which platform owns production rollback?"],
+    "approval_prompts": ["Approve the rollback runbook fix?"],
+    "learning_plan_seeds": ["Release safety and rollback rehearsals"],
+    "dashboard_handoff": {
+        "generated": False,
+        "reason": "The optional dashboard was not requested.",
+    },
+}
+
+REPORT_REQUIRED_SECTIONS = (
+    "project",
+    "executive_summary",
+    "app_purpose",
+    "detected_stack",
+    "unknowns_and_assumptions",
+    "score",
+    "confidence",
+    "score_breakdown",
+    "score_caps",
+    "coverage",
+    "findings",
+    "evidence_table",
+    "remediation_backlog",
+    "first_approval_batch",
+    "full_remediation_path",
+    "deferred_items",
+    "questions",
+    "approval_prompts",
+    "learning_plan_seeds",
+    "dashboard_handoff",
+)
+
+
 class CheckYourselfCliTests(unittest.TestCase):
     def run_cli(self, *args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -545,6 +660,80 @@ class CheckYourselfCliTests(unittest.TestCase):
         self.assertFalse(score["coverage_complete"])
         self.assertNotEqual(score["confidence"], "high")
         self.assertLess(score["score"], 100)
+
+    def _run_mcp_validate(self, kind: str, artifact: object) -> dict:
+        messages = "\n".join([
+            json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25"}}),
+            json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
+                "name": "validate", "arguments": {"kind": kind, "artifact": artifact},
+            }}),
+            "",
+        ])
+        result = subprocess.run(
+            [sys.executable, str(CLI), "mcp"],
+            text=True,
+            input=messages,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        responses = {json.loads(line)["id"]: json.loads(line) for line in result.stdout.splitlines()}
+        return responses[2]
+
+    def test_dashboard_one_of_rejects_empty_and_garbage_artifacts(self) -> None:
+        for label, artifact in {
+            "empty": {},
+            "garbage": {"garbage": True},
+        }.items():
+            with self.subTest(label=label):
+                with tempfile.TemporaryDirectory() as tmp:
+                    artifact_path = Path(tmp) / "dashboard.json"
+                    artifact_path.write_text(json.dumps(artifact), encoding="utf-8")
+                    cli_result = self.run_cli("validate", "--kind", "dashboard", str(artifact_path))
+                self.assertEqual(cli_result.returncode, 1, cli_result.stderr)
+                self.assertIn("oneOf", cli_result.stdout)
+
+                mcp_response = self._run_mcp_validate("dashboard", artifact)
+                result = mcp_response["result"]
+                self.assertFalse(result["structuredContent"]["valid"])
+                self.assertTrue(result["isError"] is False)
+
+    def test_golden_dashboard_and_report_fixtures_validate_in_cli_and_mcp(self) -> None:
+        dashboard_paths = (
+            ROOT / "samples" / "sample-dashboard-data.json",
+            ROOT / "05_OUTPUT_TEMPLATES" / "dashboard-data.example.json",
+        )
+        dashboard_artifacts = [json.loads(path.read_text(encoding="utf-8")) for path in dashboard_paths]
+        golden_artifacts = [("dashboard", artifact) for artifact in dashboard_artifacts]
+        golden_artifacts.append(("report", GOLDEN_REPORT))
+
+        for kind, artifact in golden_artifacts:
+            with self.subTest(kind=kind):
+                with tempfile.TemporaryDirectory() as tmp:
+                    artifact_path = Path(tmp) / f"{kind}.json"
+                    artifact_path.write_text(json.dumps(artifact), encoding="utf-8")
+                    cli_result = self.run_cli("validate", "--kind", kind, str(artifact_path))
+                self.assertEqual(cli_result.returncode, 0, cli_result.stderr)
+                self.assertIn("Valid", cli_result.stdout)
+
+                mcp_response = self._run_mcp_validate(kind, artifact)
+                result = mcp_response["result"]
+                self.assertTrue(result["structuredContent"]["valid"])
+                self.assertFalse(result["isError"])
+
+    def test_report_requires_every_documented_section(self) -> None:
+        for section in REPORT_REQUIRED_SECTIONS:
+            with self.subTest(section=section):
+                artifact = deepcopy(GOLDEN_REPORT)
+                artifact.pop(section)
+                with tempfile.TemporaryDirectory() as tmp:
+                    artifact_path = Path(tmp) / "report.json"
+                    artifact_path.write_text(json.dumps(artifact), encoding="utf-8")
+                    cli_result = self.run_cli("validate", "--kind", "report", str(artifact_path), "--format", "json")
+                self.assertEqual(cli_result.returncode, 1, cli_result.stderr)
+                validation = json.loads(cli_result.stdout)
+                self.assertFalse(validation["valid"])
+                self.assertTrue(any(section in error for error in validation["errors"]))
 
     def _full_coverage(self) -> dict:
         from importlib import util as _util
