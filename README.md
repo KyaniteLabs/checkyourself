@@ -4,7 +4,7 @@
 
 > **Check yourself before you wreck yourself — for the apps you ship.** Before you launch it, CheckYourself.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Model-agnostic](https://img.shields.io/badge/AI-model--agnostic-blue.svg)](#works-with-every-ai-coding-tool)
 [![Production-hardening engine](https://img.shields.io/badge/engine-19%20capabilities-blueviolet.svg)](90_ADVANCED/)
 [![Read-only by default](https://img.shields.io/badge/safety-read--only%20first-brightgreen.svg)](#is-it-safe-to-run-on-my-codebase)
@@ -65,7 +65,7 @@ CheckYourself gives you reality **before production does the grading** — a cal
 7. Continue until every finding is fixed, deferred with a reason, accepted as risk, blocked by missing context, or proven not applicable.
 8. Get a custom learning plan based on the actual gaps.
 
-> **No model lock-in. No required cloud account. No command line.**
+> **No model lock-in. No required cloud account. No required command line.**
 
 ### Direct your assistant
 
@@ -187,7 +187,7 @@ python3 tools/checkyourself.py /path/to/your/project
 
 It detects your stack, flags obvious deterministic risks (possible hardcoded secrets, a committed `.env`, missing `.env.example`, absent tests or CI) ranked P0–P3, and writes a pre-filled context file your AI can build on. Add `--json` for a machine-readable summary, `--format json --no-write` for JSON stdout, or `--ci` to use it as a lightweight pipeline gate (non-zero exit on a P0). The CLI is a scaffold, not a substitute — the AI still runs the full diagnostic. See [`docs/cli.md`](docs/cli.md).
 
-The agent-access roadmap is CLI-first: no hosted API for the current open-source product, with MCP planned later as a thin native-agent wrapper. See [`docs/agent-access-cli-plan.md`](docs/agent-access-cli-plan.md).
+The CLI is the canonical local engine, and CheckYourself also ships a thin local stdio MCP wrapper for native-agent clients. There is no hosted API for the current open-source product. See [`docs/cli.md`](docs/cli.md), [`docs/mcp.md`](docs/mcp.md), and [`docs/agent-access-cli-plan.md`](docs/agent-access-cli-plan.md).
 
 ---
 
@@ -197,7 +197,7 @@ The Markdown report is the default output because it is cheaper, faster, and eas
 
 This repository includes a real dogfood dashboard screenshot from CheckYourself auditing itself:
 
-![CheckYourself dogfood dashboard showing the self-audit score, launch status, risk counts, and coverage sweep](10_DASHBOARD/output/checkyourself-dogfood-dashboard-screenshot.png)
+![CheckYourself dogfood dashboard showing the self-audit score, launch status, risk counts, and coverage sweep](10_DASHBOARD/output/checkyourself-dogfood-dashboard-live-20260612.png)
 
 After the report exists, say:
 
@@ -250,7 +250,7 @@ See [`docs/token-efficiency.md`](docs/token-efficiency.md).
 CheckYourself is a free, open-source, model-agnostic production-readiness system that turns any AI coding assistant into a pre-launch auditor for apps built with AI — a staged diagnostic workspace, an evidence-based score, a complete findings register and remediation backlog, approval-based guided fixes, and a 19-capability hardening engine that finds every gap, explains the risks, fixes them with your approval, and teaches you what you missed.
 
 ### Do I need to install a toolchain or use the command line?
-No build step, no dependencies, no CLI, and no cloud account. You load CheckYourself as your AI assistant's operating context and it works through the stages with you. (It does ship a small optional Python validator for maintainers, but you never need it to run an audit.)
+No build step, no dependencies, and no required command line. You load CheckYourself as your AI assistant's operating context and it works through the stages with you. It also ships a small optional Python CLI and validator for maintainers and agent workflows, but you never need them to run an audit.
 
 ### Which AI tools does it work with?
 Any model-agnostic assistant that reads text or files, including Cursor, Windsurf, GitHub Copilot, Codex, ChatGPT, Claude, Gemini, Replit, Lovable, Bolt, and local agents.
@@ -265,7 +265,7 @@ A linter flags style and a few obvious problems. CheckYourself builds a *complet
 It is a 0–100 production-readiness score with severity caps and explicit reasoning, explained in [`docs/checkyourself-score-explained.md`](docs/checkyourself-score-explained.md). A low score with clear findings is more useful than a falsely high one.
 
 ### Is CheckYourself free and open source?
-Yes — it is released under the [MIT License](LICENSE) and is free to use, copy, and adapt.
+Yes — it is released under the [Apache License, Version 2.0](LICENSE) and is free to use, copy, and adapt under those terms.
 
 ### Who is it for?
 Vibe coders, indie hackers, beginners learning by doing, intermediate builders, experienced developers wanting a reusable audit, and founders, freelancers, agencies, and teams preparing real launches.
@@ -280,7 +280,7 @@ Issues and pull requests are welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md) a
 
 ## License
 
-MIT License — free and open source. See [`LICENSE`](LICENSE).
+Apache License, Version 2.0 — free and open source. See [`LICENSE`](LICENSE).
 
 <!-- s-plus-geo:start -->
 
