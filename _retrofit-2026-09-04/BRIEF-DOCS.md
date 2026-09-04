@@ -1,0 +1,6 @@
+# ROLE: LUNA FIX TEAM — DOCUMENTATION CLOSE-OUT (checkyourself)
+All retrofit waves W1-W10 + remediation are code-complete. DOCUMENT them:
+1. CHANGELOG.md: one comprehensive entry (Unreleased or version 1.8.0 if semver-appropriate) covering every wave's user-visible changes (fail-closed score trust boundary, full-keyword schema validation + report contract, scanner completeness/safe-writes, truthful backlog/diff semantics, license alignment Apache-2.0 across README/manifest, dashboard-inline documented, SECURITY.md tagged-release line, manual rule-ID rubric, base-score/minimum-cap formula in skill, agent-access CLI plan docs) — written for USERS, grouped by theme, no internal wave numbers.
+2. README.md + any stale docs: reflect current behavior only where changed.
+3. docs/RETROFIT-LEARNINGS-2026-09-04.md: the PROCESS learnings a maintainer needs (from _retrofit-2026-09-04/WAVE*-REPORT.md IMPROVEMENTS sections + RE-REPORT files): projection/commit freshness paradoxes, retrofit-artifacts-inside-public-validation hazard, license-file-vs-badge class, baseline-failure recording, orchestrator/worker git split.
+Acceptance: docs consistent with code; no behavior changes. Write _retrofit-2026-09-04/DOCS-REPORT.md (changed-file list). GIT: none. No installs/network.

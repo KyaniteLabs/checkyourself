@@ -15,9 +15,11 @@ import argparse
 import datetime as _dt
 import fnmatch
 import json
+import math
 import os
 import re
 import sys
+import tempfile
 import traceback
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
@@ -463,9 +465,9 @@ def load_checkyourself_config(root: Path) -> dict:
             continue
         if path.suffix == ".json":
             try:
-                data = json.loads(path.read_text(encoding="utf-8"))
+                data = strict_json_loads(path.read_text(encoding="utf-8"))
                 return validate_suppressions_config(data, name)
-            except (json.JSONDecodeError, OSError, UnicodeError):
+            except (ValueError, OSError, UnicodeError):
                 return {"suppress": [], "config_error": f"{name} could not be parsed as JSON"}
         try:
             return validate_suppressions_config(
@@ -656,7 +658,7 @@ def detect_stack(root: Path) -> Tuple[List[str], Dict[str, str], Dict[str, List[
             for dep, label in DEPENDENCY_HINTS.items():
                 if dep in deps:
                     deps_found.setdefault(label, []).append(dep)
-        except json.JSONDecodeError:
+        except (ValueError, UnicodeError):
             signals.append("package.json exists but could not be parsed")
 
     py_manifests = ["pyproject.toml", "requirements.txt", "Pipfile"]
@@ -1669,6 +1671,37 @@ def normalize_findings(data: Any) -> List[dict]:
     return normalized
 
 
+def findings_artifact_errors(data: Any) -> List[str]:
+    """Reject malformed findings receipts instead of treating them as empty."""
+    if isinstance(data, list):
+        findings = data
+    elif isinstance(data, dict):
+        if "findings" in data:
+            findings = data["findings"]
+            if not isinstance(findings, list):
+                return ["findings must be an array"]
+        elif "remediation_backlog" in data:
+            findings = data["remediation_backlog"]
+            if not isinstance(findings, list):
+                return ["remediation_backlog must be an array"]
+        else:
+            return ["artifact must contain a findings or remediation_backlog array"]
+    else:
+        return ["findings artifact must be an object or array"]
+
+    errors = []
+    for index, item in enumerate(findings):
+        if not isinstance(item, dict):
+            errors.append(f"finding {index} must be an object")
+    return errors
+
+
+def require_findings_artifact(data: Any) -> None:
+    errors = findings_artifact_errors(data)
+    if errors:
+        raise CliError("invalid findings artifact: " + "; ".join(errors))
+
+
 def infer_category(text: str) -> str:
     lower = text.lower()
     if any(w in lower for w in ("secret", ".env", "token", "credential", "runtime config", "api key")):
@@ -1859,6 +1892,7 @@ def inferred_coverage_from_scan(scan_data: dict, findings: List[dict]) -> Dict[s
 
 
 def score_from_inputs(findings_data: Any, coverage_data: Any = _NO_COVERAGE) -> dict:
+    require_findings_artifact(findings_data)
     findings = normalize_findings(findings_data)
     counts = {sev: 0 for sev in ("P0", "P1", "P2", "P3")}
     unresolved = [f for f in findings if f.get("status") not in RESOLVED_STATUSES]
@@ -1885,6 +1919,13 @@ def score_from_inputs(findings_data: Any, coverage_data: Any = _NO_COVERAGE) -> 
     raw_total = 0.0
 
     for cid, (name, weight) in SCORE_CATEGORIES.items():
+        if (
+            isinstance(weight, bool)
+            or not isinstance(weight, (int, float))
+            or not math.isfinite(float(weight))
+            or float(weight) < 0
+        ):
+            raise CliError(f"invalid scoring weight for {cid}: {weight!r}")
         category_findings = [f for f in unresolved if f.get("category") == cid]
         coverage_state = coverage_by_category[cid]
         penalties: List[dict] = []
@@ -1905,6 +1946,13 @@ def score_from_inputs(findings_data: Any, coverage_data: Any = _NO_COVERAGE) -> 
 
         for f in category_findings:
             fraction = SEVERITY_PENALTIES.get(f["severity"], 0.10)
+            if (
+                isinstance(fraction, bool)
+                or not isinstance(fraction, (int, float))
+                or not math.isfinite(float(fraction))
+                or float(fraction) < 0
+            ):
+                raise CliError(f"invalid severity penalty for {f['severity']}: {fraction!r}")
             points = weight * fraction
             awarded -= points
             penalties.append({
@@ -1985,6 +2033,7 @@ def score_from_inputs(findings_data: Any, coverage_data: Any = _NO_COVERAGE) -> 
 
 
 def backlog_from_findings(findings_data: Any) -> dict:
+    require_findings_artifact(findings_data)
     findings = normalize_findings(findings_data)
     backlog = []
     for f in findings:
@@ -2023,6 +2072,7 @@ def backlog_from_findings(findings_data: Any) -> dict:
 
 
 def next_from_findings(findings_data: Any) -> dict:
+    require_findings_artifact(findings_data)
     backlog = backlog_from_findings(findings_data)["remediation_backlog"]
     batch = first_batch(backlog)
     return {
@@ -2049,6 +2099,8 @@ def diff_findings(old_data: Any, new_data: Any) -> dict:
     Stable rule IDs make this meaningful: the same risk keeps the same ID
     across runs, so added/resolved is a real delta, not ID-shuffle noise.
     """
+    require_findings_artifact(old_data)
+    require_findings_artifact(new_data)
     old_findings = {f["id"]: f for f in normalize_findings(old_data)}
     new_findings = {f["id"]: f for f in normalize_findings(new_data)}
     added_ids = sorted(set(new_findings) - set(old_findings))
@@ -2276,7 +2328,7 @@ def describe_capabilities() -> dict:
 def read_manifest_version() -> str:
     manifest = ROOT / "checkyourself.manifest.json"
     try:
-        data = json.loads(manifest.read_text(encoding="utf-8"))
+        data = strict_json_loads(manifest.read_text(encoding="utf-8"))
         return str(data.get("version") or "unknown")
     except Exception:
         return "unknown"
@@ -2305,7 +2357,31 @@ def load_schema(name: str) -> dict:
     path = SCHEMA_DIR / registry[name]
     if not path.exists():
         raise CliError(f"schema file missing: {path}")
-    return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        return strict_json_loads(path.read_text(encoding="utf-8"))
+    except (ValueError, OSError, UnicodeError) as exc:
+        raise CliError(f"schema file could not be parsed: {path}: {exc}") from exc
+
+
+def _ensure_finite_json(value: Any) -> None:
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ValueError("non-finite number is not valid JSON")
+    if isinstance(value, dict):
+        for item in value.values():
+            _ensure_finite_json(item)
+    elif isinstance(value, list):
+        for item in value:
+            _ensure_finite_json(item)
+
+
+def strict_json_loads(body: str) -> Any:
+    """Parse standard JSON only; Python otherwise accepts NaN and Infinity."""
+    def reject_constant(token: str) -> None:
+        raise ValueError(f"non-finite number {token} is not valid JSON")
+
+    value = json.loads(body, parse_constant=reject_constant)
+    _ensure_finite_json(value)
+    return value
 
 
 def load_json_arg(path: str) -> Any:
@@ -2315,10 +2391,13 @@ def load_json_arg(path: str) -> Any:
         p = Path(path)
         if not p.exists():
             raise CliError(f"JSON file not found: {path}")
-        body = p.read_text(encoding="utf-8")
+        try:
+            body = p.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as exc:
+            raise CliError(f"could not read JSON in {path}: {exc}") from exc
     try:
-        return json.loads(body)
-    except json.JSONDecodeError as exc:
+        return strict_json_loads(body)
+    except (ValueError, UnicodeError) as exc:
         raise CliError(f"invalid JSON in {path}: {exc}") from exc
 
 
@@ -2401,6 +2480,8 @@ def validate_json_schema(
     errors: List[str] = []
     if _check_schema:
         errors.extend(_schema_definition_errors(schema, path))
+    if isinstance(data, float) and not math.isfinite(data):
+        return errors + [f"{path}: non-finite number is not valid JSON"]
     if schema is True:
         return errors
     if schema is False:
@@ -2568,11 +2649,30 @@ def safe_write_text(path: Path, body: str) -> None:
         if parent == candidate:
             break
         candidate = parent
-    path.write_text(body, encoding="utf-8")
+    temp_fd: Optional[int] = None
+    temp_path: Optional[Path] = None
+    try:
+        temp_fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent))
+        temp_path = Path(temp_name)
+        with os.fdopen(temp_fd, "w", encoding="utf-8", newline="") as handle:
+            temp_fd = None
+            handle.write(body)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, path)
+        temp_path = None
+    finally:
+        if temp_fd is not None:
+            os.close(temp_fd)
+        if temp_path is not None:
+            try:
+                temp_path.unlink()
+            except FileNotFoundError:
+                pass
 
 
 def write_json(data: Any) -> None:
-    print(json.dumps(data, indent=2, sort_keys=False))
+    print(json.dumps(data, indent=2, sort_keys=False, allow_nan=False))
 
 
 def write_text_result(data: dict) -> None:
@@ -2633,10 +2733,11 @@ def append_score_history(path: Optional[Path], result: dict, note: str = "") -> 
     history: List[dict] = []
     if path.exists():
         try:
-            parsed = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(parsed, list):
-                history = [item for item in parsed if isinstance(item, dict)]
-        except json.JSONDecodeError:
+            parsed = strict_json_loads(path.read_text(encoding="utf-8"))
+            if not isinstance(parsed, list) or not all(isinstance(item, dict) for item in parsed):
+                raise ValueError("score history must be a JSON array of objects")
+            history = parsed
+        except (ValueError, UnicodeError):
             # Never silently destroy the audit trail: preserve the corrupt
             # file and warn before starting a fresh history.
             backup = path.with_name(path.name + ".corrupt.bak")
@@ -2647,7 +2748,7 @@ def append_score_history(path: Optional[Path], result: dict, note: str = "") -> 
                 print("warning: score history was corrupt and could not be backed up", file=sys.stderr)
             history = []
     history.append(entry)
-    safe_write_text(path, json.dumps(history, indent=2) + "\n")
+    safe_write_text(path, json.dumps(history, indent=2, allow_nan=False) + "\n")
 
 
 def command_scan(args: argparse.Namespace) -> int:
@@ -2669,7 +2770,7 @@ def command_scan(args: argparse.Namespace) -> int:
         jout = Path(args.json)
         if not jout.is_absolute():
             jout = Path.cwd() / jout
-        safe_write_text(jout, json.dumps(data, indent=2) + "\n")
+        safe_write_text(jout, json.dumps(data, indent=2, allow_nan=False) + "\n")
         if not args.quiet and not json_stdout:
             print(f"Wrote JSON:    {jout}")
 
@@ -2717,7 +2818,7 @@ def command_coverage(args: argparse.Namespace) -> int:
     if not out_path and args.format == "text":
         out_path = DEFAULT_COVERAGE_PATH
     if out_path:
-        safe_write_text(Path(out_path), json.dumps(data, indent=2) + "\n")
+        safe_write_text(Path(out_path), json.dumps(data, indent=2, allow_nan=False) + "\n")
     if args.format == "json":
         write_json(data)
     else:
@@ -3091,7 +3192,7 @@ def mcp_error(request_id: Any, code: int, message: str, data: Optional[dict] = N
 
 
 def mcp_tool_result(data: dict, is_error: bool = False) -> dict:
-    text = json.dumps(data, indent=2)
+    text = json.dumps(data, indent=2, allow_nan=False)
     return {
         "content": [{"type": "text", "text": text}],
         "structuredContent": data,
@@ -3175,13 +3276,13 @@ def run_mcp_server() -> int:
         if not raw:
             continue
         try:
-            message = json.loads(raw)
-        except json.JSONDecodeError as exc:
+            message = strict_json_loads(raw)
+        except (ValueError, UnicodeError) as exc:
             response = mcp_error(None, -32700, f"parse error: {exc}")
         else:
             if not isinstance(message, dict):
                 # JSON-RPC batch arrays would otherwise crash on .get().
-                sys.stdout.write(json.dumps(mcp_error(None, -32600, "batch requests are not supported; send one JSON-RPC object per line"), separators=(",", ":")) + "\n")
+                sys.stdout.write(json.dumps(mcp_error(None, -32600, "batch requests are not supported; send one JSON-RPC object per line"), separators=(",", ":"), allow_nan=False) + "\n")
                 sys.stdout.flush()
                 continue
             try:
@@ -3190,7 +3291,7 @@ def run_mcp_server() -> int:
                 traceback.print_exc(file=sys.stderr)
                 response = mcp_error(message.get("id"), -32603, str(exc))
         if response is not None:
-            sys.stdout.write(json.dumps(response, separators=(",", ":")) + "\n")
+            sys.stdout.write(json.dumps(response, separators=(",", ":"), allow_nan=False) + "\n")
             sys.stdout.flush()
     return 0
 

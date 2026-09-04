@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -291,6 +292,294 @@ class CheckYourselfCliTests(unittest.TestCase):
                 score = json.loads(result.stdout)
                 self.assertLessEqual(score["score"], max_score)
                 self.assertIn(expected_cap, [cap["cap"] for cap in score["caps_applied"]])
+
+    def test_nonfinite_numbers_are_rejected_across_schema_and_scoring_paths(self) -> None:
+        from importlib import util as _util
+        spec = _util.spec_from_file_location("cy", CLI)
+        cy = _util.module_from_spec(spec)
+        spec.loader.exec_module(cy)
+
+        for bad in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(kind="schema", value=repr(bad)):
+                self.assertTrue(cy.validate_json_schema(bad, {"type": "number"}))
+            with self.subTest(kind="weight", value=repr(bad)):
+                with mock.patch.dict(cy.SCORE_CATEGORIES, {"C1": ("Data", bad)}):
+                    with self.assertRaisesRegex(cy.CliError, "invalid scoring weight"):
+                        cy.score_from_inputs({"findings": []})
+            with self.subTest(kind="penalty", value=repr(bad)):
+                with mock.patch.dict(cy.SEVERITY_PENALTIES, {"P1": bad}):
+                    with self.assertRaisesRegex(cy.CliError, "invalid severity penalty"):
+                        cy.score_from_inputs({
+                            "findings": [{
+                                "id": "F-NONFINITE",
+                                "severity": "P1",
+                                "category": "C1",
+                                "finding": "finite input",
+                            }]
+                        })
+
+        with tempfile.TemporaryDirectory() as tmp:
+            artifact = Path(tmp) / "nonfinite.json"
+            artifact.write_text('{"score": NaN}', encoding="utf-8")
+            result = self.run_cli("validate", "--kind", "score", str(artifact), "--format", "json")
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(json.loads(result.stdout)["code"], 2)
+        self.assertIn("non-finite", result.stderr)
+
+    def test_malformed_json_fails_closed_for_cli_artifact_consumers(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            broken = project / "broken.json"
+            broken.write_text("{ not valid JSON", encoding="utf-8")
+            valid = project / "valid.json"
+            valid.write_text('{"findings": []}', encoding="utf-8")
+            cases = {
+                "coverage": ["coverage", "--check", str(broken), "--format", "json"],
+                "score": ["score", "--findings", str(broken), "--no-history", "--format", "json"],
+                "backlog": ["backlog", "--findings", str(broken), "--format", "json"],
+                "next": ["next", "--findings", str(broken), "--format", "json"],
+                "diff": ["diff", "--old", str(broken), "--new", str(valid), "--format", "json"],
+                "validate": ["validate", "--kind", "scan", str(broken), "--format", "json"],
+            }
+            for label, args in cases.items():
+                with self.subTest(command=label):
+                    result = self.run_cli(*args)
+                    self.assertEqual(result.returncode, 2, result.stderr)
+                    error = json.loads(result.stdout)
+                    self.assertEqual(error["code"], 2)
+                    self.assertIn("invalid JSON", error["error"])
+                    self.assertNotIn("Traceback", result.stderr)
+
+            (project / "package.json").write_text("{ not valid JSON", encoding="utf-8")
+            for command in ("scan", "diagnostic"):
+                with self.subTest(command=command):
+                    result = self.run_cli(command, str(project), "--format", "json", "--no-write")
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    data = json.loads(result.stdout)
+                    self.assertIn("could not be parsed", " ".join(data["stack_signals"]))
+
+            init_result = self.run_cli("init", str(project), "--format", "json")
+            self.assertEqual(init_result.returncode, 0, init_result.stderr)
+            self.assertTrue((project / "CHECKYOURSELF_COVERAGE.generated.json").exists())
+
+    def test_mcp_malformed_json_is_a_parse_error_not_a_crash(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(CLI), "mcp"],
+            text=True,
+            input="{ not valid JSON\n",
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        response = json.loads(result.stdout)
+        self.assertEqual(response["error"]["code"], -32700)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_corrupt_receipts_do_not_become_false_empty_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            null_receipt = project / "null.json"
+            null_receipt.write_text("null", encoding="utf-8")
+            valid = project / "valid.json"
+            valid.write_text('{"findings": []}', encoding="utf-8")
+
+            cases = {
+                "score": ["score", "--findings", str(null_receipt), "--no-history", "--format", "json"],
+                "backlog": ["backlog", "--findings", str(null_receipt), "--format", "json"],
+                "next": ["next", "--findings", str(null_receipt), "--format", "json"],
+                "diff": ["diff", "--old", str(null_receipt), "--new", str(valid), "--format", "json"],
+            }
+            for label, args in cases.items():
+                with self.subTest(command=label):
+                    result = self.run_cli(*args)
+                    self.assertEqual(result.returncode, 2, result.stderr)
+                    error = json.loads(result.stdout)
+                    self.assertEqual(error["code"], 2)
+                    self.assertIn("invalid findings artifact", error["error"])
+
+            coverage = project / "coverage-mid-write.json"
+            coverage.write_text('{"schema":"checkyourself-coverage/1","surfaces":[', encoding="utf-8")
+            findings = project / "findings.json"
+            findings.write_text('{"findings": []}', encoding="utf-8")
+            result = self.run_cli(
+                "score", "--findings", str(findings), "--coverage", str(coverage),
+                "--no-history", "--format", "json",
+            )
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertEqual(json.loads(result.stdout)["code"], 2)
+            self.assertNotIn("score", json.loads(result.stdout))
+
+    def test_atomic_generated_writes_preserve_previous_contents_on_interruption(self) -> None:
+        from importlib import util as _util
+        spec = _util.spec_from_file_location("cy", CLI)
+        cy = _util.module_from_spec(spec)
+        spec.loader.exec_module(cy)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            target = project / "generated.json"
+            target.write_text("old receipt\n", encoding="utf-8")
+            for failure in ("fsync", "replace"):
+                with self.subTest(failure=failure):
+                    target.write_text("old receipt\n", encoding="utf-8")
+                    with mock.patch.object(cy.os, failure, side_effect=OSError("simulated interruption")):
+                        with self.assertRaises(OSError):
+                            cy.safe_write_text(target, "new receipt\n")
+                    self.assertEqual(target.read_text(encoding="utf-8"), "old receipt\n")
+                    self.assertEqual(list(project.glob(f".{target.name}.*.tmp")), [])
+
+    def test_score_to_report_round_trip_and_invalid_mutations_fail_schema(self) -> None:
+        findings = {
+            "findings": [{
+                "id": "F-ROUNDTRIP",
+                "severity": "P1",
+                "category": "C5",
+                "finding": "Generated report test gap",
+                "plain_english_risk": "The report must preserve the score contract.",
+                "evidence": ["tests/test_checkyourself_cli.py:1"],
+                "status": "open",
+            }]
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            findings_path = project / "findings.json"
+            findings_path.write_text(json.dumps(findings), encoding="utf-8")
+            score_result = self.run_cli(
+                "score", "--findings", str(findings_path), "--no-history", "--format", "json",
+            )
+            self.assertEqual(score_result.returncode, 0, score_result.stderr)
+            score = json.loads(score_result.stdout)
+            backlog_result = self.run_cli(
+                "backlog", "--findings", str(findings_path), "--format", "json",
+            )
+            self.assertEqual(backlog_result.returncode, 0, backlog_result.stderr)
+            backlog = json.loads(backlog_result.stdout)
+
+            report = deepcopy(GOLDEN_REPORT)
+            report.update({
+                "score": score["score"],
+                "confidence": score["confidence"],
+                "score_breakdown": score["per_category"],
+                "score_caps": score["caps_applied"],
+                "findings": findings["findings"],
+                "remediation_backlog": backlog["remediation_backlog"],
+                "first_approval_batch": backlog["first_approval_batch"],
+            })
+            report_path = project / "report.json"
+            report_path.write_text(json.dumps(report), encoding="utf-8")
+            valid = self.run_cli("validate", "--kind", "report", str(report_path), "--format", "json")
+            self.assertEqual(valid.returncode, 0, valid.stderr)
+            self.assertTrue(json.loads(valid.stdout)["valid"])
+
+            mutations = {
+                "missing score": lambda artifact: artifact.pop("score"),
+                "score above maximum": lambda artifact: artifact.__setitem__("score", 101),
+                "unknown confidence": lambda artifact: artifact.__setitem__("confidence", "certain"),
+                "missing dashboard handoff": lambda artifact: artifact.pop("dashboard_handoff"),
+            }
+            for label, mutate in mutations.items():
+                with self.subTest(mutation=label):
+                    invalid = deepcopy(report)
+                    mutate(invalid)
+                    report_path.write_text(json.dumps(invalid), encoding="utf-8")
+                    result = self.run_cli("validate", "--kind", "report", str(report_path), "--format", "json")
+                    self.assertEqual(result.returncode, 1, result.stderr)
+                    self.assertFalse(json.loads(result.stdout)["valid"])
+
+    def test_diff_ci_treats_line_endings_as_noop_and_reports_real_changes(self) -> None:
+        old = {
+            "findings": [{
+                "id": "CY-LINE-001", "severity": "P2", "category": "C6",
+                "finding": "Line ending fixture", "status": "open",
+            }]
+        }
+        added = {
+            "findings": old["findings"] + [{
+                "id": "CY-REAL-001", "severity": "P1", "category": "C5",
+                "finding": "Actual regression", "status": "open",
+            }]
+        }
+
+        def ending_variant(body: str, mode: str) -> str:
+            lines = body.splitlines()
+            if mode == "crlf":
+                return "\r\n".join(lines) + "\r\n"
+            return "".join(line + ("\r\n" if index % 2 == 0 else "\n") for index, line in enumerate(lines))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            old_path = project / "old.json"
+            new_path = project / "new.json"
+            old_path.write_text(json.dumps(old, indent=2) + "\n", encoding="utf-8", newline="")
+            new_path.write_bytes(ending_variant(json.dumps(old, indent=2), "crlf").encode("utf-8"))
+            no_change = self.run_cli(
+                "diff", "--old", str(old_path), "--new", str(new_path), "--ci", "--format", "json",
+            )
+            self.assertEqual(no_change.returncode, 0, no_change.stderr)
+            no_change_data = json.loads(no_change.stdout)
+            self.assertFalse(no_change_data["regression"])
+            self.assertEqual(no_change_data["unchanged"], ["CY-LINE-001"])
+
+            new_path.write_bytes(ending_variant(json.dumps(added, indent=2), "mixed").encode("utf-8"))
+            changed = self.run_cli(
+                "diff", "--old", str(old_path), "--new", str(new_path), "--ci", "--format", "json",
+            )
+            self.assertEqual(changed.returncode, 1)
+            changed_data = json.loads(changed.stdout)
+            self.assertEqual([item["id"] for item in changed_data["added"]], ["CY-REAL-001"])
+            self.assertEqual(changed_data["regressions"], [{
+                "id": "CY-REAL-001", "type": "newly_open", "severity": "P1",
+            }])
+
+    def test_unicode_empty_and_huge_strings_survive_scan_and_receipt_commands(self) -> None:
+        huge = "x" * 200_001
+        finding = {
+            "id": "F-✨",
+            "severity": "P3",
+            "category": "C4",
+            "finding": "",
+            "plain_english_risk": "",
+            "evidence": [huge],
+            "status": "open",
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            unicode_dir = project / "空"
+            unicode_dir.mkdir()
+            (unicode_dir / "空.py").write_text("", encoding="utf-8")
+            (project / "huge.txt").write_text("x" * 2_000_001, encoding="utf-8")
+            scan_result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+            self.assertEqual(scan_result.returncode, 0, scan_result.stderr)
+            scan = json.loads(scan_result.stdout)
+            self.assertEqual(scan["scan_limits"]["files_oversized"], 1)
+            self.assertTrue(any("空.py" in item for item in scan["tree"]))
+
+            findings_path = project / "edge-findings.json"
+            findings_path.write_text(json.dumps({"findings": [finding]}), encoding="utf-8")
+            for label, args in {
+                "score": ["score", "--findings", str(findings_path), "--no-history", "--format", "json"],
+                "backlog": ["backlog", "--findings", str(findings_path), "--format", "json"],
+                "next": ["next", "--findings", str(findings_path), "--format", "json"],
+            }.items():
+                with self.subTest(command=label):
+                    result = self.run_cli(*args)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    data = json.loads(result.stdout)
+                    if label == "score":
+                        self.assertEqual(data["findings_scored"], ["F-✨"])
+                    elif label == "backlog":
+                        self.assertEqual(data["first_approval_batch"], ["F-✨"])
+                    else:
+                        self.assertEqual(data["finding_ids"], ["F-✨"])
+
+            same_path = project / "same-edge-findings.json"
+            same_path.write_text(json.dumps({"findings": [finding]}), encoding="utf-8")
+            diff_result = self.run_cli(
+                "diff", "--old", str(findings_path), "--new", str(same_path), "--format", "json",
+            )
+            self.assertEqual(diff_result.returncode, 0, diff_result.stderr)
+            diff = json.loads(diff_result.stdout)
+            self.assertEqual(diff["unchanged"], ["F-✨"])
 
     def test_not_applicable_scoring_preserves_its_weight(self) -> None:
         coverage = self._full_coverage()
@@ -1583,17 +1872,19 @@ class CheckYourselfCliTests(unittest.TestCase):
             self.assertFalse((Path(tmp) / ".checkyourself-score-history.json").exists())
 
     def test_corrupt_score_history_is_preserved_not_destroyed(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            project = Path(tmp)
-            findings_path = project / "findings.json"
-            findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
-            history_path = project / "history.json"
-            history_path.write_text("{ this is not valid json", encoding="utf-8")
-            result = self.run_cli("score", "--findings", str(findings_path), "--history", str(history_path), "--format", "json")
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertTrue((project / "history.json.corrupt.bak").exists())
-            history = json.loads(history_path.read_text(encoding="utf-8"))
-            self.assertEqual(len(history), 1)
+        for corrupted in ("{ this is not valid json", "null", '{"wrong": "shape"}'):
+            with self.subTest(corrupted=corrupted):
+                with tempfile.TemporaryDirectory() as tmp:
+                    project = Path(tmp)
+                    findings_path = project / "findings.json"
+                    findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
+                    history_path = project / "history.json"
+                    history_path.write_text(corrupted, encoding="utf-8")
+                    result = self.run_cli("score", "--findings", str(findings_path), "--history", str(history_path), "--format", "json")
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertTrue((project / "history.json.corrupt.bak").exists())
+                    history = json.loads(history_path.read_text(encoding="utf-8"))
+                    self.assertEqual(len(history), 1)
 
     def test_validate_public_handles_non_dict_dashboard_sample(self) -> None:
         validator = ROOT / "tools" / "validate_public.py"
