@@ -1223,7 +1223,7 @@ def render_markdown(root: Path, data: dict) -> str:
     add("Use this generated context with the CheckYourself diagnostic. Treat the deterministic")
     add("findings above as confirmed evidence, then sweep the whole production surface: infer the")
     add("stack, list unknowns, score production readiness 0-100 with caps, rank P0/P1/P2/P3 risks,")
-    add("produce the complete remediation backlog and the safest first approval batch, and generate")
+    add("produce the complete remediation backlog and the highest-severity approval batch, and generate")
     add("a bespoke learning plan from the gaps.")
     add("```")
     return "\n".join(lines) + "\n"
@@ -1761,12 +1761,22 @@ def backlog_from_findings(findings_data: Any) -> dict:
         backlog.append(item)
     backlog.sort(key=lambda item: (SEVERITY_ORDER.get(item["severity"], 9), item["category"], item["finding_id"]))
     first = first_batch(backlog)
+    batch_ids = [item["finding_id"] for item in first]
     return {
         "tool": TOOL_NAME,
         "schema": "checkyourself-backlog/1",
         "generated_at": now_iso(),
         "remediation_backlog": backlog,
-        "first_approval_batch": [item["finding_id"] for item in first],
+        # This selection is deterministic, but it does not analyze safety,
+        # dependencies, coupling, or blast radius. Keep the old field as a
+        # compatibility alias while naming the contract honestly.
+        "highest_severity_batch": batch_ids,
+        "first_approval_batch": batch_ids,
+        "batch_basis": {
+            "name": "highest_severity_batch",
+            "selection": "up to three unresolved findings at the highest current severity",
+            "safety_analysis": "not performed",
+        },
     }
 
 
@@ -1777,8 +1787,17 @@ def next_from_findings(findings_data: Any) -> dict:
         "tool": TOOL_NAME,
         "schema": "checkyourself-next-batch/1",
         "generated_at": now_iso(),
+        # The legacy field remains for consumers of next-batch/1. This is a
+        # highest-severity slice, not a safety or dependency judgment.
+        "highest_severity_batch": batch,
         "next_approval_batch": batch,
+        "next_highest_severity_batch": batch,
         "finding_ids": [item["finding_id"] for item in batch],
+        "batch_basis": {
+            "name": "highest_severity_batch",
+            "selection": "up to three unresolved findings at the highest current severity",
+            "safety_analysis": "not performed",
+        },
     }
 
 
@@ -1791,8 +1810,80 @@ def diff_findings(old_data: Any, new_data: Any) -> dict:
     old_findings = {f["id"]: f for f in normalize_findings(old_data)}
     new_findings = {f["id"]: f for f in normalize_findings(new_data)}
     added_ids = sorted(set(new_findings) - set(old_findings))
-    resolved_ids = sorted(set(old_findings) - set(new_findings))
+    removed_ids = sorted(set(old_findings) - set(new_findings))
     persisting_ids = sorted(set(old_findings) & set(new_findings))
+
+    def is_open(finding: dict) -> bool:
+        return finding.get("status") not in RESOLVED_STATUSES
+
+    status_changes: List[dict] = []
+    severity_changes: List[dict] = []
+    resolved_status_ids: List[str] = []
+    unchanged_ids: List[str] = []
+    for fid in persisting_ids:
+        old_finding = old_findings[fid]
+        new_finding = new_findings[fid]
+        old_status = old_finding.get("status", "open")
+        new_status = new_finding.get("status", "open")
+        old_severity = old_finding.get("severity", "P3")
+        new_severity = new_finding.get("severity", "P3")
+        if old_status != new_status:
+            status_changes.append({
+                "id": fid,
+                "old_status": old_status,
+                "new_status": new_status,
+            })
+        if old_severity != new_severity:
+            severity_changes.append({
+                "id": fid,
+                "old_severity": old_severity,
+                "new_severity": new_severity,
+            })
+        if old_status == new_status and old_severity == new_severity:
+            unchanged_ids.append(fid)
+        if is_open(old_finding) and not is_open(new_finding):
+            resolved_status_ids.append(fid)
+
+    # A finding can resolve without disappearing from the artifact. Include
+    # those transitions in the existing resolved collection so consumers do
+    # not have to infer closure from counts or status_changes.
+    resolved_ids = sorted(set(removed_ids) | set(resolved_status_ids))
+
+    regression_events: List[dict] = []
+
+    def add_regression(event: dict) -> None:
+        key = (event["id"], event["type"])
+        if not any((existing["id"], existing["type"]) == key for existing in regression_events):
+            regression_events.append(event)
+
+    for fid in added_ids:
+        finding = new_findings[fid]
+        if is_open(finding) and finding["severity"] in {"P0", "P1"}:
+            add_regression({
+                "id": fid,
+                "type": "newly_open",
+                "severity": finding["severity"],
+            })
+    for fid in persisting_ids:
+        old_finding = old_findings[fid]
+        new_finding = new_findings[fid]
+        if not is_open(old_finding) and is_open(new_finding) and new_finding["severity"] in {"P0", "P1"}:
+            add_regression({
+                "id": fid,
+                "type": "reopened",
+                "severity": new_finding["severity"],
+            })
+        if (
+            is_open(new_finding)
+            and new_finding["severity"] in {"P0", "P1"}
+            and SEVERITY_ORDER.get(new_finding["severity"], 9) < SEVERITY_ORDER.get(old_finding["severity"], 9)
+        ):
+            add_regression({
+                "id": fid,
+                "type": "severity_escalated",
+                "old_severity": old_finding["severity"],
+                "new_severity": new_finding["severity"],
+            })
 
     evidence_changes: List[dict] = []
     for fid in persisting_ids:
@@ -1814,17 +1905,22 @@ def diff_findings(old_data: Any, new_data: Any) -> dict:
 
     old_counts = open_counts(old_findings)
     new_counts = open_counts(new_findings)
+    count_regression = any(new_counts[sev] > old_counts[sev] for sev in ("P0", "P1"))
     return {
         "tool": TOOL_NAME,
         "schema": "checkyourself-diff/1",
         "generated_at": now_iso(),
         "added": [new_findings[fid] for fid in added_ids],
-        "resolved": [old_findings[fid] for fid in resolved_ids],
-        "unchanged": persisting_ids,
+        "resolved": [new_findings[fid] if fid in resolved_status_ids else old_findings[fid] for fid in resolved_ids],
+        "unchanged": unchanged_ids,
+        "status_changes": status_changes,
+        "severity_changes": severity_changes,
         "evidence_changes": evidence_changes,
         "old_counts": old_counts,
         "new_counts": new_counts,
-        "regression": any(new_counts[sev] > old_counts[sev] for sev in ("P0", "P1")),
+        "count_regression": count_regression,
+        "regressions": regression_events,
+        "regression": count_regression or bool(regression_events),
     }
 
 
@@ -1884,9 +1980,9 @@ def describe_capabilities() -> dict:
         ("coverage --emit", "Write the 20-surface coverage skeleton by default, or print JSON with --format json.", {"project": "optional string"}, COVERAGE_SCHEMA_ID),
         ("coverage --check", "Validate coverage completeness.", {"file": "coverage json path"}, "checkyourself-coverage-check/1"),
         ("score", "Compute a deterministic Production Reality Score from findings and optional coverage, with score history.", {"findings": "json path", "coverage": "optional json path", "history": "optional path"}, SCORE_SCHEMA_ID),
-        ("backlog", "Rank remediation backlog and first approval batch.", {"findings": "json path"}, "checkyourself-backlog/1"),
-        ("next", "Return the next safest unresolved approval batch.", {"findings": "json path"}, "checkyourself-next-batch/1"),
-        ("diff", "Compare two findings artifacts and report added, resolved, and regressed findings.", {"old": "json path", "new": "json path"}, "checkyourself-diff/1"),
+        ("backlog", "Rank remediation backlog and return a highest-severity batch; safety analysis is not performed.", {"findings": "json path"}, "checkyourself-backlog/1"),
+        ("next", "Return the next highest-severity unresolved approval batch; safety analysis is not performed.", {"findings": "json path"}, "checkyourself-next-batch/1"),
+        ("diff", "Compare two findings artifacts, report identity-aware transitions, and gate newly open, reopened, or escalated P0/P1 findings.", {"old": "json path", "new": "json path"}, "checkyourself-diff/1"),
         ("validate", "Validate an artifact against a bundled JSON schema subset.", {"kind": "schema kind", "file": "json path"}, "checkyourself-validation/1"),
         ("schema", "Print a bundled schema by name.", {"name": "schema name"}, "json-schema"),
         ("init", "Create starter generated coverage/context files without overwriting by default.", {"project": "path"}, "checkyourself-init/1"),
@@ -2256,7 +2352,10 @@ def write_text_result(data: dict) -> None:
         for cap in data["caps_applied"]:
             print(f"  cap {cap['cap']}: {cap['reason']}")
     elif schema in {"checkyourself-backlog/1", "checkyourself-next-batch/1"}:
-        ids = data.get("first_approval_batch") or data.get("finding_ids") or []
+        if schema == "checkyourself-next-batch/1":
+            ids = data.get("finding_ids") or []
+        else:
+            ids = data.get("highest_severity_batch") or data.get("first_approval_batch") or []
         print("Next batch: " + (", ".join(ids) if ids else "none"))
     else:
         write_json(data)
@@ -2433,8 +2532,10 @@ def command_diff(args: argparse.Namespace) -> int:
             print(f"  + [{f['severity']}] {f['id']} {f['finding']}")
         for f in resolved:
             print(f"  - [{f['severity']}] {f['id']} {f['finding']}")
-        if result["regression"]:
-            print("REGRESSION: open P0/P1 count increased against the baseline.")
+        for event in result["regressions"]:
+            print(f"  ! [{event['type']}] {event['id']}")
+        if result["count_regression"]:
+            print("  ! [count_increased] open P0/P1 count increased against the baseline.")
     if args.ci and result["regression"]:
         return 1
     return 0
@@ -2595,6 +2696,7 @@ def mcp_tools() -> List[dict]:
             "title": "Rank Backlog",
             "description": description(
                 "Normalize inline findings and return the complete remediation backlog sorted by severity, category, and finding ID. "
+                "The highest_severity_batch is a deterministic severity slice; safety and dependency analysis are not performed. "
                 "Each item includes fix summary, order rationale, verification, rollback idea, learning value, and status. "
                 "This recommends work only; it does not modify files or mark findings resolved."
             ),
@@ -2608,8 +2710,8 @@ def mcp_tools() -> List[dict]:
             "name": "next",
             "title": "Next Approval Batch",
             "description": description(
-                "Return the next safest unresolved approval batch from inline findings by reusing the backlog ranking rules. "
-                "The batch contains at most the first three unresolved findings at the highest current severity. "
+                "Return the next highest-severity unresolved approval batch from inline findings by reusing the backlog ranking rules. "
+                "The batch contains at most the first three unresolved findings at the highest current severity; safety and dependency analysis are not performed. "
                 "This is a planning tool only and does not perform fixes."
             ),
             "inputSchema": object_schema({
@@ -2623,8 +2725,9 @@ def mcp_tools() -> List[dict]:
             "title": "Diff Findings",
             "description": description(
                 "Compare two inline findings artifacts (scan results, reports, or finding lists) and return added, "
-                "resolved, and unchanged findings, evidence-level changes, severity count deltas, and a regression flag "
-                "that is true when open P0/P1 counts increased. Use this to gate changes against a baseline."
+                "resolved, unchanged, status and severity transitions, evidence-level changes, severity count deltas, and "
+                "a regression flag that is true for newly open, reopened, or escalated P0/P1 findings or increased counts. "
+                "Use this to gate changes against a baseline."
             ),
             "inputSchema": object_schema({
                 "old": findings_schema("treat as the baseline"),
@@ -2908,7 +3011,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--format", choices=("text", "json"), default="text")
     p.set_defaults(func=command_backlog)
 
-    p = sub.add_parser("next", help="Return the next safest unresolved approval batch.")
+    p = sub.add_parser("next", help="Return the next highest-severity unresolved approval batch; safety analysis is not performed.")
     p.add_argument("--findings", required=True, help="JSON file containing findings, scan output, or report.")
     p.add_argument("--format", choices=("text", "json"), default="text")
     p.set_defaults(func=command_next)
@@ -2916,7 +3019,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("diff", help="Compare two findings artifacts and report added/resolved/regressed findings.")
     p.add_argument("--old", required=True, help="Baseline findings JSON path, or - for stdin.")
     p.add_argument("--new", required=True, help="Current findings JSON path, or - for stdin.")
-    p.add_argument("--ci", action="store_true", help="Exit non-zero when open P0/P1 counts increased.")
+    p.add_argument("--ci", action="store_true", help="Exit non-zero for a new/reopened/escalated open P0/P1 finding or an increased open P0/P1 count.")
     p.add_argument("--format", choices=("text", "json"), default="text")
     p.set_defaults(func=command_diff)
 

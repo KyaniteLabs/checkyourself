@@ -948,6 +948,75 @@ class CheckYourselfCliTests(unittest.TestCase):
         self.assertTrue(diff["regression"])
         self.assertEqual(ci_result.returncode, 1)
 
+    def test_diff_gates_equal_count_p1_replacement(self) -> None:
+        old = {"findings": [{"id": "CY-OLD-001", "severity": "P1", "category": "C5", "finding": "Old risk", "status": "open"}]}
+        new = {"findings": [{"id": "CY-NEW-001", "severity": "P1", "category": "C5", "finding": "New risk", "status": "open"}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            old_path = Path(tmp) / "old.json"
+            new_path = Path(tmp) / "new.json"
+            old_path.write_text(json.dumps(old), encoding="utf-8")
+            new_path.write_text(json.dumps(new), encoding="utf-8")
+            result = self.run_cli("diff", "--old", str(old_path), "--new", str(new_path), "--format", "json")
+            ci_result = self.run_cli("diff", "--old", str(old_path), "--new", str(new_path), "--ci")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        diff = json.loads(result.stdout)
+        self.assertEqual(diff["old_counts"], diff["new_counts"])
+        self.assertTrue(diff["regression"])
+        self.assertEqual(diff["regressions"], [{"id": "CY-NEW-001", "type": "newly_open", "severity": "P1"}])
+        self.assertEqual(ci_result.returncode, 1)
+
+    def test_diff_reports_status_only_resolution(self) -> None:
+        old = {"findings": [{"id": "CY-TEST-001", "severity": "P1", "category": "C5", "finding": "No tests", "status": "open"}]}
+        new = {"findings": [{"id": "CY-TEST-001", "severity": "P1", "category": "C5", "finding": "No tests", "status": "fixed"}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            old_path = Path(tmp) / "old.json"
+            new_path = Path(tmp) / "new.json"
+            old_path.write_text(json.dumps(old), encoding="utf-8")
+            new_path.write_text(json.dumps(new), encoding="utf-8")
+            result = self.run_cli("diff", "--old", str(old_path), "--new", str(new_path), "--format", "json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        diff = json.loads(result.stdout)
+        self.assertEqual([finding["id"] for finding in diff["resolved"]], ["CY-TEST-001"])
+        self.assertEqual(diff["resolved"][0]["status"], "fixed")
+        self.assertEqual(diff["status_changes"], [{"id": "CY-TEST-001", "old_status": "open", "new_status": "fixed"}])
+        self.assertEqual(diff["unchanged"], [])
+        self.assertFalse(diff["regression"])
+
+    def test_diff_gates_reopened_and_escalated_high_risk(self) -> None:
+        old = {"findings": [{"id": "CY-RISK-001", "severity": "P2", "category": "C5", "finding": "Risk", "status": "fixed"}]}
+        new = {"findings": [{"id": "CY-RISK-001", "severity": "P1", "category": "C5", "finding": "Risk", "status": "open"}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            old_path = Path(tmp) / "old.json"
+            new_path = Path(tmp) / "new.json"
+            old_path.write_text(json.dumps(old), encoding="utf-8")
+            new_path.write_text(json.dumps(new), encoding="utf-8")
+            result = self.run_cli("diff", "--old", str(old_path), "--new", str(new_path), "--ci")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("[reopened] CY-RISK-001", result.stdout)
+        self.assertIn("[severity_escalated] CY-RISK-001", result.stdout)
+
+    def test_batch_output_names_highest_severity_slice(self) -> None:
+        findings = {
+            "findings": [
+                {"id": "F-002", "severity": "P2", "category": "C6", "finding": "No CI", "status": "open"},
+                {"id": "F-001", "severity": "P1", "category": "C5", "finding": "No tests", "status": "open"},
+            ]
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "findings.json"
+            path.write_text(json.dumps(findings), encoding="utf-8")
+            result = self.run_cli("backlog", "--findings", str(path), "--format", "json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        backlog = json.loads(result.stdout)
+        self.assertEqual(backlog["highest_severity_batch"], ["F-001"])
+        self.assertEqual(backlog["first_approval_batch"], backlog["highest_severity_batch"])
+        self.assertEqual(backlog["batch_basis"]["name"], "highest_severity_batch")
+        self.assertEqual(backlog["batch_basis"]["safety_analysis"], "not performed")
+
     def test_mcp_rejects_unknown_arguments_and_unknown_tools(self) -> None:
         messages = "\n".join([
             json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25"}}),
