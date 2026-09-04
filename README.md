@@ -62,7 +62,7 @@ CheckYourself gives you reality **before production does the grading** — a cal
 4. Run a read-only diagnostic and review the **Production Reality Report**.
 5. Approve fixes one at a time or in safe, reversible batches.
 6. Recheck and rescore after each batch.
-7. Continue until every finding is fixed, deferred with a reason, accepted as risk, blocked by missing context, or proven not applicable.
+7. Continue until every finding is fixed, deferred with a reason, accepted as risk, suppressed with evidence, proven not applicable, or remains open with blocker context.
 8. Get a custom learning plan based on the actual gaps.
 
 > **No model lock-in. No required cloud account. No required command line.**
@@ -75,7 +75,7 @@ Once the folder is in place, tell your AI assistant how to operate within it:
 Use the checkyourself folder as your operating context.
 Start with a read-only diagnostic.
 Do not make code changes until I approve a specific fix.
-Generate the dashboard only if I say dashboard yes.
+Generate the dashboard only if I say `dashboard yes` or `dashboard inline`.
 After the diagnostic, create a learning plan based on the gaps you found.
 ```
 
@@ -102,14 +102,14 @@ Default outputs (see a real example in [`samples/sample-production-reality-repor
 - **Production Reality Score** — a 0–100 score with caps and reasoning ([how the score works](docs/checkyourself-score-explained.md)).
 - **Coverage Sweep** — every relevant production surface marked Pass, Finding, Unknown, or Not applicable.
 - **Complete Findings Register** — every discovered risk, not just the obvious ones.
-- **Complete Remediation Backlog** — every finding and blocking unknown ranked by severity, safety, and dependency order.
-- **Safest First Approval Batch** — the first reversible batch to approve, not the whole scope.
+- **Complete Remediation Backlog** — every finding and blocking unknown in a deterministic severity, category, and finding-ID order.
+- **Highest-Severity Approval Batch** — a small unresolved slice for review, not the whole scope. The local CLI does not infer safety, dependencies, coupling, or blast radius; the diagnostic and human approval gate still do.
 - **Guided Fix Loop** — approve, fix, verify, rescore, repeat.
 - **Bespoke Learning Plan** — what to learn next based on what your own app was missing.
 
 Optional output:
 
-- **Human Audit Dashboard** — one self-contained HTML/CSS dashboard that visualizes the score, risks, backlog, coverage, status, and learning plan. It is optional because dashboards use extra tokens. Ask for it with `dashboard yes`. If you do not want HTML, use the compact inline Markdown dashboard instead.
+- **Human Audit Dashboard** — one self-contained HTML/CSS dashboard that visualizes the score, risks, backlog, coverage, status, and learning plan. It is optional because dashboards use extra tokens. Ask for it with `dashboard yes`, or use `dashboard inline` for the compact Markdown fallback.
 
 ---
 
@@ -199,7 +199,7 @@ This repository includes a real dogfood dashboard screenshot from CheckYourself 
 
 ![CheckYourself dogfood dashboard showing the self-audit score, launch status, risk counts, and coverage sweep](10_DASHBOARD/output/checkyourself-dogfood-dashboard-live-20260612.png)
 
-After the report exists, say:
+After the report exists, say either:
 
 ```text
 dashboard yes
@@ -211,7 +211,14 @@ The AI creates one self-contained HTML/CSS dashboard from the report — it shou
 dashboard inline
 ```
 
-and the AI returns the compact Markdown dashboard shape instead of creating a file.
+or:
+
+```text
+dashboard inline
+```
+
+The first creates one self-contained HTML/CSS file. The second returns the
+compact Markdown dashboard shape instead of creating a file.
 
 Dashboard files:
 

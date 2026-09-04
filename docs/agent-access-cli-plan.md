@@ -1,8 +1,9 @@
-# Build Plan — Agent-Accessible CheckYourself CLI
+# Agent-Accessible CheckYourself CLI — Decision Record
 
-Status: **implemented in v1.6.0.** This document is now the decision record for
-turning `tools/checkyourself.py` from a one-shot scanner into the machine interface that lets an
-AI agent **discover, run, score, and self-verify** CheckYourself with no human in the loop.
+Status: **implemented in v1.6.0 and present in the v1.7.0 public manifest.**
+This document records the shipped machine interface that lets an AI agent
+**discover, run, score, and self-verify** CheckYourself with no human in the
+loop.
 
 Current decision: **CLI is the canonical engine, MCP is a thin local wrapper, no hosted API for
 now.** The CLI is local, offline, scriptable, CI-friendly, and easiest for AI agents to call
@@ -23,8 +24,9 @@ The single design idea behind everything below:
 - **The agent supplies judgment** — what it found (findings), which surfaces it inspected
   (coverage), what evidence it reviewed.
 - **The CLI owns determinism** — it computes the score from `scoring-method.md` (weights +
-  caps), ranks the backlog, selects the next safe batch, and validates output against
-  `schemas/`.
+  caps), ranks the backlog, selects the next highest-severity batch, and validates output against
+  `schemas/`. It does not decide whether a batch is safe to approve; that remains a diagnostic and
+  human-review decision.
 
 Today an LLM eyeballs the score. That is neither reproducible nor verifiable. When the CLI
 owns the math and the schemas, **any agent, any model, gets the same score from the same
@@ -81,13 +83,13 @@ Global conventions:
 - **Determinism:** pure; derived from constants and the bundled schema/method files.
 - **Example:** `python3 tools/checkyourself.py describe --format json`
 
-### 3.2 `scan` — deterministic discovery (built, to extend)
+### 3.2 `scan` — deterministic discovery (implemented)
 
 - **Purpose:** detect stack, dependencies, scripts, env files, tests, CI, risk-surface path
   hints; raise deterministic findings (credential shapes, lower-confidence secret-like
   assignments, committed `.env`, missing `.env.example`, no tests, no CI) ranked P0-P3.
-- **Extend with:** `--format json` returning a `checkyourself-scan/1` object that already
-  carries `findings[]` and `counts` so it can pipe straight into `score` and `backlog`.
+- **Behavior:** `--format json` returns a `checkyourself-scan/1` object with `findings[]` and
+  `counts` so it can pipe straight into `score` and `backlog`.
 - **Output:** context Markdown + scan JSON with suppression status. `diagnostic` is an alias
   for `scan`, and `scan --deep` adds conservative CI/supply-chain validation checks.
 
@@ -141,11 +143,12 @@ Global conventions:
 ### 3.6 `validate` — schema self-check (readable / accessible)
 
 - **Purpose:** let an agent prove its own output is well-formed, and let CI gate on it.
-- **Input:** `validate --kind {report,dashboard,learning-plan,scan,coverage,score} FILE`.
+- **Input:** `validate --kind {capabilities,report,dashboard,dashboard-data,learning-plan,scan,coverage,score,backlog,next,diff} FILE`.
 - **Behavior:** validate against the matching schema in `schemas/`; print errors; non-zero exit
   on invalid.
-- **Note:** implement a small stdlib JSON-Schema subset checker (required/type/enum/min/max/items)
-  to stay dependency-free; document the supported subset.
+- **Behavior:** the standard-library-only checker executes every validation keyword used by the
+  bundled schemas and fails closed on unsupported schema keywords, so a contract cannot silently
+  lose constraints.
 
 ### 3.7 `schema` — emit a contract (readable)
 
@@ -173,7 +176,8 @@ was reused initially and retired in v1.7.0; `dashboard-data.schema.json` covers 
 - `schemas/scan.schema.json` — the `checkyourself-scan/1` object `scan` emits.
 - `schemas/coverage.schema.json` — the 20-surface matrix with status enum + evidence arrays.
 - `schemas/score-result.schema.json` — the `score` breakdown (per-category, caps, confidence).
-- `schemas/backlog.schema.json` — the ranked backlog and first approval batch.
+- `schemas/backlog.schema.json` — the ranked backlog and highest-severity batch (with the legacy
+  `first_approval_batch` compatibility field).
 - `schemas/next-batch.schema.json` — the next unresolved approval batch.
 - `schemas/capabilities.schema.json` — the `describe` manifest shape.
 
@@ -301,8 +305,9 @@ Cursor / Codex.
   SDK, preserving the zero-dependency promise.
 - **Handshake:** implements `initialize`, `notifications/initialized`, `ping`, `tools/list`, and
   `tools/call`.
-- **Tools exposed:** `scan`, `coverage_emit`, `coverage_check`, `score`, `backlog`, `next`,
-  `validate`, `describe` — each a thin wrapper over the same internal functions the CLI uses, so
+- **Tools exposed:** `scan`, `coverage_emit`, `coverage_check`, `score`, `backlog`, `next`, `diff`,
+  `validate`, `schema`, `describe` — each a thin wrapper over the same internal functions the CLI
+  uses, so
   there is one implementation and one contract.
 - **Inputs/outputs:** JSON arguments mirroring the CLI flags; results are the same schema-backed
   objects, returned as MCP tool content.
@@ -316,11 +321,13 @@ The native stdlib server is shipped as `python3 tools/checkyourself.py mcp`.
 
 ## 10. Discoverability wiring
 
-- Add to `AGENTS.md`: a short "Machine interface" note — *"To discover and drive CheckYourself
+The shipped wiring includes:
+
+- `AGENTS.md`'s "Machine interface" note: *"To discover and drive CheckYourself
   programmatically, run `python3 tools/checkyourself.py describe --format json`."*
-- Add a `capabilities` pointer in `checkyourself.manifest.json` entrypoints.
-- README: extend the "Optional local CLI" section with the agent-facing verbs.
-- `docs/cli.md`: full command reference (expand from current scan-only docs).
+- A `capabilities` pointer in `checkyourself.manifest.json` entrypoints.
+- README coverage of the agent-facing verbs in the optional local CLI section.
+- The full command reference in `docs/cli.md`.
 
 ---
 
@@ -355,9 +362,10 @@ the scan-derived path records the missing execution or validation receipt instea
 
 ---
 
-## 13. Phased rollout & acceptance criteria
+## 13. Historical rollout & acceptance criteria
 
-All phases below are delivered in v1.6.0 unless a future enhancement is called out explicitly.
+The phases below describe the delivered v1.6.0 rollout. Any future enhancement
+is called out explicitly.
 
 The canonical resolution statuses are `fixed`, `accepted-risk`, `deferred`,
 `not-applicable`, and `suppressed`. An unresolved item remains `open` and

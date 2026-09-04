@@ -1,5 +1,53 @@
 # Changelog
 
+## Unreleased
+
+The current maintenance pass makes the local diagnostic contracts explicit and
+keeps user-facing proof aligned with the shipped behavior.
+
+### Trustworthy evidence and scoring
+
+- Scores now fail closed when coverage evidence is invalid, incomplete,
+  duplicated, unknown, or mismatched. Missing evidence cannot be disguised as
+  a `Pass`, and high confidence requires all 20 surfaces with real evidence.
+- Bundled JSON Schema validation now executes every validation keyword used by
+  the repository's contracts, including combinators, array constraints, and
+  closed-object checks; unsupported schema keywords are reported instead of
+  being ignored.
+- The report contract now requires the complete Production Reality Report
+  sections, so a partial artifact cannot certify a complete diagnostic.
+- The skill documents a canonical manual rule-ID registry and evidence rubric,
+  plus the executable `final_score = min(base_score, minimum_cap)` formula for
+  readers who cannot run the CLI.
+
+### Safer local automation
+
+- Scans disclose unreadable, skipped, and truncated files, recognize relevant
+  extensionless configuration files, and avoid misclassifying ordinary names
+  as tests. Generated output uses read-only-by-default and symlink-safe write
+  boundaries.
+- Backlog and `next` output now calls its deterministic slice
+  `highest_severity_batch`; it is an ordering result, not an analysis of
+  safety, dependencies, coupling, or blast radius. `diff` reports identity,
+  status, and severity transitions and its CI gate catches newly opened,
+  reopened, escalated, and count-increasing P0/P1 risk.
+
+### Clearer agent and dashboard interfaces
+
+- The local CLI is documented as the canonical engine, with the stdio MCP
+  wrapper using the same functions and schemas. The agent-access plan is now a
+  current decision record rather than a future-tense implementation plan.
+- The optional dashboard has a documented `dashboard inline` Markdown mode in
+  addition to the opt-in self-contained HTML/CSS mode.
+
+### Public and release documentation
+
+- Public license claims are aligned to Apache-2.0 across the README, manifest,
+  LICENSE, and NOTICE surfaces.
+- Security support documentation identifies the supported tagged `1.7.x`
+  release line, the supported public `main` branch, and the unsupported older
+  tags.
+
 ## 1.7.0 — 2026-06-12
 
 Major reliability, security, and detection-depth pass.
