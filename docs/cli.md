@@ -67,6 +67,11 @@ python3 tools/checkyourself.py backlog --findings CHECKYOURSELF_SCAN.generated.j
 python3 tools/checkyourself.py next --findings CHECKYOURSELF_SCAN.generated.json --format json
 ```
 
+The emitted skeleton intentionally has empty statuses, so it is not scoreable
+yet: fill coverage.json with evidence, then re-run score. Run `coverage --check`
+first to get a clear completeness result. If a JSON-mode score command fails,
+its stdout is still a valid JSON error object for redirected automation.
+
 That makes the score and highest-severity batch reproducible. Same evidence,
 same result. No vibes with a clipboard. Review dependencies, reversibility,
 coupling, and blast radius before approving a batch.
@@ -156,6 +161,10 @@ suppress:
 
 Suppressed findings remain in JSON with `status: "suppressed"` and a
 `suppression` note, but they do not count toward severity totals or score caps.
+Context-only matches from documentation, tests, audits, detector definitions,
+and explicitly guarded eval code are omitted from findings and listed in
+`context_suppressions` with a reason. High-confidence credential shapes and
+unguarded application sinks remain findings.
 
 `scan --deep` is still intentionally conservative. It validates a few detected
 surfaces instead of pretending to be a full SAST platform: mutable GitHub Action

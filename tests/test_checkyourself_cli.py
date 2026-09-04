@@ -502,6 +502,65 @@ class CheckYourselfCliTests(unittest.TestCase):
         self.assertEqual([finding["id"] for finding in suppressed], ["CY-SECRET-001"])
         self.assertEqual(data["suppression_count"], 1)
 
+    def test_multiline_yaml_suppression_paths_are_parsed(self) -> None:
+        token = "sk-" + ("m" * 32)
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "app.py").write_text(f'API_KEY = "{token}"\n', encoding="utf-8")
+            (project / ".checkyourself.yml").write_text(
+                "\n".join([
+                    "version: 1",
+                    "suppress:",
+                    "  - id: CY-SECRET-001",
+                    "    reason: reviewed multiline path fixture",
+                    "    files:",
+                    "      - app.py",
+                    "    reviewed_by: unit-test",
+                    '    reviewed_at: "2026-09-04"',
+                    "",
+                ]),
+                encoding="utf-8",
+            )
+            result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertIsNone(data["config_error"])
+        self.assertEqual(data["suppression_count"], 1)
+        suppressed = next(finding for finding in data["findings"] if finding["id"] == "CY-SECRET-001")
+        self.assertEqual(suppressed["suppression"]["reason"], "reviewed multiline path fixture")
+
+    def test_path_scoped_suppression_does_not_hide_other_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "src").mkdir()
+            (project / "src" / "reviewed.py").write_text(
+                'API_KEY = "abcdefghijklmnop"\n', encoding="utf-8"
+            )
+            (project / "src" / "runtime.py").write_text(
+                'API_KEY = "qrstuvwxyzabcdef"\n', encoding="utf-8"
+            )
+            (project / ".checkyourself.yml").write_text(
+                "\n".join([
+                    "version: 1",
+                    "suppress:",
+                    "  - id: CY-SECRET-002",
+                    "    reason: reviewed non-secret config field",
+                    '    files: ["src/reviewed.py"]',
+                    "",
+                ]),
+                encoding="utf-8",
+            )
+            result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        finding = next(item for item in data["findings"] if item["id"] == "CY-SECRET-002")
+        self.assertEqual(finding["status"], "open")
+        self.assertTrue(any("src/runtime.py" in evidence for evidence in finding["evidence"]))
+        self.assertEqual(len(finding["suppressed_evidence"]), 1)
+        self.assertIn("reviewed non-secret config field", finding["suppressed_evidence"][0]["reason"])
+
     def test_package_scripts_are_redacted_from_json_and_markdown(self) -> None:
         token = "sk-" + ("y" * 32)
         with tempfile.TemporaryDirectory() as tmp:
@@ -684,10 +743,35 @@ class CheckYourselfCliTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("Wrote coverage skeleton", result.stdout)
+            self.assertIn("fill coverage.json with evidence, then re-run score", result.stdout.lower())
             coverage_path = project / "CHECKYOURSELF_COVERAGE.generated.json"
             self.assertTrue(coverage_path.exists())
             coverage = json.loads(coverage_path.read_text(encoding="utf-8"))
             self.assertEqual(coverage["schema"], "checkyourself-coverage/1")
+
+    def test_failed_json_score_redirect_emits_parseable_error_object(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            findings_path = project / "findings.json"
+            findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
+            emit = self.run_cli("coverage", "--emit", cwd=project)
+            self.assertEqual(emit.returncode, 0, emit.stderr)
+            coverage_path = project / "CHECKYOURSELF_COVERAGE.generated.json"
+            output_path = project / "score.json"
+            with output_path.open("w", encoding="utf-8") as output:
+                result = subprocess.run(
+                    [
+                        sys.executable, str(CLI), "score", "--findings", str(findings_path),
+                        "--coverage", str(coverage_path), "--no-history", "--format", "json",
+                    ],
+                    cwd=str(project), text=True, stdout=output, stderr=subprocess.PIPE, check=False,
+                )
+
+            self.assertEqual(result.returncode, 2)
+            error = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(error["code"], 2)
+            self.assertIn("fill coverage.json with evidence, then re-run score", error["error"].lower())
+            self.assertIn("error:", result.stderr)
 
     def test_diagnostic_alias_emits_scan_contract(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -870,6 +954,46 @@ class CheckYourselfCliTests(unittest.TestCase):
         ids = {f["id"] for f in json.loads(result.stdout)["findings"]}
         self.assertIn("CY-API-001", ids)
         self.assertIn("CY-CODE-001", ids)
+
+    def test_context_suppressions_keep_real_secret_and_sink_matches(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "docs").mkdir()
+            (project / "tests").mkdir()
+            (project / "docs" / "audit.md").write_text(
+                'API_KEY = "abcdefghijklmnop"\neval(userInput)\n', encoding="utf-8"
+            )
+            (project / "tests" / "test_example.py").write_text(
+                'API_KEY = "qrstuvwxyzabcdef"\neval(userInput)\n', encoding="utf-8"
+            )
+            (project / "detector.py").write_text(
+                "patterns = [{pattern: /eval\\s*\\(/, label: 'eval()'}]\n", encoding="utf-8"
+            )
+            (project / "guarded.js").write_text(
+                "const blockedPatterns = findDangerous(code);\n"
+                "if (blockedPatterns.length > 0) { warn(); } else { eval(wrappedCode); }\n",
+                encoding="utf-8",
+            )
+            (project / "app.py").write_text(
+                'API_KEY = "1234567890abcdef"\neval(userInput)\n', encoding="utf-8"
+            )
+            result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        ids = {finding["id"] for finding in data["findings"]}
+        self.assertIn("CY-SECRET-002", ids)
+        self.assertIn("CY-CODE-001", ids)
+        secret = next(finding for finding in data["findings"] if finding["id"] == "CY-SECRET-002")
+        sink = next(finding for finding in data["findings"] if finding["id"] == "CY-CODE-001")
+        self.assertTrue(any("app.py" in evidence for evidence in secret["evidence"]))
+        self.assertTrue(any("app.py" in evidence for evidence in sink["evidence"]))
+        suppressed = data["context_suppressions"]
+        self.assertGreaterEqual(len(suppressed), 4)
+        reasons = {item["reason"] for item in suppressed}
+        self.assertTrue(any("documentation" in reason for reason in reasons))
+        self.assertTrue(any("detector source" in reason for reason in reasons))
+        self.assertTrue(any("guarded eval" in reason for reason in reasons))
 
     def test_missing_lockfile_is_flagged(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1252,7 +1376,9 @@ class CheckYourselfCliTests(unittest.TestCase):
                         "--coverage", str(coverage_path), "--no-history", "--format", "json",
                     )
                 self.assertEqual(cli_result.returncode, 2, cli_result.stderr)
-                self.assertEqual(cli_result.stdout, "")
+                error = json.loads(cli_result.stdout)
+                self.assertEqual(error["code"], 2)
+                self.assertIn("fill coverage.json with evidence, then re-run score", error["error"])
                 self.assertIn("invalid coverage artifact", cli_result.stderr)
 
                 mcp_response = self._run_mcp_score(coverage)
