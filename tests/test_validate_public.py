@@ -312,6 +312,17 @@ class ValidatePublicTests(unittest.TestCase):
         self.assertNotIn("not listed in .gitignore", result_with.stdout)
         self.assertNotIn("scanner-generated project context output is not ignored", result_with.stdout)
 
+    def test_security_policy_names_current_release_line_and_main(self) -> None:
+        manifest = json.loads((ROOT / "checkyourself.manifest.json").read_text(encoding="utf-8"))
+        version = manifest["version"]
+        release_line = ".".join(version.split(".")[:2]) + ".x"
+        security = (ROOT / "SECURITY.md").read_text(encoding="utf-8").lower()
+
+        self.assertIn(f"latest tagged release is `{version}`", security)
+        self.assertIn(release_line.lower(), security)
+        self.assertIn("public `main` branch", security)
+        self.assertIn("unsupported", security)
+
 
 if __name__ == "__main__":
     unittest.main()

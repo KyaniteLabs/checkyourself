@@ -10,7 +10,7 @@ The inline Markdown fallback is `10_DASHBOARD/inline-dashboard.md`.
 | Input | Required? | Notes |
 |---|---|---|
 | Production Reality Report | Yes | Do not re-run the audit just to build the dashboard. |
-| Dashboard request | Yes | Canonical trigger: `dashboard yes`. |
+| Dashboard request | Yes | Canonical triggers: `dashboard yes` or `dashboard inline`. |
 | Current finding statuses | Preferred | Needed for progress display. |
 | Language signals | Preferred | User prompt language, README/UI language, locale files, docs. |
 
