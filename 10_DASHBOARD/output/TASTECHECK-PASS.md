@@ -1,45 +1,52 @@
-# TASTECHECK PASS — CheckYourself dashboard + README — 2026-06-12
+# TASTECHECK RECEIPT — CheckYourself dashboard + README — 2026-09-04
 
 Spec (inferred system, existing artifacts): **"A calm, high-contrast dark
 *instrument* — production-readiness as a readout, not a marketing page.
 Kyanite signal colors (cyan/amber/magenta) on near-black panels, monospace for
 data and labels, no motion, accessibility as a default."** The README landing
-page inherits the same brand voice: direct, evidence-first, light side-eye at the
-project state — never the person.
+page inherits the same brand voice: direct, evidence-first, light side-eye at
+the project state — never the person.
 
-Gate run with the `tastecheck-pass` skill: the mechanical `gate-audit.js` auditor
-plus measured checks on the rendered dashboard, and the verbal/structural deslop
-plane on the README (the DOM auditor, contrast, and reflow checks are HTML-only;
-the README renders as GitHub-Flavored Markdown).
+This receipt was refreshed against the repository state on 2026-09-04. The
+existing dashboard artifact and its committed PNG were checked; W8 did not
+rerender the dashboard.
 
 ## Dashboard (`checkyourself-dogfood-dashboard.html`)
 
 | Check | Result | Notes (measured) |
 |-------|--------|------------------|
-| Cold load (gate-audit.js, fresh load) | ✓ | 0 fails: no `[hidden]` defeated by CSS, no error text before input, no `aria-busy`, no opacity-0 ghosts, no stuck skeletons |
-| Structural tells (gate-audit.js) | ✓ (1 reviewed warn) | "stat band: 5 numeric callouts in .risk-grid" — accepted: those are the P0/P1/P2/P3/Unknown **risk counts**, the literal core data of the instrument, not decorative social proof |
-| Display face (computed) | ✓ | resolves to "Plus Jakarta Sans" — not a safe-font tell |
-| Color contrast (WCAG, measured) | ✓ | worst pair 11.49:1 (eyebrow); h1 17.87, body 15.84, muted/labels 12.76–12.88, links 11.75 — all ≫ 4.5:1 |
-| Responsive @ 320px | ✓ | horizontal overflow 0px; no culprits; wide tables in keyboard-scrollable `.table-wrap` regions; h1 reflows 48→36px |
-| Reduced motion | ✓ | `prefers-reduced-motion` rule present; design has no motion to begin with |
-| Keyboard / a11y structure | ✓ | skip-link first focusable, `:focus-visible` outlines, table regions `tabindex=0` with `role="region"`, `role="meter"` on the score |
-| Content accuracy vs v1.7.0 | ✓ | 60 tests, 100/100 re-earned under stricter scoring, AUDIT-01–06 hardening findings, current coverage evidence |
-| Console | ✓ | only `favicon.ico` 404 from the local test server — not a page defect |
+| Cold load (gate-audit.js, fresh load) | ✓ | 0 fails in the existing 2026-06-12 receipt: no hidden-content, error-state, busy-state, opacity, or stuck-skeleton defects |
+| Structural tells (gate-audit.js) | ✓ (1 reviewed warn) | Risk-count grid is data, not decorative social proof |
+| Display face (computed) | ✓ | Existing receipt resolves to "Plus Jakarta Sans" |
+| Color contrast (WCAG, measured) | ✓ | Existing receipt's measured pairs are all above 4.5:1 |
+| Responsive @ 320px | ✓ | Existing receipt measured 0px horizontal overflow |
+| Reduced motion | ✓ | Existing receipt found the required `prefers-reduced-motion` rule |
+| Keyboard / a11y structure | ✓ | Existing receipt found skip-link, focus-visible outlines, keyboard-scrollable table regions, and score meter semantics |
+| Current proof | ✓ with baseline note | Current scan: 234 files, zero open findings; current score: 100/high confidence; coverage: complete |
+| Console | ✓ | Existing receipt recorded only a local `favicon.ico` 404 |
 
-**Dashboard gate: PASS** (10 mechanical checks + contrast/reflow/a11y; 0 fails, 1 reviewed-and-accepted warn).
+**Dashboard gate: PASS** for the existing dashboard artifact, with the
+historical mechanical receipt clearly labeled above.
 
 ## README landing page (`README.md`)
 
-| Check | Result | Notes (measured) |
-|-------|--------|------------------|
-| Hype words (deslop) | ✓ | 0 (powerful/seamless/robust/comprehensive/unlock/supercharge/… none) |
-| "whether you're …" filler | ✓ | 0 |
-| "Built for / Designed to" filler | ✓ | 0 |
-| Gerund-stacked bullets | ✓ | 0 |
-| Em-dash density | ✓ | 11 across ~280 lines — within normal range, each substantive |
-| Antithesis / brand voice | ✓ | "not a linter with a clipboard … not a shame machine" is the committed `identity.md` voice, not a default |
-| Accuracy of the shown example | ✓ | score example fixed to the real 49 P0 cap; finding severities match source (CY-CI-001 = P2) |
+| Check | Result | Notes |
+|-------|--------|-------|
+| License claim | ✓ | Apache License, Version 2.0 badge, FAQ, and footer agree with `LICENSE`, `NOTICE.md`, and manifest metadata |
+| CLI/MCP claims | ✓ | Optional CLI and shipped local stdio MCP wrapper are described accurately |
+| Dashboard image | ✓ | README points to the committed `checkyourself-dogfood-dashboard-live-20260612.png` |
+| Hype words and filler | ✓ | Existing receipt recorded 0 for the checked deslop patterns |
+| README example accuracy | ✓ | Existing receipt recorded the score and finding-severity corrections |
 
-**README gate: PASS** (verbal/structural plane; DOM/contrast/reflow are not applicable to GitHub-rendered Markdown).
+**README gate: PASS.**
 
-Gate: **PASS** — dashboard re-rendered and audited live; README copy audited against the brand spec. 1 warn reviewed and accepted (risk-count grid is data, not social proof).
+## Public validation receipt
+
+- `python3 tools/validate_public.py` exits 1 for the two known
+  `_retrofit-2026-09-04/` markdown links listed in the dogfood recheck report.
+- `python3 -m pytest tests/ -q` records **89 passed, 53 subtests passed, 1
+  failed**, with the same known baseline cause.
+
+Gate: **PASS WITH KNOWN BASELINE** — W8 product claims and the committed
+dashboard asset agree; the remaining public-validator failure is confined to
+orchestrator-owned retrofit markdown.
