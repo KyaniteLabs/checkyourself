@@ -184,10 +184,49 @@ def public_files(root: Path) -> list[Path]:
     return result
 
 
+def _path_has_symlink(root: Path, path: Path) -> bool:
+    try:
+        relative = path.relative_to(root)
+    except ValueError:
+        return True
+
+    current = root
+    for part in relative.parts:
+        current /= part
+        try:
+            if current.is_symlink():
+                return True
+        except OSError:
+            return True
+    return False
+
+
+def _path_is_inside(root: Path, path: Path) -> bool:
+    try:
+        path.resolve(strict=False).relative_to(root.resolve())
+    except (OSError, RuntimeError, ValueError):
+        return False
+    return True
+
+
+def _regular_in_root_file(root: Path, path: Path) -> bool:
+    if _path_has_symlink(root, path) or not _path_is_inside(root, path):
+        return False
+    try:
+        return path.is_file()
+    except OSError:
+        return False
+
+
 def validate_required(root: Path, errors: list[str]) -> None:
     for rel in REQUIRED:
-        if not (root / rel).exists():
+        path = root / rel
+        if _path_has_symlink(root, path):
+            errors.append(f"required public path must be a regular in-root file: {rel}")
+        elif not path.exists():
             errors.append(f"missing required public file: {rel}")
+        elif not _regular_in_root_file(root, path):
+            errors.append(f"required public path must be a regular in-root file: {rel}")
 
 
 def validate_release_boundary(root: Path, errors: list[str]) -> None:
@@ -286,17 +325,99 @@ def validate_manifest(root: Path, errors: list[str]) -> None:
 
 
 def validate_markdown_links(root: Path, errors: list[str]) -> None:
-    link_re = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
+    link_start_re = re.compile(r"\[[^\]\n]+\]\(")
+
+    def link_body(start: int) -> tuple[str, int] | None:
+        depth = 0
+        escaped = False
+        in_angle_destination = False
+        for index in range(start, len(body)):
+            char = body[index]
+            if escaped:
+                escaped = False
+                continue
+            if char == "\\":
+                escaped = True
+                continue
+            if char == "<" and depth == 0:
+                in_angle_destination = True
+                continue
+            if char == ">" and in_angle_destination:
+                in_angle_destination = False
+                continue
+            if in_angle_destination:
+                continue
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                if depth == 0:
+                    return body[start:index], index + 1
+                depth -= 1
+        return None
+
+    def unescape_destination(destination: str) -> str:
+        return re.sub(r"\\([!\"#$%&'()*+,\-./:;<=>?@\[\\\]^_`{|}~])", r"\1", destination)
+
+    def destination_from_body(raw: str) -> str:
+        content = raw.strip()
+        if not content:
+            return ""
+        if content.startswith("<"):
+            closing = None
+            escaped = False
+            for index, char in enumerate(content[1:], start=1):
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == ">":
+                    closing = index
+                    break
+            if closing is None:
+                return ""
+            destination = content[1:closing] if closing is not None else ""
+        else:
+            destination_chars: list[str] = []
+            index = 0
+            while index < len(content):
+                char = content[index]
+                if char == "\\" and index + 1 < len(content):
+                    destination_chars.append(content[index : index + 2])
+                    index += 2
+                    continue
+                if char.isspace():
+                    break
+                destination_chars.append(char)
+                index += 1
+            destination = "".join(destination_chars)
+        return destination
+
+    def split_unescaped_fragment(destination: str) -> tuple[str, str]:
+        escaped = False
+        for index, char in enumerate(destination):
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == "#":
+                return destination[:index], destination[index + 1 :]
+        return destination, ""
+
     for path in public_files(root):
         if path.suffix != ".md":
             continue
         body = text(path)
-        for match in link_re.finditer(body):
-            raw = match.group(1)
-            link = raw.split("#")[0].strip()
+        for match in link_start_re.finditer(body):
+            parsed = link_body(match.end())
+            if parsed is None:
+                continue
+            raw, _ = parsed
+            destination = destination_from_body(raw)
+            link, _ = split_unescaped_fragment(destination)
+            link = urllib.parse.unquote(unescape_destination(link)).strip()
             if not link or re.match(r"^[a-z]+:", link) or link.startswith("mailto:"):
                 continue
-            target = (path.parent / urllib.parse.unquote(link)).resolve()
+            target = (path.parent / link).resolve()
             try:
                 target.relative_to(root.resolve())
             except ValueError:
@@ -310,14 +431,37 @@ def validate_markdown_links(root: Path, errors: list[str]) -> None:
 
 def validate_assets(root: Path, errors: list[str]) -> None:
     assets = root / "assets"
-    if not assets.exists():
+    if not assets.exists() and not assets.is_symlink():
+        return
+
+    if _path_has_symlink(root, assets) or not _path_is_inside(root, assets):
+        errors.append("public asset directory must be a regular in-root directory: assets")
+        return
+
+    try:
+        if not assets.is_dir():
+            errors.append("public asset directory must be a regular in-root directory: assets")
+            return
+        asset_paths = sorted(assets.iterdir())
+    except OSError:
+        errors.append("unable to inspect public asset directory: assets")
         return
 
     by_hash: dict[str, list[str]] = {}
-    for path in sorted(assets.iterdir()):
-        if not path.is_file():
+    for path in asset_paths:
+        rel = str(path.relative_to(root))
+        if _path_has_symlink(root, path) or not _path_is_inside(root, path):
+            errors.append(f"public asset must be a regular in-root file: {rel}")
             continue
-        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        try:
+            if not path.is_file():
+                continue
+            if path.stat().st_size > MAX_VALIDATED_FILE_BYTES:
+                continue
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        except OSError:
+            errors.append(f"unable to read public asset: {rel}")
+            continue
         by_hash.setdefault(digest, []).append(str(path.relative_to(root)))
 
     for paths in by_hash.values():
