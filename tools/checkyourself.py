@@ -135,6 +135,7 @@ LLM_DEPENDENCY_LABELS = {"OpenAI API", "Anthropic SDK", "LangChain", "LlamaIndex
 TEST_PATH_MARKERS = ("test", "tests", "spec", "specs", "__tests__", "fixture", "fixtures",
                      "mock", "mocks", "example", "examples", "sample", "samples", "doc", "docs",
                      "__mocks__", "e2e", "stories")
+CONTEXT_ONLY_PATH_MARKERS = TEST_PATH_MARKERS + ("audit", "audits", "snapshot", "snapshots")
 
 STACK_FILES = {
     "package.json": "JavaScript/TypeScript project",
@@ -372,6 +373,8 @@ def parse_scalar(value: str) -> Any:
 def parse_minimal_yaml_suppressions(text: str) -> List[dict]:
     suppressions: List[dict] = []
     current: Optional[dict] = None
+    current_item_indent: Optional[int] = None
+    current_list_key: Optional[str] = None
     in_suppress = False
 
     for raw_line in text.splitlines():
@@ -390,13 +393,20 @@ def parse_minimal_yaml_suppressions(text: str) -> List[dict]:
             if current:
                 suppressions.append(current)
                 current = None
+            current_list_key = None
             in_suppress = False
         if not in_suppress:
             continue
         if stripped.startswith("- "):
+            indent = len(raw_line) - len(raw_line.lstrip())
+            if current is not None and current_list_key and current_item_indent is not None and indent > current_item_indent:
+                current[current_list_key].append(parse_scalar(stripped[2:].strip()))
+                continue
             if current:
                 suppressions.append(current)
             current = {}
+            current_item_indent = indent
+            current_list_key = None
             stripped = stripped[2:].strip()
             if stripped and ":" in stripped:
                 key, value = stripped.split(":", 1)
@@ -406,7 +416,9 @@ def parse_minimal_yaml_suppressions(text: str) -> List[dict]:
             continue
         if current is not None and ":" in stripped:
             key, value = stripped.split(":", 1)
-            current[key.strip()] = parse_scalar(value)
+            key = key.strip()
+            current[key] = [] if not value.strip() else parse_scalar(value)
+            current_list_key = key if not value.strip() else None
 
     if current:
         suppressions.append(current)
@@ -490,7 +502,32 @@ def suppression_matches(finding: dict, suppression: dict) -> bool:
 def apply_suppressions(findings: List[dict], suppressions: List[dict]) -> List[dict]:
     for finding in findings:
         for suppression in suppressions:
-            if suppression_matches(finding, suppression):
+            sid = str(suppression.get("id") or "").strip()
+            files = suppression.get("files") or suppression.get("paths") or []
+            if isinstance(files, str):
+                files = [files]
+            if sid and sid not in {str(finding.get("id")), str(finding.get("finding")), str(finding.get("title"))}:
+                continue
+            evidence = [str(item) for item in finding.get("evidence") or []]
+            if files:
+                matched = [
+                    item for item in evidence
+                    if any(fnmatch.fnmatch(evidence_path(item), pattern) or evidence_path(item) == pattern for pattern in files)
+                ]
+                if not matched:
+                    continue
+                finding["evidence"] = [item for item in evidence if item not in matched]
+                finding.setdefault("suppressed_evidence", []).extend({
+                    "evidence": item,
+                    "reason": str(suppression.get("reason") or "reviewed suppression"),
+                    "reviewed_by": str(suppression.get("reviewed_by") or ""),
+                    "reviewed_at": str(suppression.get("reviewed_at") or ""),
+                } for item in matched)
+                if finding["evidence"]:
+                    continue
+            elif not suppression_matches(finding, suppression):
+                continue
+            if not files or not finding.get("evidence"):
                 finding["status"] = "suppressed"
                 finding["suppression"] = {
                     "reason": str(suppression.get("reason") or "reviewed suppression"),
@@ -727,19 +764,55 @@ def is_placeholder_secret_value(value: str) -> bool:
     return any(token in lower for token in placeholder_tokens)
 
 
+def context_path_reason(path: str) -> Optional[str]:
+    """Return a review-context reason for low-confidence heuristic matches."""
+    for segment in (part.lower() for part in Path(path).parts):
+        segment_tokens = set(re.split(r"[._-]+", segment))
+        if any(
+            segment == marker
+            or marker in segment_tokens
+            or segment.startswith((marker + ".", marker + "-", marker + "_"))
+            for marker in CONTEXT_ONLY_PATH_MARKERS
+        ):
+            return "documentation, test, fixture, example, audit, or snapshot path; heuristic match is review context"
+    return None
+
+
+def detector_or_guard_context_reason(lines: Sequence[str], index: int) -> Optional[str]:
+    """Suppress quoted detector patterns and explicitly guarded eval calls only."""
+    line = lines[index]
+    lower = line.lower()
+    window = "\n".join(lines[max(0, index - 14): index + 1]).lower()
+    if re.search(r"\b(?:pattern|patterns|regex|regexp|risky_patterns?|re\.compile|new\s+regexp)\b", lower):
+        return "detector source string, not an executable sink"
+    if any(marker in lower for marker in ("never use eval", "no eval", "dangerous eval() detected")):
+        return "quoted detector or guard guidance, not an executable sink"
+    if "eval" not in lower:
+        return None
+    if (
+        "blockedpatterns" in window
+        and re.search(r"if\s*\([^\n)]*blockedpatterns[^\n)]*(?:length|includes)", window)
+        and re.search(r"eval\s*\(\s*(?:wrapped|compiled|safe|validated|isolated|sandbox)", lower)
+    ):
+        return "intentional guarded eval follows a nearby blocked-pattern check"
+    if "page!.evaluate" in window and "sourcesfnsource" in window:
+        return "intentional eval rebuilds a function inside an isolated page.evaluate callback"
+    return None
+
+
 SOURCEMAP_CONFIG_NAMES = {
     "next.config.js", "next.config.mjs", "next.config.ts",
     "webpack.config.js", "webpack.config.ts",
 }
 
 
-def scan_file_contents(root: Path, files: List[Path], scan_limits: Optional[dict] = None) -> Dict[str, List[str]]:
+def scan_file_contents(root: Path, files: List[Path], scan_limits: Optional[dict] = None) -> Dict[str, Any]:
     """Single content pass over every scannable file, feeding all detectors.
 
-    Secrets are scanned everywhere, including tests and docs, because real
-    credentials get committed in both. The heuristic detectors (debug flags,
-    CORS, sinks, default credentials) skip test/doc/fixture paths to keep the
-    false-positive rate low.
+    High-confidence secrets are scanned everywhere, including tests and docs,
+    because real credentials get committed in both. Low-confidence secret
+    assignments and heuristic sink matches record context suppression reasons
+    for docs/tests/audits and detector or explicitly guarded eval text.
     """
     results: Dict[str, List[str]] = {
         "env_files": [],
@@ -751,7 +824,19 @@ def scan_file_contents(root: Path, files: List[Path], scan_limits: Optional[dict
         "dangerous_sinks": [],
         "default_credentials": [],
         "sourcemap_configs": [],
+        "context_suppressions": [],
+        "context_suppression_count": 0,
     }
+
+    def suppress_context(rp: str, line_no: int, detector: str, reason: str) -> None:
+        results["context_suppression_count"] += 1
+        results["context_suppressions"].append({
+            "path": rp,
+            "line": line_no,
+            "detector": detector,
+            "reason": reason,
+        })
+
     for p in files:
         rp = rel(root, p)
         name = p.name.lower()
@@ -782,16 +867,13 @@ def scan_file_contents(root: Path, files: List[Path], scan_limits: Optional[dict
 
         # Match markers against whole path segments (and segment stems like
         # `app.test.ts`) so `docker-compose.yml` is not mistaken for a doc path.
-        path_segments = [s.lower() for s in Path(rp).parts]
-        in_test_path = any(
-            seg == marker or seg.startswith(marker + ".") or marker == seg.split(".")[-1]
-            for seg in path_segments
-            for marker in TEST_PATH_MARKERS
-        )
+        path_reason = context_path_reason(rp)
+        in_test_path = path_reason is not None
         is_code = suffix in CODE_EXTENSIONS
         is_config = suffix in CONFIG_EXTENSIONS or kind is not None or is_known_config
 
-        for line_no, line in enumerate(text.splitlines(), start=1):
+        lines = text.splitlines()
+        for line_no, line in enumerate(lines, start=1):
             stripped = line.strip()
             if any(r.search(line) for r in SECRET_SHAPE_RES):
                 results["suspicious_high"].append(secret_evidence(
@@ -806,12 +888,18 @@ def scan_file_contents(root: Path, files: List[Path], scan_limits: Optional[dict
                     and not stripped.startswith(("#", "//", "*"))
                     and not is_placeholder_secret_value(value_match.group(2))
                 ):
-                    results["suspicious_low"].append(secret_evidence(
-                        rp, line_no, "possible secret-like assignment",
-                        "secret_name_and_assignment", "low", line,
-                    ))
+                    if path_reason:
+                        suppress_context(rp, line_no, "secret_name_and_assignment", path_reason)
+                    else:
+                        results["suspicious_low"].append(secret_evidence(
+                            rp, line_no, "possible secret-like assignment",
+                            "secret_name_and_assignment", "low", line,
+                        ))
 
             if in_test_path:
+                for sink_re, label in DANGEROUS_SINK_RES:
+                    if sink_re.search(line):
+                        suppress_context(rp, line_no, label, path_reason or "heuristic detector skipped in review context")
                 continue
             if (is_config or suffix == ".py") and any(r.search(line) for r in DEBUG_FLAG_RES):
                 results["debug_flags"].append(f"{rp}:{line_no} ({compact_context(line)})")
@@ -823,12 +911,26 @@ def scan_file_contents(root: Path, files: List[Path], scan_limits: Optional[dict
             if is_code:
                 for sink_re, label in DANGEROUS_SINK_RES:
                     if sink_re.search(line):
-                        results["dangerous_sinks"].append(f"{rp}:{line_no} ({label}; {compact_context(line)})")
+                        reason = detector_or_guard_context_reason(lines, line_no - 1)
+                        if reason:
+                            suppress_context(rp, line_no, label, reason)
+                        else:
+                            results["dangerous_sinks"].append(f"{rp}:{line_no} ({label}; {compact_context(line)})")
                         break
             if name in SOURCEMAP_CONFIG_NAMES and any(r.search(line) for r in SOURCEMAP_RES):
                 results["sourcemap_configs"].append(f"{rp}:{line_no} ({compact_context(line)})")
 
-    return {key: sorted(set(values))[:50] for key, values in results.items()}
+    output: Dict[str, Any] = {}
+    for key, values in results.items():
+        if key == "context_suppression_count":
+            output[key] = values
+            continue
+        if key == "context_suppressions":
+            unique = {json.dumps(value, sort_keys=True): value for value in values}
+            output[key] = [unique[item] for item in sorted(unique)[:100]]
+        else:
+            output[key] = sorted(set(values))[:50]
+    return output
 
 
 def find_tests(root: Path, files: List[Path]) -> List[str]:
@@ -1233,6 +1335,8 @@ def scan(root: Path, deep: bool = False, max_files: int = DEFAULT_MAX_FILES) -> 
         "ci": ci,
         "risk_surfaces": hints,
         "findings": finding_dicts,
+        "context_suppressions": content["context_suppressions"],
+        "context_suppression_count": content["context_suppression_count"],
         "counts": counts,
         "suppression_count": suppression_count,
         "config_error": config.get("config_error"),
@@ -1764,7 +1868,10 @@ def score_from_inputs(findings_data: Any, coverage_data: Any = _NO_COVERAGE) -> 
     if coverage_data is not _NO_COVERAGE:
         coverage_errors = _coverage_validation_errors(coverage_data)
         if coverage_errors:
-            raise CliError("invalid coverage artifact: " + "; ".join(coverage_errors))
+            raise CliError(
+                "invalid coverage artifact: " + "; ".join(coverage_errors)
+                + "; fill coverage.json with evidence, then re-run score"
+            )
         coverage_by_category, coverage_complete = category_coverage(coverage_data)
         score_mode = "coverage-backed"
     elif isinstance(findings_data, dict) and findings_data.get("schema") == SCAN_SCHEMA_ID:
@@ -2615,6 +2722,7 @@ def command_coverage(args: argparse.Namespace) -> int:
         write_json(data)
     else:
         print(f"Wrote coverage skeleton: {out_path}")
+        print("Fill coverage.json with evidence, then re-run score.")
     return 0
 
 
@@ -3212,6 +3320,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         args = parser.parse_args(raw)
         return args.func(args)
     except CliError as exc:
+        json_requested = any(
+            token == "--format=json"
+            or (token == "--format" and index + 1 < len(raw) and raw[index + 1] == "json")
+            for index, token in enumerate(raw)
+        )
+        if json_requested:
+            # A shell creates `> output.json` before this process starts. Keep
+            # that file parseable when a JSON-mode command fails validation.
+            write_json({"error": str(exc), "code": exc.code})
         print(f"error: {exc}", file=sys.stderr)
         return exc.code
 
