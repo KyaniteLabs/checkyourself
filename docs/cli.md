@@ -41,8 +41,8 @@ python3 tools/checkyourself.py describe --format json
 | `coverage --emit` | Writes the 20-surface coverage skeleton for an agent to fill. Use `--format json` for stdout. |
 | `coverage --check FILE` | Checks a filled coverage artifact for completeness. |
 | `score --findings FILE [--coverage FILE]` | Computes the deterministic Production Reality Score or a low-confidence scan-derived estimate. |
-| `backlog --findings FILE` | Ranks the complete remediation backlog. |
-| `next --findings FILE` | Returns the next safest unresolved approval batch. |
+| `backlog --findings FILE` | Ranks the complete remediation backlog and emits a `highest_severity_batch`; it does not analyze safety. |
+| `next --findings FILE` | Returns the next unresolved `highest_severity_batch`; it does not analyze safety. |
 | `diff --old FILE --new FILE` | Compares two findings artifacts and reports added, resolved, and regressed findings. |
 | `validate --kind KIND FILE` | Validates JSON against bundled schema contracts. |
 | `schema NAME` | Prints a bundled JSON schema. |
@@ -67,8 +67,9 @@ python3 tools/checkyourself.py backlog --findings CHECKYOURSELF_SCAN.generated.j
 python3 tools/checkyourself.py next --findings CHECKYOURSELF_SCAN.generated.json --format json
 ```
 
-That makes the score and first batch reproducible. Same evidence, same score.
-No vibes with a clipboard.
+That makes the score and highest-severity batch reproducible. Same evidence,
+same result. No vibes with a clipboard. Review dependencies, reversibility,
+coupling, and blast radius before approving a batch.
 
 See the field notes behind this remediation in
 [`docs/postmortems/checkyourself-field-postmortem-2026-05-29.md`](postmortems/checkyourself-field-postmortem-2026-05-29.md).
@@ -177,10 +178,11 @@ and reports which findings were **added**, **resolved**, and **unchanged**,
 plus evidence-level changes on findings that persisted. Because rule IDs are
 stable, the delta reflects real changes rather than ID-shuffle noise.
 
-The result includes a `regression` flag that is `true` when the open P0 or P1
-count increased against the baseline. With `--ci`, `diff` exits non-zero on a
-regression, so CI can gate on *new* risk instead of only absolute P0 count —
-the right control for a project that already has a known backlog.
+The result includes a `regression` flag. With `--ci`, `diff` exits non-zero for
+a newly opened or reopened P0/P1 finding, a severity escalation into open
+P0/P1, or an increase in the aggregate open P0/P1 count. Status-only
+open-to-resolved transitions appear in `resolved`; other status and severity
+transitions remain explicit in `regressions` or `count_regression`.
 
 ## Coverage
 
@@ -270,8 +272,12 @@ Supported schema kinds:
 - `dashboard-data`;
 - `learning-plan`.
 
-Validation uses a small standard-library JSON Schema subset: `required`, `type`,
-`enum`, `minimum`, `maximum`, `properties`, and `items`.
+Validation is standard-library-only and executes the supported contract
+keywords: `type`, `enum`, `const`, `oneOf`, `anyOf`, `allOf`, `not`, `required`,
+`properties`, `additionalProperties`, `items`, `minimum`, `maximum`,
+`exclusiveMinimum`, `exclusiveMaximum`, `minItems`, `maxItems`, `uniqueItems`,
+`minLength`, `maxLength`, and `pattern`. Unsupported schema keywords fail
+closed instead of being silently ignored.
 
 ## Exit Codes
 

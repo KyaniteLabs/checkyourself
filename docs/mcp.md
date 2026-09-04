@@ -40,9 +40,9 @@ and [`Tools`](https://modelcontextprotocol.io/specification/2025-11-25/server/to
 | `coverage_emit` | `checkyourself coverage --emit --format json` |
 | `coverage_check` | `checkyourself coverage --check FILE` logic, with an inline object |
 | `score` | `checkyourself score --findings FILE [--coverage FILE]` logic, with inline objects and no history write |
-| `backlog` | `checkyourself backlog --findings FILE` logic |
-| `next` | `checkyourself next --findings FILE` logic |
-| `diff` | compare two findings objects (`old`, `new`); returns added/resolved/regressed findings and a `regression` boolean flag |
+| `backlog` | `checkyourself backlog --findings FILE` logic; emits a deterministic `highest_severity_batch`, not a safety judgment |
+| `next` | `checkyourself next --findings FILE` logic; emits the next deterministic `highest_severity_batch`, not a safety judgment |
+| `diff` | compare two findings objects (`old`, `new`); returns added/resolved/unchanged findings, evidence changes, identity-aware regressions, and count regressions |
 | `validate` | `checkyourself validate --kind KIND FILE` logic, with an inline object |
 | `schema` | `checkyourself schema NAME` |
 
@@ -74,7 +74,7 @@ Use this shape in MCP clients that accept a local stdio server command:
 6. Call `score`. Without coverage, treat the result as a low-confidence estimate and read `manual_evidence_needed`.
 7. Call `backlog`.
 8. Call `next`.
-9. Ask before making any fix.
+9. Review safety, dependencies, coupling, and blast radius; then ask before making any fix.
 
 ## Security Boundaries
 
