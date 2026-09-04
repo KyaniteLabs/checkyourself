@@ -239,6 +239,81 @@ class CheckYourselfCliTests(unittest.TestCase):
         self.assertLessEqual(score["score"], 49)
         self.assertEqual(score["counts"]["P0"], 1)
 
+    def test_scoring_contract_covers_all_documented_caps(self) -> None:
+        cases = {
+            "unresolved P0": (
+                {"findings": [{"id": "F-P0", "severity": "P0", "category": "C4", "finding": "P0 risk", "status": "open"}]},
+                None,
+                49,
+                49,
+            ),
+            "unresolved P1": (
+                {"findings": [{"id": "F-P1", "severity": "P1", "category": "C4", "finding": "P1 risk", "status": "open"}]},
+                None,
+                74,
+                74,
+            ),
+            "critical evidence gap": (
+                {"findings": []},
+                "critical",
+                84,
+                84,
+            ),
+            "high-score evidence gate": (
+                {"findings": []},
+                "high-score",
+                90,
+                90,
+            ),
+        }
+
+        for label, (findings, coverage_kind, expected_cap, max_score) in cases.items():
+            with self.subTest(label=label):
+                with tempfile.TemporaryDirectory() as tmp:
+                    project = Path(tmp)
+                    findings_path = project / "findings.json"
+                    findings_path.write_text(json.dumps(findings), encoding="utf-8")
+                    args = ["score", "--findings", str(findings_path), "--no-history", "--format", "json"]
+                    if coverage_kind:
+                        coverage = self._full_coverage()
+                        if coverage_kind == "critical":
+                            row = next(item for item in coverage["surfaces"] if item["id"] == "S06")
+                            row.update(status="Unknown", missing_evidence=["restore receipt"])
+                        else:
+                            row = next(item for item in coverage["surfaces"] if item["id"] == "S11")
+                            row.update(status="Unknown", missing_evidence=["test receipt"])
+                        coverage_path = project / "coverage.json"
+                        coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
+                        args.extend(["--coverage", str(coverage_path)])
+                    result = self.run_cli(*args)
+
+                self.assertEqual(result.returncode, 0, result.stderr)
+                score = json.loads(result.stdout)
+                self.assertLessEqual(score["score"], max_score)
+                self.assertIn(expected_cap, [cap["cap"] for cap in score["caps_applied"]])
+
+    def test_not_applicable_scoring_preserves_its_weight(self) -> None:
+        coverage = self._full_coverage()
+        row = next(item for item in coverage["surfaces"] if item["id"] == "S19")
+        row.update(status="NotApplicable", evidence_reviewed=[], not_applicable_reason="Project has no AI or agent behavior.")
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            findings_path = project / "findings.json"
+            coverage_path = project / "coverage.json"
+            findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
+            coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
+            result = self.run_cli(
+                "score", "--findings", str(findings_path), "--coverage", str(coverage_path),
+                "--no-history", "--format", "json",
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        score = json.loads(result.stdout)
+        c10 = next(category for category in score["per_category"] if category["id"] == "C10")
+        self.assertEqual(c10["coverage_status"], "NotApplicable")
+        self.assertEqual(c10["awarded"], 6)
+        self.assertEqual(score["score"], 100)
+
     def test_backlog_and_next_return_first_batch(self) -> None:
         findings = {
             "findings": [
@@ -538,7 +613,43 @@ class CheckYourselfCliTests(unittest.TestCase):
             self.assertEqual(score["confidence"], "low")
             self.assertTrue(score["manual_evidence_needed"])
             history = json.loads((project / ".checkyourself-score-history.json").read_text(encoding="utf-8"))
-            self.assertEqual(history[-1]["score"], score["score"])
+        self.assertEqual(history[-1]["score"], score["score"])
+
+    def test_scan_derived_presence_is_not_proof_of_tests_or_ci(self) -> None:
+        cases = {
+            "empty test file": "tests",
+            "invalid CI file": "ci",
+        }
+        for label, surface in cases.items():
+            with self.subTest(label=label):
+                with tempfile.TemporaryDirectory() as tmp:
+                    project = Path(tmp)
+                    if surface == "tests":
+                        (project / "test_empty.py").write_text("", encoding="utf-8")
+                    else:
+                        workflow = project / ".github" / "workflows"
+                        workflow.mkdir(parents=True)
+                        (workflow / "ci.yml").write_text("jobs: [not valid", encoding="utf-8")
+
+                    scan_result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+                    self.assertEqual(scan_result.returncode, 0, scan_result.stderr)
+                    scan_path = project / "scan.json"
+                    scan_path.write_text(scan_result.stdout, encoding="utf-8")
+                    score_result = self.run_cli(
+                        "score", "--findings", str(scan_path), "--no-history", "--format", "json",
+                    )
+
+                self.assertEqual(score_result.returncode, 0, score_result.stderr)
+                score = json.loads(score_result.stdout)
+                categories = {item["id"]: item for item in score["per_category"]}
+                category_id = "C5" if surface == "tests" else "C6"
+                if surface == "tests":
+                    self.assertEqual(categories["C5"]["coverage_status"], "Unknown")
+                    self.assertIn("file presence does not prove", " ".join(categories["C5"]["missing_evidence"]))
+                else:
+                    self.assertEqual(categories["C6"]["coverage_status"], "Unknown")
+                    self.assertIn("file presence does not prove", " ".join(categories["C6"]["missing_evidence"]))
+                self.assertNotEqual(categories[category_id]["coverage_status"], "Pass")
 
     def test_audit_defaults_leave_fixture_tree_unchanged(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -865,6 +976,42 @@ class CheckYourselfCliTests(unittest.TestCase):
                 self.assertFalse(result["structuredContent"]["valid"])
                 self.assertTrue(result["isError"] is False)
 
+    def _run_mcp_requests(self, requests, cwd: Path | None = None) -> dict:
+        workdir = cwd or ROOT
+        messages = "\n".join([*(json.dumps(request) for request in requests), ""])
+        result = subprocess.run(
+            [sys.executable, str(CLI), "mcp"],
+            text=True,
+            input=messages,
+            capture_output=True,
+            check=False,
+            cwd=workdir,
+            env={**__import__("os").environ, "CHECKYOURSELF_SCAN_ROOT": str(workdir)},
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return {json.loads(line)["id"]: json.loads(line) for line in result.stdout.splitlines()}
+
+    def test_validate_rejects_empty_machine_artifacts_in_cli_and_mcp(self) -> None:
+        kinds = (
+            "scan", "coverage", "score", "backlog", "next", "diff",
+            "learning-plan", "capabilities", "dashboard-data",
+        )
+        for kind in kinds:
+            with self.subTest(kind=kind):
+                with tempfile.TemporaryDirectory() as tmp:
+                    artifact_path = Path(tmp) / f"{kind}.json"
+                    artifact_path.write_text("{}", encoding="utf-8")
+                    cli_result = self.run_cli("validate", "--kind", kind, str(artifact_path), "--format", "json")
+                self.assertEqual(cli_result.returncode, 1, cli_result.stderr)
+                validation = json.loads(cli_result.stdout)
+                self.assertFalse(validation["valid"])
+                self.assertTrue(validation["errors"])
+
+                mcp_response = self._run_mcp_validate(kind, {})
+                mcp_result = mcp_response["result"]
+                self.assertFalse(mcp_result["structuredContent"]["valid"])
+                self.assertFalse(mcp_result["isError"])
+
     def test_golden_dashboard_and_report_fixtures_validate_in_cli_and_mcp(self) -> None:
         dashboard_paths = (
             ROOT / "samples" / "sample-dashboard-data.json",
@@ -887,6 +1034,120 @@ class CheckYourselfCliTests(unittest.TestCase):
                 result = mcp_response["result"]
                 self.assertTrue(result["structuredContent"]["valid"])
                 self.assertFalse(result["isError"])
+
+    def test_cli_outputs_are_deterministic_goldens_after_timestamp_normalization(self) -> None:
+        def without_timestamps(value):
+            if isinstance(value, dict):
+                return {
+                    key: without_timestamps(item)
+                    for key, item in value.items()
+                    if key != "generated_at"
+                }
+            if isinstance(value, list):
+                return [without_timestamps(item) for item in value]
+            return value
+
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "app.py").write_text("print('hello')\n", encoding="utf-8")
+            (project / "test_app.py").write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+            workflow = project / ".github" / "workflows"
+            workflow.mkdir(parents=True)
+            (workflow / "ci.yml").write_text("name: ci\non: [push]\njobs: {}\n", encoding="utf-8")
+
+            first_scan_result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+            second_scan_result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+            self.assertEqual(first_scan_result.returncode, 0, first_scan_result.stderr)
+            self.assertEqual(second_scan_result.returncode, 0, second_scan_result.stderr)
+            first_scan = json.loads(first_scan_result.stdout)
+            second_scan = json.loads(second_scan_result.stdout)
+            self.assertEqual(without_timestamps(first_scan), without_timestamps(second_scan))
+
+            findings_path = project / "scan.json"
+            findings_path.write_text(first_scan_result.stdout, encoding="utf-8")
+            score_one = self.run_cli(
+                "score", "--findings", str(findings_path), "--no-history", "--format", "json",
+            )
+            score_two = self.run_cli(
+                "score", "--findings", str(findings_path), "--no-history", "--format", "json",
+            )
+            self.assertEqual(score_one.returncode, 0, score_one.stderr)
+            self.assertEqual(score_two.returncode, 0, score_two.stderr)
+            self.assertEqual(
+                without_timestamps(json.loads(score_one.stdout)),
+                without_timestamps(json.loads(score_two.stdout)),
+            )
+
+            backlog_one = self.run_cli("backlog", "--findings", str(findings_path), "--format", "json")
+            backlog_two = self.run_cli("backlog", "--findings", str(findings_path), "--format", "json")
+            self.assertEqual(backlog_one.returncode, 0, backlog_one.stderr)
+            self.assertEqual(backlog_two.returncode, 0, backlog_two.stderr)
+            self.assertEqual(
+                without_timestamps(json.loads(backlog_one.stdout)),
+                without_timestamps(json.loads(backlog_two.stdout)),
+            )
+
+    def test_cli_and_mcp_scan_score_validate_pipeline(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "app.py").write_text("print('hello')\n", encoding="utf-8")
+            (project / "test_app.py").write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+            workflow = project / ".github" / "workflows"
+            workflow.mkdir(parents=True)
+            (workflow / "ci.yml").write_text("name: ci\non: [push]\njobs: {}\n", encoding="utf-8")
+
+            scan_result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+            self.assertEqual(scan_result.returncode, 0, scan_result.stderr)
+            scan = json.loads(scan_result.stdout)
+            scan_path = project / "scan.json"
+            scan_path.write_text(scan_result.stdout, encoding="utf-8")
+            self.assertEqual(self.run_cli("validate", "--kind", "scan", str(scan_path)).returncode, 0)
+
+            score_result = self.run_cli(
+                "score", "--findings", str(scan_path), "--no-history", "--format", "json",
+            )
+            self.assertEqual(score_result.returncode, 0, score_result.stderr)
+            score_path = project / "score.json"
+            score_path.write_text(score_result.stdout, encoding="utf-8")
+            self.assertEqual(self.run_cli("validate", "--kind", "score", str(score_path)).returncode, 0)
+
+            emitted = {
+                "capabilities": self.run_cli("describe", "--format", "json"),
+                "coverage": self.run_cli("coverage", "--emit", "--format", "json"),
+                "backlog": self.run_cli("backlog", "--findings", str(scan_path), "--format", "json"),
+                "next": self.run_cli("next", "--findings", str(scan_path), "--format", "json"),
+                "diff": self.run_cli("diff", "--old", str(scan_path), "--new", str(scan_path), "--format", "json"),
+            }
+            for kind, emitted_result in emitted.items():
+                self.assertEqual(emitted_result.returncode, 0, emitted_result.stderr)
+                artifact_path = project / f"{kind}.json"
+                artifact_path.write_text(emitted_result.stdout, encoding="utf-8")
+                validation = self.run_cli("validate", "--kind", kind, str(artifact_path), "--format", "json")
+                self.assertEqual(validation.returncode, 0, validation.stderr)
+
+            mcp_scan = self._run_mcp_requests([
+                {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25"}},
+                {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "scan", "arguments": {"project": "."}}},
+            ], cwd=project)
+            mcp_scan_result = mcp_scan[2]["result"]
+            self.assertFalse(mcp_scan_result["isError"])
+            self.assertEqual(mcp_scan_result["structuredContent"]["schema"], "checkyourself-scan/1")
+            mcp_scan_data = mcp_scan_result["structuredContent"]
+
+            mcp_pipeline = self._run_mcp_requests([
+                {"jsonrpc": "2.0", "id": 3, "method": "initialize", "params": {"protocolVersion": "2025-11-25"}},
+                {"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {
+                    "name": "score", "arguments": {"findings": mcp_scan_data},
+                }},
+                {"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {
+                    "name": "validate", "arguments": {"kind": "scan", "artifact": mcp_scan_data},
+                }},
+            ], cwd=project)
+            mcp_score = mcp_pipeline[4]["result"]
+            self.assertFalse(mcp_score["isError"])
+            self.assertEqual(mcp_score["structuredContent"]["schema"], "checkyourself-score/1")
+            mcp_validate = mcp_pipeline[5]["result"]
+            self.assertTrue(mcp_validate["structuredContent"]["valid"])
 
     def test_report_requires_every_documented_section(self) -> None:
         for section in REPORT_REQUIRED_SECTIONS:

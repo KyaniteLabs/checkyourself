@@ -1729,13 +1729,25 @@ def inferred_coverage_from_scan(scan_data: dict, findings: List[dict]) -> Dict[s
 
     tests = scan_data.get("tests") if isinstance(scan_data.get("tests"), list) else []
     if tests:
-        set_state("C5", "Pass", [f"detected test evidence: {item}" for item in tests[:10]], [], ["S11"])
+        set_state(
+            "C5",
+            "Unknown",
+            [f"detected test candidate: {item}" for item in tests[:10]],
+            ["focused test execution receipt still needed; file presence does not prove tests pass"],
+            ["S11"],
+        )
     else:
         set_state("C5", "Finding", [], ["no automated tests detected by scan"], ["S11"])
 
     ci = scan_data.get("ci") if isinstance(scan_data.get("ci"), list) else []
     if ci:
-        set_state("C6", "Pass", [f"detected CI evidence: {item}" for item in ci[:10]], [], ["S12"])
+        set_state(
+            "C6",
+            "Unknown",
+            [f"detected CI configuration candidate: {item}" for item in ci[:10]],
+            ["CI parse and successful-run receipt still needed; file presence does not prove the workflow is valid"],
+            ["S12"],
+        )
     else:
         set_state("C6", "Finding", [], ["no CI workflow detected by scan"], ["S12"])
 
