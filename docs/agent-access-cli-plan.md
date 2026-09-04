@@ -110,6 +110,8 @@ Global conventions:
 - **Input:** `score --findings findings.json [--coverage coverage.json]`.
 - **Algorithm:** coverage-backed scores apply the full evidence caps. Without coverage, scan
   JSON produces a low-confidence `scan-derived-estimate` and lists `manual_evidence_needed`.
+  Detected test or CI paths are discovery signals only: they remain `Unknown` until a focused
+  test-execution or CI parse/success receipt is supplied.
 - **Output:** `{ score, confidence, per_category:[{category, weight, raw, penalties[], awarded}],
   caps_applied:[...], score_mode, manual_evidence_needed, counts }` conforming to
   `schemas/score-result.schema.json`.
@@ -332,6 +334,12 @@ The native stdlib server is shipped as `python3 tools/checkyourself.py mcp`.
 - **CI:** extend `.github/workflows/validate.yml` to compile the CLI, run `describe`, run a
   fixture `scan`→`score`→`validate` pipeline, and run the scoring unit tests.
 - **No-secret guarantee test:** assert secret *values* never appear in any output.
+
+The contract matrix is implemented in `tests/test_checkyourself_cli.py`. It also covers negative
+schema artifacts through CLI and MCP, status-only and severity diff transitions, read-only scan and
+score defaults, timestamp-normalized `scan`/`score`/`backlog` goldens, all documented score caps,
+and the CLI/MCP `scan`→`score`→`validate` pipeline. File presence alone cannot certify tests or CI;
+the scan-derived path records the missing execution or validation receipt instead.
 
 ---
 
