@@ -332,6 +332,73 @@ class CheckYourselfCliTests(unittest.TestCase):
             data["findings"],
         )
 
+    def test_env_example_classifier_is_shared_across_variants(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / ".env.local").write_text("APP_MODE=local\n", encoding="utf-8")
+            (project / ".env.local.example").write_text("APP_MODE=your_app_mode\n", encoding="utf-8")
+            (project / ".gitignore").write_text(".env.*\n*.pem\n*.key\n", encoding="utf-8")
+            result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(set(data["env_files"]), {".env.local", ".env.local.example"})
+        ids = {finding["id"] for finding in data["findings"]}
+        self.assertNotIn("CY-ENV-001", ids)
+        self.assertNotIn("CY-ENV-003", ids)
+
+    def test_gitignore_comments_and_patterns_use_gitignore_semantics(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / ".env").write_text("APP_MODE=local\n", encoding="utf-8")
+            (project / ".gitignore").write_text(
+                "# .env is intentionally not an ignore rule\n*.pem\n*.key\n",
+                encoding="utf-8",
+            )
+            result = self.run_cli("scan", str(project), "--deep", "--format", "json", "--no-write")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        ids = {finding["id"] for finding in data["findings"]}
+        self.assertIn("CY-ENV-001", ids)
+        secret_file_finding = next(finding for finding in data["findings"] if finding["id"] == "CY-SECRET-003")
+        self.assertIn(".env", " ".join(secret_file_finding["evidence"]))
+        self.assertNotIn("*.pem", " ".join(secret_file_finding["evidence"]))
+        self.assertNotIn("*.key", " ".join(secret_file_finding["evidence"]))
+
+    def test_gitignore_directory_rules_cover_nested_env_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            secrets_dir = project / "secrets"
+            secrets_dir.mkdir()
+            (secrets_dir / ".env").write_text("APP_MODE=local\n", encoding="utf-8")
+            (project / ".gitignore").write_text("secrets/\n*.pem\n*.key\n", encoding="utf-8")
+            result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        ids = {finding["id"] for finding in json.loads(result.stdout)["findings"]}
+        self.assertNotIn("CY-ENV-001", ids)
+        self.assertIn("CY-ENV-002", ids)
+
+    def test_invalid_suppression_config_is_structured_and_fail_closed(self) -> None:
+        token = "sk-" + ("c" * 32)
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "app.py").write_text(f'API_KEY = "{token}"\n', encoding="utf-8")
+            (project / ".checkyourself.json").write_text(
+                json.dumps({"suppress": [None]}), encoding="utf-8"
+            )
+            result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        data = json.loads(result.stdout)
+        self.assertIn("suppression 0 must be an object", data["config_error"])
+        ids = {finding["id"] for finding in data["findings"]}
+        self.assertIn("CY-CONFIG-003", ids)
+        self.assertIn("CY-SECRET-001", ids)
+        self.assertEqual(data["suppression_count"], 0)
+
     def test_checkyourself_yml_can_suppress_reviewed_finding_without_counting_it(self) -> None:
         token = "sk-" + ("s" * 32)
         with tempfile.TemporaryDirectory() as tmp:
@@ -702,6 +769,23 @@ class CheckYourselfCliTests(unittest.TestCase):
         ids = {f["id"] for f in json.loads(result.stdout)["findings"]}
         self.assertIn("CY-SUPPLY-002", ids)
 
+    def test_non_object_package_json_is_reported_without_traceback(self) -> None:
+        for label, package_json in {
+            "null": "null\n",
+            "array": "[]\n",
+            "boolean": "true\n",
+        }.items():
+            with self.subTest(label=label):
+                with tempfile.TemporaryDirectory() as tmp:
+                    project = Path(tmp)
+                    (project / "package.json").write_text(package_json, encoding="utf-8")
+                    result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+                data = json.loads(result.stdout)
+                self.assertIn("package.json exists but must contain a JSON object", data["stack_signals"])
+
     def test_test_path_secrets_still_detected_but_heuristics_skip_tests(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
@@ -881,6 +965,20 @@ class CheckYourselfCliTests(unittest.TestCase):
         mismatched_category["surfaces"][2]["category"] = "C2"
         cases["mismatched category"] = mismatched_category
 
+        missing_surface = deepcopy(base)
+        del missing_surface["surfaces"][2]["surface"]
+        cases["missing canonical surface"] = missing_surface
+
+        structural_drift = deepcopy(base)
+        structural_drift["surfaces"].append({
+            "id": "S99",
+            "surface": "Untracked surface",
+            "category": "C1",
+            "status": "Pass",
+            "evidence_reviewed": ["src/app.py:99"],
+        })
+        cases["unknown structural row"] = structural_drift
+
         for label, coverage in cases.items():
             with self.subTest(label=label):
                 with tempfile.TemporaryDirectory() as tmp:
@@ -1034,6 +1132,36 @@ class CheckYourselfCliTests(unittest.TestCase):
         self.assertEqual(responses[2]["error"]["code"], -32602)
         self.assertIn("error", responses[3])
         self.assertIn("unknown tool", responses[3]["error"]["message"])
+
+    def test_mcp_rejects_wrong_argument_types_and_bounds(self) -> None:
+        messages = "\n".join([
+            json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25"}}),
+            json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "scan", "arguments": {"deep": "false"}}}),
+            json.dumps({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "scan", "arguments": {"max_files": 0}}}),
+            "",
+        ])
+        result = subprocess.run(
+            [sys.executable, str(CLI), "mcp"],
+            text=True, input=messages, capture_output=True, check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        responses = {json.loads(line)["id"]: json.loads(line) for line in result.stdout.splitlines()}
+        self.assertEqual(responses[2]["error"]["code"], -32602)
+        self.assertIn("expected", responses[2]["error"]["message"])
+        self.assertEqual(responses[3]["error"]["code"], -32602)
+        self.assertIn("minimum", responses[3]["error"]["message"])
+
+    def test_top_level_help_lists_every_shipped_subcommand(self) -> None:
+        result = self.run_cli("--help")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for command in (
+            "describe", "scan", "diagnostic", "schema", "coverage", "score",
+            "backlog", "next", "diff", "validate", "init", "mcp",
+        ):
+            self.assertIn(command, result.stdout)
+        self.assertNotIn("Project root to scan", result.stdout)
 
     def test_mcp_scan_is_confined_to_scan_root(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

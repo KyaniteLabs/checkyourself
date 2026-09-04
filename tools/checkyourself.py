@@ -379,7 +379,10 @@ def parse_minimal_yaml_suppressions(text: str) -> List[dict]:
         if not line.strip():
             continue
         stripped = line.strip()
-        if stripped == "suppress:":
+        if stripped.startswith("suppress:"):
+            value = stripped.split(":", 1)[1].strip()
+            if value not in {"", "[]"}:
+                raise ValueError("suppress must be a YAML list")
             in_suppress = True
             continue
         if in_suppress and not raw_line[:1].isspace() and not stripped.startswith("- "):
@@ -398,6 +401,8 @@ def parse_minimal_yaml_suppressions(text: str) -> List[dict]:
             if stripped and ":" in stripped:
                 key, value = stripped.split(":", 1)
                 current[key.strip()] = parse_scalar(value)
+            elif stripped:
+                raise ValueError("suppression list items must be mappings")
             continue
         if current is not None and ":" in stripped:
             key, value = stripped.split(":", 1)
@@ -408,6 +413,37 @@ def parse_minimal_yaml_suppressions(text: str) -> List[dict]:
     return suppressions
 
 
+def validate_suppressions_config(data: Any, name: str) -> dict:
+    if not isinstance(data, dict):
+        return {"suppress": [], "config_error": f"{name} must contain a JSON/YAML object"}
+    suppressions = data.get("suppress", [])
+    if not isinstance(suppressions, list):
+        return {"suppress": [], "config_error": f"{name} suppress must be a list"}
+    for index, suppression in enumerate(suppressions):
+        if not isinstance(suppression, dict):
+            return {"suppress": [], "config_error": f"{name} suppression {index} must be an object"}
+        for key in ("id", "reason", "reviewed_by", "reviewed_at"):
+            if key in suppression and not isinstance(suppression[key], str):
+                return {"suppress": [], "config_error": f"{name} suppression {index} field {key} must be a string"}
+        for key in ("files", "paths"):
+            if key not in suppression:
+                continue
+            value = suppression[key]
+            if isinstance(value, str):
+                continue
+            if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+                return {"suppress": [], "config_error": f"{name} suppression {index} field {key} must be a string or list of strings"}
+        has_id = isinstance(suppression.get("id"), str) and bool(suppression["id"].strip())
+        has_path = any(
+            (isinstance(suppression.get(key), str) and bool(suppression[key].strip()))
+            or (isinstance(suppression.get(key), list) and bool(suppression[key]))
+            for key in ("files", "paths")
+        )
+        if not has_id and not has_path:
+            return {"suppress": [], "config_error": f"{name} suppression {index} needs id, files, or paths"}
+    return {"suppress": suppressions}
+
+
 def load_checkyourself_config(root: Path) -> dict:
     for name in CONFIG_NAMES:
         path = root / name
@@ -416,10 +452,16 @@ def load_checkyourself_config(root: Path) -> dict:
         if path.suffix == ".json":
             try:
                 data = json.loads(path.read_text(encoding="utf-8"))
-                return data if isinstance(data, dict) else {"suppress": []}
-            except json.JSONDecodeError:
+                return validate_suppressions_config(data, name)
+            except (json.JSONDecodeError, OSError, UnicodeError):
                 return {"suppress": [], "config_error": f"{name} could not be parsed as JSON"}
-        return {"suppress": parse_minimal_yaml_suppressions(path.read_text(encoding="utf-8"))}
+        try:
+            return validate_suppressions_config(
+                {"suppress": parse_minimal_yaml_suppressions(path.read_text(encoding="utf-8"))},
+                name,
+            )
+        except (OSError, UnicodeError, ValueError) as exc:
+            return {"suppress": [], "config_error": f"{name} is invalid: {exc}"}
     return {"suppress": []}
 
 
@@ -562,6 +604,9 @@ def detect_stack(root: Path) -> Tuple[List[str], Dict[str, str], Dict[str, List[
     if package_json.exists():
         try:
             data = json.loads(read_text(package_json))
+            if not isinstance(data, dict):
+                signals.append("package.json exists but must contain a JSON object")
+                data = {}
             if isinstance(data.get("scripts"), dict):
                 scripts = {
                     str(k): redact_sensitive_text(str(v))
@@ -586,16 +631,72 @@ def detect_stack(root: Path) -> Tuple[List[str], Dict[str, str], Dict[str, List[
     return sorted(signals), scripts, deps_found
 
 
-def gitignore_entries(root: Path) -> str:
+def parse_gitignore_patterns(text: str) -> List[str]:
+    patterns: List[str] = []
+    for raw_line in text.splitlines():
+        line = raw_line.rstrip(" \t")
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if line.startswith(r"\#"):
+            line = line[1:]
+        patterns.append(line)
+    return patterns
+
+
+def gitignore_entries(root: Path) -> List[str]:
     gi = root / ".gitignore"
-    return read_text(gi).lower() if gi.exists() else ""
+    return parse_gitignore_patterns(read_text(gi)) if gi.exists() else []
+
+
+def _gitignore_pattern_matches(pattern: str, path: str) -> bool:
+    rule = pattern[1:] if pattern.startswith("!") else pattern
+    if rule.startswith(r"\!"):
+        rule = rule[1:]
+    directory_only = rule.endswith("/")
+    anchored = rule.startswith("/")
+    rule = rule.strip("/")
+    candidate = path.replace(os.sep, "/")
+    if candidate.startswith("./"):
+        candidate = candidate[2:]
+    candidate = candidate.lstrip("/")
+    if not rule or not candidate:
+        return False
+    if "/" not in rule:
+        segments = candidate.split("/")
+        if directory_only:
+            segments = segments[:-1]
+        if anchored:
+            return bool(segments) and fnmatch.fnmatchcase("/".join(segments), rule)
+        return any(fnmatch.fnmatchcase(segment, rule) for segment in segments)
+    parts = candidate.split("/")
+    candidates = ["/".join(parts[:index]) for index in range(1, len(parts))]
+    if not directory_only:
+        candidates.append(candidate)
+    if not anchored:
+        candidates.extend(
+            "/".join(value.split("/")[index:])
+            for value in list(candidates)
+            for index in range(1, len(value.split("/")))
+        )
+    return any(fnmatch.fnmatchcase(value, rule) for value in candidates)
+
+
+def gitignore_ignores_path(patterns: List[str], path: str) -> bool:
+    ignored = False
+    for pattern in patterns:
+        if _gitignore_pattern_matches(pattern, path):
+            ignored = not pattern.startswith("!")
+    return ignored
 
 
 def is_env_example_name(name: str) -> bool:
     lower = name.lower()
     return lower in ENV_EXAMPLE_NAMES or (
-        lower.startswith(".env")
+        lower.startswith((".env.", "env."))
         and lower.endswith((".example", ".sample", ".template"))
+    ) or (
+        lower.endswith(".env")
+        and any(token in lower for token in ("example", "sample", "template"))
     )
 
 
@@ -603,8 +704,6 @@ def classify_env_file(name: str) -> Optional[str]:
     """Classify a file name as an 'example' env file, a 'real' one, or neither."""
     lower = name.lower()
     if is_env_example_name(lower):
-        return "example"
-    if lower.endswith(".env") and any(t in lower for t in ("example", "sample", "template")):
         return "example"
     if lower == ".env" or lower.startswith(".env.") or lower.endswith(".env"):
         return "real"
@@ -769,7 +868,7 @@ def find_ci(root: Path) -> List[str]:
     return sorted(set(ci))
 
 
-def run_deep_checks(root: Path, ci: List[str], gitignore: str) -> List[Finding]:
+def run_deep_checks(root: Path, ci: List[str], gitignore: List[str]) -> List[Finding]:
     findings: List[Finding] = []
     mutable_actions: List[str] = []
     npm_install_in_ci: List[str] = []
@@ -827,7 +926,11 @@ def run_deep_checks(root: Path, ci: List[str], gitignore: str) -> List[Finding]:
             recommended_fix="Use `npm ci` (or the pnpm/yarn frozen-lockfile equivalent) in CI.",
         ))
 
-    missing_gitignore = [pattern for pattern in (".env", "*.pem", "*.key") if pattern.lower() not in gitignore]
+    gitignore_targets = {".env": ".env", "*.pem": "secret.pem", "*.key": "secret.key"}
+    missing_gitignore = [
+        pattern for pattern, target in gitignore_targets.items()
+        if not gitignore_ignores_path(gitignore, target)
+    ]
     if missing_gitignore:
         findings.append(Finding(
             "CY-SECRET-003",
@@ -889,10 +992,11 @@ def build_findings(
     content: Dict[str, List[str]],
     tests: List[str],
     ci: List[str],
-    gitignore: str,
+    gitignore: List[str],
     deps_found: Dict[str, List[str]],
     missing_lockfile: bool = False,
     deep_findings: Optional[List[Finding]] = None,
+    config_error: Optional[str] = None,
 ) -> List[Finding]:
     """Build scan findings with stable, semantic rule IDs.
 
@@ -902,6 +1006,16 @@ def build_findings(
     findings: List[Finding] = []
     real_env_files = content["real_env_files"]
     env_files = content["env_files"]
+
+    if config_error:
+        findings.append(Finding(
+            "CY-CONFIG-003", "P2", "Invalid CheckYourself suppression configuration",
+            "The optional suppression configuration could not be validated, so no suppressions were applied. "
+            "Fix the configuration before relying on a clean scan.",
+            [config_error],
+            category="C3",
+            recommended_fix="Correct the suppression file shape and rerun the scan; invalid configuration must never hide findings.",
+        ))
 
     if content["suspicious_high"]:
         findings.append(Finding(
@@ -923,13 +1037,15 @@ def build_findings(
             recommended_fix="Verify whether the value is a credential. If it is benign, add a reviewed `.checkyourself.yml` suppression; if real, move it to environment variables.",
         ))
 
-    env_ignored = ".env" in gitignore
-    if real_env_files and not env_ignored:
+    unignored_env_files = [
+        path for path in real_env_files if not gitignore_ignores_path(gitignore, path)
+    ]
+    if unignored_env_files:
         findings.append(Finding(
             "CY-ENV-001", "P0", "A real .env file may be committed",
             "A non-example .env file exists and `.env` is not in .gitignore. "
             "If this is tracked by git, secrets are in your history. Gitignore it and rotate.",
-            real_env_files,
+            unignored_env_files,
             category="C3",
             recommended_fix="Add `.env` patterns to `.gitignore`, remove tracked env files, and rotate exposed values.",
         ))
@@ -942,7 +1058,7 @@ def build_findings(
             recommended_fix="Run git history/secret checks and keep only redacted `.env.example` files in the repo.",
         ))
 
-    has_example = any(Path(e).name.lower() in ENV_EXAMPLE_NAMES for e in env_files)
+    has_example = any(is_env_example_name(Path(e).name) for e in env_files)
     if real_env_files and not has_example:
         findings.append(Finding(
             "CY-ENV-003", "P1", "No .env.example for required configuration",
@@ -1077,6 +1193,7 @@ def scan(root: Path, deep: bool = False, max_files: int = DEFAULT_MAX_FILES) -> 
     hints = path_hints(root, files)
     gitignore = gitignore_entries(root)
     deep_results = run_deep_checks(root, ci, gitignore) if deep else []
+    config = load_checkyourself_config(root)
     missing_lockfile = (root / "package.json").exists() and not any(
         (root / name).exists() for name in LOCKFILE_NAMES
     )
@@ -1088,8 +1205,8 @@ def scan(root: Path, deep: bool = False, max_files: int = DEFAULT_MAX_FILES) -> 
         deps_found,
         missing_lockfile=missing_lockfile,
         deep_findings=deep_results,
+        config_error=config.get("config_error"),
     )
-    config = load_checkyourself_config(root)
     finding_dicts = apply_suppressions([f.to_dict() for f in findings], config.get("suppress") or [])
 
     counts = {sev: 0 for sev in ("P0", "P1", "P2", "P3")}
@@ -1118,6 +1235,7 @@ def scan(root: Path, deep: bool = False, max_files: int = DEFAULT_MAX_FILES) -> 
         "findings": finding_dicts,
         "counts": counts,
         "suppression_count": suppression_count,
+        "config_error": config.get("config_error"),
         "tree": tree_sample(root),
         "public_repo_scope_guardrails": PUBLIC_REPO_SCOPE_GUARDRAILS,
     }
@@ -1290,12 +1408,21 @@ def _coverage_validation_errors(data: Any) -> List[str]:
 
         raw_id = item.get("id")
         raw_surface = item.get("surface")
-        if "id" in item and (not isinstance(raw_id, str) or not raw_id.strip()):
+        raw_category = item.get("category")
+        if "id" not in item:
+            errors.append(f"{prefix} is missing id")
+        elif not isinstance(raw_id, str) or not raw_id.strip():
             errors.append(f"{prefix} has an invalid id: {raw_id!r}")
             raw_id = None
-        if "surface" in item and (not isinstance(raw_surface, str) or not raw_surface.strip()):
+        if "surface" not in item:
+            errors.append(f"{prefix} is missing surface")
+        elif not isinstance(raw_surface, str) or not raw_surface.strip():
             errors.append(f"{prefix} has an invalid surface: {raw_surface!r}")
             raw_surface = None
+        if "category" not in item:
+            errors.append(f"{prefix} is missing category")
+        elif not isinstance(raw_category, str) or not raw_category.strip():
+            errors.append(f"{prefix} has an invalid category: {raw_category!r}")
 
         if "id" in item:
             sid = raw_id
@@ -1320,14 +1447,10 @@ def _coverage_validation_errors(data: Any) -> List[str]:
                 f"{prefix} surface {raw_surface!r} does not match {sid} ({expected_surface!r})"
             )
 
-        if "category" in item:
-            category = item.get("category")
-            if not isinstance(category, str) or not category.strip():
-                errors.append(f"{prefix} has an invalid category: {category!r}")
-            elif category != expected_category:
-                errors.append(
-                    f"{prefix} category {category!r} does not match {sid} ({expected_category!r})"
-                )
+        if isinstance(raw_category, str) and raw_category.strip() and raw_category != expected_category:
+            errors.append(
+                f"{prefix} category {raw_category!r} does not match {sid} ({expected_category!r})"
+            )
 
         if "status" not in item or item.get("status") is None:
             errors.append(f"{prefix} has a null or missing status")
@@ -2635,6 +2758,7 @@ def mcp_tools() -> List[dict]:
                 },
                 "max_files": {
                     "type": "integer",
+                    "minimum": 1,
                     "description": "Maximum files to scan before truncating (default 6000). The result reports skipped inputs and incompleteness in scan_limits.",
                 },
             }),
@@ -2684,7 +2808,7 @@ def mcp_tools() -> List[dict]:
             "inputSchema": object_schema({
                 "findings": findings_schema("normalize and score"),
                 "coverage": {
-                    "type": "object",
+                    "type": ["object", "null"],
                     "description": "Optional filled coverage object. Provide this for coverage-backed scoring; omit for scan-derived or finding-only estimates.",
                 },
             }, ["findings"]),
@@ -2907,6 +3031,12 @@ def handle_mcp_message(message: dict) -> Optional[dict]:
         missing = sorted(set(input_schema.get("required") or []) - set(arguments))
         if missing:
             return mcp_error(request_id, -32602, f"missing required argument(s) for {name}: {', '.join(missing)}")
+        type_errors = validate_json_schema(arguments, input_schema)
+        if type_errors:
+            return mcp_error(
+                request_id, -32602,
+                f"invalid argument value(s) for {name}: {'; '.join(type_errors)}",
+            )
         try:
             data = call_mcp_tool(name, arguments)
             return mcp_success(request_id, mcp_tool_result(data))
@@ -3054,6 +3184,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     raw = list(sys.argv[1:] if argv is None else argv)
     commands = {"describe", "scan", "diagnostic", "schema", "coverage", "score", "backlog", "next", "diff", "validate", "init", "mcp"}
     try:
+        if raw and raw[0] in {"-h", "--help"}:
+            build_parser().print_help()
+            return 0
         if raw and raw[0] not in commands and not raw[0].startswith("-") and not Path(raw[0]).exists():
             # A misspelled command would otherwise be treated as a project
             # path, silently scanning nothing useful.
