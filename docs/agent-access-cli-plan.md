@@ -115,15 +115,26 @@ Global conventions:
   `schemas/score-result.schema.json`.
 - **Why it matters:** the score stops being a vibe. Same evidence → same number, every time.
 
-### 3.5 `backlog` / `next` — ranking and the safe batch (usable)
+### 3.5 `backlog` / `next` — ranking and the highest-severity batch (usable)
 
 - **`backlog --findings F`:** rank every Finding and high-impact Unknown by
-  severity → reversibility/safety → dependency order; output the **complete ranked backlog** plus
-  the **safest first approval batch** (small, reversible) — mirroring the report contract.
-- **`next --findings F`:** given current statuses (fixed / accepted-risk / deferred / blocked /
-  not-applicable), emit the next safest batch. This drives the guided-fix loop deterministically.
-- **Output:** conforms to the `remediation_backlog` / `first_approval_batch` shapes already in
-  `schemas/checkyourself-report.schema.json`.
+  severity → category → finding ID; output the **complete ranked backlog** plus the
+  **`highest_severity_batch`** (at most three unresolved findings at the highest severity).
+  The CLI does not analyze reversibility, dependencies, coupling, or blast radius, so this field is
+  not a safety judgment. `first_approval_batch` remains as a compatibility alias.
+- **`next --findings F`:** given current statuses (fixed / accepted-risk / deferred /
+  not-applicable), emit the next `highest_severity_batch` using the same deterministic rule.
+  The result also retains `next_approval_batch` as a compatibility alias.
+- **Output:** the complete backlog and batch basis are machine-readable; consumers should use
+  `batch_basis.name` to distinguish the highest-severity slice from a future safety-ranked batch.
+
+### 3.5.1 `diff` — identity-aware regression gate
+
+- `diff` reports status-only open-to-resolved transitions in `resolved` and details every
+  status/severity transition separately.
+- `diff --ci` fails for a newly open P0/P1 finding, a reopened P0/P1 finding, a severity escalation
+  into open P0/P1, or an increased aggregate open P0/P1 count. Identity events are retained in
+  `regressions`; count-only changes are reported as `count_regression`.
 
 ### 3.6 `validate` — schema self-check (readable / accessible)
 
