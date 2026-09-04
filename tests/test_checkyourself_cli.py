@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 import subprocess
 import sys
 import tempfile
@@ -520,9 +521,14 @@ class CheckYourselfCliTests(unittest.TestCase):
         self.assertNotIn("CY-CONFIG-001", ids)  # debug flag heuristic skips test paths
 
     def test_coverage_backed_score_blocks_thin_pass_gaming(self) -> None:
+        from importlib import util as _util
+        spec = _util.spec_from_file_location("cy", CLI)
+        cy = _util.module_from_spec(spec)
+        spec.loader.exec_module(cy)
         surfaces = [
-            {"id": f"S{i:02d}", "surface": f"s{i}", "status": "Pass", "evidence_reviewed": ["x"]}
-            for i in range(1, 11)
+            {"id": sid, "surface": surface, "category": category,
+             "status": "Pass", "evidence_reviewed": ["x"]}
+            for sid, surface, category in cy.COVERAGE_SURFACES[:10]
         ]
         coverage = {"schema": "checkyourself-coverage/1", "surfaces": surfaces}
         with tempfile.TemporaryDirectory() as tmp:
@@ -539,6 +545,90 @@ class CheckYourselfCliTests(unittest.TestCase):
         self.assertFalse(score["coverage_complete"])
         self.assertNotEqual(score["confidence"], "high")
         self.assertLess(score["score"], 100)
+
+    def _full_coverage(self) -> dict:
+        from importlib import util as _util
+        spec = _util.spec_from_file_location("cy", CLI)
+        cy = _util.module_from_spec(spec)
+        spec.loader.exec_module(cy)
+        return {
+            "schema": cy.COVERAGE_SCHEMA_ID,
+            "surfaces": [
+                {
+                    "id": sid,
+                    "surface": surface,
+                    "category": category,
+                    "status": "Pass",
+                    "evidence_reviewed": [f"src/app.py:{index}"],
+                }
+                for index, (sid, surface, category) in enumerate(cy.COVERAGE_SURFACES, start=1)
+            ],
+        }
+
+    def _run_mcp_score(self, coverage: object) -> dict:
+        messages = "\n".join([
+            json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25"}}),
+            json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
+                "name": "score", "arguments": {"findings": {"findings": []}, "coverage": coverage},
+            }}),
+            "",
+        ])
+        result = subprocess.run(
+            [sys.executable, str(CLI), "mcp"],
+            text=True,
+            input=messages,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        responses = {json.loads(line)["id"]: json.loads(line) for line in result.stdout.splitlines()}
+        return responses[2]
+
+    def test_score_rejects_invalid_coverage_in_cli_and_mcp(self) -> None:
+        base = self._full_coverage()
+        cases = {}
+
+        invalid = deepcopy(base)
+        invalid["surfaces"][2]["status"] = "Bogus"
+        cases["invalid status"] = invalid
+
+        null_status = deepcopy(base)
+        null_status["surfaces"][2]["status"] = None
+        cases["null status"] = null_status
+        cases["null artifact"] = None
+
+        duplicate = deepcopy(base)
+        duplicate["surfaces"].append(deepcopy(duplicate["surfaces"][0]))
+        cases["duplicate id"] = duplicate
+
+        unknown_id = deepcopy(base)
+        unknown_id["surfaces"][2]["id"] = "S99"
+        cases["unknown id"] = unknown_id
+
+        mismatched_category = deepcopy(base)
+        mismatched_category["surfaces"][2]["category"] = "C2"
+        cases["mismatched category"] = mismatched_category
+
+        for label, coverage in cases.items():
+            with self.subTest(label=label):
+                with tempfile.TemporaryDirectory() as tmp:
+                    findings_path = Path(tmp) / "findings.json"
+                    coverage_path = Path(tmp) / "coverage.json"
+                    findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
+                    coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
+                    cli_result = self.run_cli(
+                        "score", "--findings", str(findings_path),
+                        "--coverage", str(coverage_path), "--no-history", "--format", "json",
+                    )
+                self.assertEqual(cli_result.returncode, 2, cli_result.stderr)
+                self.assertEqual(cli_result.stdout, "")
+                self.assertIn("invalid coverage artifact", cli_result.stderr)
+
+                mcp_response = self._run_mcp_score(coverage)
+                mcp_result = mcp_response["result"]
+                self.assertTrue(mcp_result["isError"])
+                self.assertNotIn("score", mcp_result["structuredContent"])
+                self.assertNotIn("confidence", mcp_result["structuredContent"])
 
     def test_coverage_backed_full_evidence_reaches_high_confidence(self) -> None:
         from importlib import util as _util
