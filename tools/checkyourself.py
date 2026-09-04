@@ -65,6 +65,9 @@ CODE_EXTENSIONS = {
 }
 
 CONFIG_EXTENSIONS = {".env", ".cfg", ".ini", ".conf", ".properties", ".toml", ".yaml", ".yml"}
+# These files carry configuration even though their names have no useful
+# suffix. They must receive the same content checks as extension-based config.
+EXTENSIONLESS_CONFIG_NAMES = {"dockerfile", "makefile", "jenkinsfile"}
 
 # One credential-name token list feeds both detection and redaction so the two
 # regexes cannot drift apart. The trailing (?![a-z]) rejects identifier
@@ -304,6 +307,18 @@ def read_text(path: Path, max_chars: int = 200_000) -> str:
         return ""
 
 
+def read_text_with_status(path: Path, max_chars: int) -> Tuple[str, bool, bool]:
+    """Read bounded text and distinguish truncation from an unreadable file."""
+    try:
+        if path.is_symlink():
+            return "", False, True
+        with path.open("r", encoding="utf-8", errors="ignore") as handle:
+            text = handle.read(max_chars + 1)
+        return text[:max_chars], len(text) > max_chars, False
+    except OSError:
+        return "", False, True
+
+
 def looks_binary(text: str) -> bool:
     return "\x00" in text[:2048]
 
@@ -464,34 +479,73 @@ def iter_files(root: Path, limit: int = DEFAULT_MAX_FILES) -> Tuple[List[Path], 
         "truncated": False,
         "files_beyond_limit": 0,
         "symlinks_skipped": 0,
+        "symlink_dirs_skipped": 0,
+        "files_oversized": 0,
         "files_unreadable": 0,
+        "content_truncated": 0,
+        "skipped_files": [],
+        "oversized_files": [],
+        "unreadable_files": [],
+        "truncated_files": [],
+        "incomplete": False,
     }
     for dirpath, dirnames, filenames in os.walk(root):
         parent = Path(dirpath)
         # Sorting dirnames keeps walk order deterministic across filesystems.
-        dirnames[:] = sorted(d for d in dirnames if keep_dir(parent, d))
+        kept_dirnames = []
+        for dirname in sorted(dirnames):
+            if dirname in IGNORED_DIRS or (dirname.startswith(".") and dirname != ".github"):
+                continue
+            if (parent / dirname).is_symlink():
+                stats["symlink_dirs_skipped"] += 1
+                stats["skipped_files"].append(rel(root, parent / dirname))
+                continue
+            kept_dirnames.append(dirname)
+        dirnames[:] = kept_dirnames
         for name in sorted(filenames):
             p = parent / name
             if p.is_symlink():
                 stats["symlinks_skipped"] += 1
+                stats["skipped_files"].append(rel(root, p))
                 continue
             try:
                 real = p.resolve(strict=True)
                 real.relative_to(root)
                 if real.stat().st_size > 2_000_000:
+                    stats["files_oversized"] += 1
+                    stats["oversized_files"].append(rel(root, p))
                     continue
             except ValueError:
                 # Resolves outside the scanned tree (e.g. via a parent link).
                 stats["symlinks_skipped"] += 1
+                stats["skipped_files"].append(rel(root, p))
+                continue
+            except RuntimeError:
+                # Symlink loops can make Path.resolve fail without an OSError.
+                stats["symlinks_skipped"] += 1
+                stats["skipped_files"].append(rel(root, p))
                 continue
             except OSError:
                 stats["files_unreadable"] += 1
+                stats["unreadable_files"].append(rel(root, p))
                 continue
             if len(files) >= limit:
                 stats["truncated"] = True
                 stats["files_beyond_limit"] += 1
+                stats["truncated_files"].append(rel(root, p))
                 continue
             files.append(p)
+    stats["skipped_files"] = sorted(set(stats["skipped_files"]))
+    stats["oversized_files"] = sorted(set(stats["oversized_files"]))
+    stats["unreadable_files"] = sorted(set(stats["unreadable_files"]))
+    stats["truncated_files"] = sorted(set(stats["truncated_files"]))
+    stats["incomplete"] = bool(
+        stats["truncated"]
+        or stats["symlinks_skipped"]
+        or stats["symlink_dirs_skipped"]
+        or stats["files_oversized"]
+        or stats["files_unreadable"]
+    )
     return files, stats
 
 
@@ -580,7 +634,7 @@ SOURCEMAP_CONFIG_NAMES = {
 }
 
 
-def scan_file_contents(root: Path, files: List[Path]) -> Dict[str, List[str]]:
+def scan_file_contents(root: Path, files: List[Path], scan_limits: Optional[dict] = None) -> Dict[str, List[str]]:
     """Single content pass over every scannable file, feeding all detectors.
 
     Secrets are scanned everywhere, including tests and docs, because real
@@ -611,9 +665,19 @@ def scan_file_contents(root: Path, files: List[Path]) -> Dict[str, List[str]]:
         elif kind == "example":
             results["env_files"].append(rp)
 
-        if suffix not in TEXT_EXTENSIONS and not name.startswith(".env") and kind is None:
+        is_known_config = name in EXTENSIONLESS_CONFIG_NAMES
+        if suffix not in TEXT_EXTENSIONS and not name.startswith(".env") and kind is None and not is_known_config:
             continue
-        text = read_text(p, max_chars=60_000)
+        text, was_truncated, unreadable = read_text_with_status(p, max_chars=2_000_000)
+        if scan_limits is not None:
+            if was_truncated:
+                scan_limits["content_truncated"] += 1
+                scan_limits["truncated_files"].append(rp)
+            if unreadable:
+                scan_limits["files_unreadable"] += 1
+                scan_limits["unreadable_files"].append(rp)
+        if unreadable:
+            continue
         if not text or looks_binary(text):
             continue
 
@@ -626,7 +690,7 @@ def scan_file_contents(root: Path, files: List[Path]) -> Dict[str, List[str]]:
             for marker in TEST_PATH_MARKERS
         )
         is_code = suffix in CODE_EXTENSIONS
-        is_config = suffix in CONFIG_EXTENSIONS or kind is not None
+        is_config = suffix in CONFIG_EXTENSIONS or kind is not None or is_known_config
 
         for line_no, line in enumerate(text.splitlines(), start=1):
             stripped = line.strip()
@@ -669,13 +733,28 @@ def scan_file_contents(root: Path, files: List[Path]) -> Dict[str, List[str]]:
 
 
 def find_tests(root: Path, files: List[Path]) -> List[str]:
+    test_dirs = {"test", "tests", "spec", "specs", "__tests__", "playwright", "cypress", "e2e"}
+    test_extensions = {".js", ".jsx", ".ts", ".tsx", ".py", ".go", ".java", ".rb", ".rs"}
     tests: List[str] = []
     for p in files:
         rp = rel(root, p)
         lower = rp.lower()
-        if any(x in lower for x in ("test", "spec", "__tests__", "playwright", "cypress")):
-            if p.suffix.lower() in {".js", ".jsx", ".ts", ".tsx", ".py", ".go", ".java", ".rb", ".rs"}:
-                tests.append(rp)
+        suffix = p.suffix.lower()
+        if suffix not in test_extensions:
+            continue
+        parts = [part.lower() for part in Path(lower).parts]
+        stem = p.stem.lower()
+        in_test_dir = any(part in test_dirs for part in parts[:-1])
+        conventional_name = (
+            stem in {"test", "spec"}
+            or stem.startswith("test_")
+            or stem.endswith("_test")
+            or stem.endswith(".test")
+            or stem.endswith(".spec")
+            or (suffix == ".java" and stem.startswith("test"))
+        )
+        if in_test_dir or conventional_name:
+            tests.append(rp)
     return sorted(set(tests))[:100]
 
 
@@ -982,7 +1061,17 @@ def scan(root: Path, deep: bool = False, max_files: int = DEFAULT_MAX_FILES) -> 
     root = root.resolve()
     files, scan_limits = iter_files(root, limit=max_files)
     stack_signals, scripts, deps_found = detect_stack(root)
-    content = scan_file_contents(root, files)
+    content = scan_file_contents(root, files, scan_limits)
+    scan_limits["truncated_files"] = sorted(set(scan_limits["truncated_files"]))
+    scan_limits["unreadable_files"] = sorted(set(scan_limits["unreadable_files"]))
+    scan_limits["incomplete"] = bool(
+        scan_limits["truncated"]
+        or scan_limits["symlinks_skipped"]
+        or scan_limits["symlink_dirs_skipped"]
+        or scan_limits["files_oversized"]
+        or scan_limits["files_unreadable"]
+        or scan_limits["content_truncated"]
+    )
     tests = find_tests(root, files)
     ci = find_ci(root)
     hints = path_hints(root, files)
@@ -1046,6 +1135,8 @@ def render_markdown(root: Path, data: dict) -> str:
     add(f"- Project root: `{data['project']}`")
     add(f"- Files scanned: {data['files_scanned']}")
     limits = data.get("scan_limits") or {}
+    if limits.get("incomplete"):
+        add("- WARNING: scan incomplete; skipped, unreadable, oversized, or truncated inputs may hide findings.")
     if limits.get("truncated"):
         add(f"- WARNING: scan truncated at {limits.get('max_files')} files; "
             f"{limits.get('files_beyond_limit')} files were not scanned. "
@@ -2128,8 +2219,17 @@ def safe_write_text(path: Path, body: str) -> None:
     Generated files land inside scanned (potentially untrusted) directories;
     a pre-planted symlink at the expected name could redirect the write.
     """
-    if path.is_symlink():
-        raise CliError(f"refusing to write through symlink: {path}")
+    candidate = path
+    while True:
+        # macOS exposes temporary directories through root-level aliases such
+        # as /var and /tmp. They are outside the caller's writable subtree;
+        # reject symlinks introduced below those OS-managed aliases.
+        if candidate.is_symlink() and candidate.parent != Path(candidate.anchor):
+            raise CliError(f"refusing to write through symlink: {path}")
+        parent = candidate.parent
+        if parent == candidate:
+            break
+        candidate = parent
     path.write_text(body, encoding="utf-8")
 
 
@@ -2143,6 +2243,8 @@ def write_text_result(data: dict) -> None:
         c = data["counts"]
         print(f"Scanned {data['files_scanned']} files. Findings — P0: {c['P0']}, P1: {c['P1']}, P2: {c['P2']}, P3: {c['P3']}")
         limits = data.get("scan_limits") or {}
+        if limits.get("incomplete"):
+            print("  WARNING: scan incomplete; skipped, unreadable, oversized, or truncated inputs may hide findings.")
         if limits.get("truncated"):
             print(f"  WARNING: scan truncated at {limits.get('max_files')} files; "
                   f"{limits.get('files_beyond_limit')} files were not scanned. Rerun with --max-files.")
@@ -2163,13 +2265,15 @@ def write_text_result(data: dict) -> None:
 def resolve_history_path(findings_path: str, requested: Optional[str]) -> Optional[Path]:
     if requested == "none":
         return None
+    if requested == "":
+        if findings_path == "-":
+            return Path.cwd() / DEFAULT_SCORE_HISTORY_PATH
+        return Path(findings_path).resolve().parent / DEFAULT_SCORE_HISTORY_PATH
     if requested:
         return Path(requested)
-    if findings_path == "-":
-        # Piped findings should not silently litter the CWD with a history
-        # file; stdin scoring writes history only when --history is explicit.
-        return None
-    return Path(findings_path).resolve().parent / DEFAULT_SCORE_HISTORY_PATH
+    # Scoring is read-only by default. Persist a score history only when the
+    # caller explicitly supplies --history.
+    return None
 
 
 def append_score_history(path: Optional[Path], result: dict, note: str = "") -> None:
@@ -2212,20 +2316,21 @@ def command_scan(args: argparse.Namespace) -> int:
     data = scan(root, deep=getattr(args, "deep", False), max_files=getattr(args, "max_files", DEFAULT_MAX_FILES))
     json_stdout = args.format == "json" or args.json == "-" or (args.no_write and args.json is not None)
 
-    if not args.no_write:
+    if not args.no_write and args.out is not None:
         out = Path(args.out)
         if not out.is_absolute():
             out = Path.cwd() / out
         safe_write_text(out, render_markdown(root, data))
         if not args.quiet and not json_stdout:
             print(f"Wrote context: {out}")
-        if args.json is not None and args.json != "-":
-            jout = Path(args.json)
-            if not jout.is_absolute():
-                jout = Path.cwd() / jout
-            safe_write_text(jout, json.dumps(data, indent=2) + "\n")
-            if not args.quiet and not json_stdout:
-                print(f"Wrote JSON:    {jout}")
+
+    if not args.no_write and args.json is not None and args.json != "-":
+        jout = Path(args.json)
+        if not jout.is_absolute():
+            jout = Path.cwd() / jout
+        safe_write_text(jout, json.dumps(data, indent=2) + "\n")
+        if not args.quiet and not json_stdout:
+            print(f"Wrote JSON:    {jout}")
 
     if json_stdout:
         write_json(data)
@@ -2285,7 +2390,7 @@ def command_score(args: argparse.Namespace) -> int:
         result = score_from_inputs(findings_data, load_json_arg(args.coverage))
     else:
         result = score_from_inputs(findings_data)
-    history_path = resolve_history_path(args.findings, None if not args.history else args.history)
+    history_path = resolve_history_path(args.findings, args.history)
     append_score_history(history_path, result, args.note)
     if args.format == "json":
         write_json(result)
@@ -2429,7 +2534,7 @@ def mcp_tools() -> List[dict]:
                 },
                 "max_files": {
                     "type": "integer",
-                    "description": "Maximum files to scan before truncating (default 6000). The result reports truncation in scan_limits.",
+                    "description": "Maximum files to scan before truncating (default 6000). The result reports skipped inputs and incompleteness in scan_limits.",
                 },
             }),
             "annotations": read_only_annotations("Scan Project"),
@@ -2739,8 +2844,8 @@ def run_mcp_server() -> int:
 
 def add_scan_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("project", nargs="?", default=".", help="Project root to scan (default: .)")
-    parser.add_argument("--out", default="CHECKYOURSELF_PROJECT_CONTEXT.generated.md",
-                        help="Markdown context output path (default: CHECKYOURSELF_PROJECT_CONTEXT.generated.md)")
+    parser.add_argument("--out",
+                        help="Write Markdown context to this path (scans are stdout-only by default)")
     parser.add_argument("--json", nargs="?", const="CHECKYOURSELF_SCAN.generated.json", default=None,
                         help="Also write a JSON summary (default path: CHECKYOURSELF_SCAN.generated.json). Use - for stdout.")
     parser.add_argument("--format", choices=("text", "json"), default="text",
@@ -2790,8 +2895,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("score", help="Compute deterministic Production Reality Score.")
     p.add_argument("--findings", required=True, help="JSON file containing findings, scan output, or report.")
     p.add_argument("--coverage", help="Optional coverage JSON file.")
-    p.add_argument("--history", nargs="?", const=DEFAULT_SCORE_HISTORY_PATH,
-                   help="Write score history to this path. Defaults to .checkyourself-score-history.json beside the findings file.")
+    p.add_argument("--history", nargs="?", const="",
+                   help="Write score history to this path (or beside findings when supplied without a path; disabled by default).")
     p.add_argument("--no-history", dest="history", action="store_const", const="none",
                    help="Do not append score history.")
     p.add_argument("--note", default="", help="Optional note stored with the score history entry.")

@@ -443,7 +443,7 @@ class CheckYourselfCliTests(unittest.TestCase):
         structured = responses[2]["result"]["structuredContent"]
         self.assertEqual(structured["schema"], "checkyourself-capabilities/1")
 
-    def test_score_without_coverage_uses_scan_estimate_and_writes_history(self) -> None:
+    def test_score_without_coverage_uses_scan_estimate_and_writes_explicit_history(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             (project / "app.py").write_text("print('hello')\n", encoding="utf-8")
@@ -456,7 +456,9 @@ class CheckYourselfCliTests(unittest.TestCase):
             scan_path = project / "scan.json"
             scan_path.write_text(scan_result.stdout, encoding="utf-8")
 
-            score_result = self.run_cli("score", "--findings", str(scan_path), "--format", "json")
+            score_result = self.run_cli(
+                "score", "--findings", str(scan_path), "--history", "--format", "json",
+            )
 
             self.assertEqual(score_result.returncode, 0, score_result.stderr)
             score = json.loads(score_result.stdout)
@@ -470,6 +472,32 @@ class CheckYourselfCliTests(unittest.TestCase):
             self.assertTrue(score["manual_evidence_needed"])
             history = json.loads((project / ".checkyourself-score-history.json").read_text(encoding="utf-8"))
             self.assertEqual(history[-1]["score"], score["score"])
+
+    def test_audit_defaults_leave_fixture_tree_unchanged(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "app.py").write_text("print('hello')\n", encoding="utf-8")
+            findings_path = project / "findings.json"
+            findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
+            before = sorted(
+                (path.relative_to(project).as_posix(), path.read_bytes())
+                for path in project.rglob("*") if path.is_file()
+            )
+
+            scan_result = self.run_cli("scan", str(project), "--format", "json")
+            self.assertEqual(scan_result.returncode, 0, scan_result.stderr)
+            score_result = self.run_cli(
+                "score", "--findings", str(findings_path), "--format", "json",
+            )
+            self.assertEqual(score_result.returncode, 0, score_result.stderr)
+
+            after = sorted(
+                (path.relative_to(project).as_posix(), path.read_bytes())
+                for path in project.rglob("*") if path.is_file()
+            )
+            self.assertEqual(after, before)
+            self.assertFalse((project / "CHECKYOURSELF_PROJECT_CONTEXT.generated.md").exists())
+            self.assertFalse((project / ".checkyourself-score-history.json").exists())
 
     def test_coverage_emit_writes_default_file_in_text_mode(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -537,6 +565,61 @@ class CheckYourselfCliTests(unittest.TestCase):
         self.assertTrue(data["scan_limits"]["truncated"])
         self.assertEqual(data["files_scanned"], 2)
         self.assertGreater(data["scan_limits"]["files_beyond_limit"], 0)
+        self.assertTrue(data["scan_limits"]["incomplete"])
+        self.assertTrue(data["scan_limits"]["truncated_files"])
+
+    def test_scan_reports_oversized_files_as_incomplete(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "large.py").write_bytes(b"x" * 2_000_001)
+            result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        limits = data["scan_limits"]
+        self.assertEqual(data["files_scanned"], 0)
+        self.assertEqual(limits["files_oversized"], 1)
+        self.assertEqual(limits["oversized_files"], ["large.py"])
+        self.assertTrue(limits["incomplete"])
+
+    def test_scan_reads_eligible_content_past_previous_read_cap(self) -> None:
+        token = "sk-" + ("e" * 32)
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "app.py").write_text(
+                ("# padding\n" * 7_000) + f'API_KEY = "{token}"\n',
+                encoding="utf-8",
+            )
+            result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        secret = next(f for f in data["findings"] if f["id"] == "CY-SECRET-001")
+        self.assertGreater(int(secret["evidence"][0].split(":", 2)[1].split(" ", 1)[0]), 60_000 // 10)
+        self.assertFalse(data["scan_limits"]["incomplete"])
+
+    def test_extensionless_config_files_are_scanned_for_secrets(self) -> None:
+        token = "sk-" + ("d" * 32)
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "Dockerfile").write_text(f"FROM python:3.14\nENV API_KEY={token}\n", encoding="utf-8")
+            result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        secret = next(f for f in data["findings"] if f["id"] == "CY-SECRET-001")
+        self.assertIn("Dockerfile:2", " ".join(secret["evidence"]))
+
+    def test_filename_substrings_do_not_create_test_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "latest.py").write_text("print('not a test')\n", encoding="utf-8")
+            result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(data["tests"], [])
+        self.assertIn("CY-TEST-001", {finding["id"] for finding in data["findings"]})
 
     def test_scan_does_not_read_symlinked_files_out_of_tree(self) -> None:
         # Built by concatenation so the committed source never contains a
@@ -1017,6 +1100,19 @@ class CheckYourselfCliTests(unittest.TestCase):
             out_link = project / "context.md"
             out_link.symlink_to(target)
             result = self.run_cli("scan", str(project), "--out", str(out_link), "--quiet")
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("refusing to write through symlink", result.stderr)
+
+    def test_scan_refuses_to_write_through_symlinked_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as outside, tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "app.py").write_text("print('ok')\n", encoding="utf-8")
+            target_dir = Path(outside) / "output"
+            target_dir.mkdir()
+            parent_link = project / "generated"
+            parent_link.symlink_to(target_dir, target_is_directory=True)
+            result = self.run_cli("scan", str(project), "--out", str(parent_link / "context.md"), "--quiet")
 
         self.assertEqual(result.returncode, 2)
         self.assertIn("refusing to write through symlink", result.stderr)
