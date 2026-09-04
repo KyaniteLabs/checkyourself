@@ -181,9 +181,11 @@ Every new schema must be added to the public validator's JSON checks and link-ch
 
 ---
 
-## 5. Deterministic scoring algorithm (proposed)
+## 5. Deterministic scoring algorithm (current contract)
 
-This operationalizes `scoring-method.md`. Tunable, but must stay faithful to that file.
+This is the decision record for the executable behavior in `scoring-method.md`.
+The scoring-method file is the canonical prose contract; this section must stay
+faithful to it.
 
 **Categories and weights** (sum = 100), taken verbatim from `scoring-method.md`:
 
@@ -228,9 +230,8 @@ This operationalizes `scoring-method.md`. Tunable, but must stay faithful to tha
 4. `Unknown` earns reduced or zero credit depending on criticality, records `missing_evidence`,
    and prevents high-confidence scoring. Critical unknowns in C1/C2/C3 should usually earn 0 until
    evidence is supplied.
-5. `NotApplicable` categories are excluded from the denominator only when the report gives a
-   concrete reason. Normalize across applicable categories without inflating scores for missing
-   evidence.
+5. `NotApplicable` surfaces with a concrete reason retain their category weight. Their weight is
+   not redistributed, and the denominator is not normalized to inflate scores for missing evidence.
 6. Raw total = normalized sum of awarded category points (0–100).
 7. **Apply caps** in order, taking the minimum:
    - any unresolved P0 → cap 49;
@@ -290,9 +291,10 @@ security/privacy risk.
 
 Recommendation: **ship CLI as the engine, ship MCP as a local wrapper, do not build an API now.**
 
-## 9. MCP server (`checkyourself mcp`) — Phase 3
+## 9. MCP server (`checkyourself mcp`) — delivered in v1.6.0
 
-Make the verbs callable as **native agent tools** in Claude / Cursor / Codex.
+The shipped server makes the verbs callable as **native agent tools** in Claude /
+Cursor / Codex.
 
 - **Transport:** JSON-RPC 2.0 over stdio, implemented with the standard library only. The current
   MCP stdio transport uses newline-delimited JSON-RPC messages on stdin/stdout. No third-party MCP
@@ -345,16 +347,21 @@ the scan-derived path records the missing execution or validation receipt instea
 
 ## 12. Versioning, docs, release
 
-- Target **v1.6.0** (new agent interface is a feature release).
-- Update `CHANGELOG.md`, `checkyourself.manifest.json` (version, modes:
-  add `agent_cli` / `mcp_server`; entrypoints: add `capabilities`), `docs/cli.md`, `docs/mcp.md`,
-  README, and the new schemas — then run `tools/validate_public.py`.
+- The agent interface was delivered in **v1.6.0** and is part of the current
+  **v1.7.0** public manifest.
+- The release artifacts are `CHANGELOG.md`, `checkyourself.manifest.json`,
+  `docs/cli.md`, `docs/mcp.md`, README, and the bundled schemas. Validate them
+  with `tools/validate_public.py` and the full test suite.
 
 ---
 
 ## 13. Phased rollout & acceptance criteria
 
 All phases below are delivered in v1.6.0 unless a future enhancement is called out explicitly.
+
+The canonical resolution statuses are `fixed`, `accepted-risk`, `deferred`,
+`not-applicable`, and `suppressed`. An unresolved item remains `open` and
+carries blocker context when work cannot proceed.
 
 **Phase 1A — Agent contract foundation**
 - Add subcommands while preserving `python3 tools/checkyourself.py <path>` as `scan <path>`.

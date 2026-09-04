@@ -60,7 +60,7 @@
 
 Every relevant production surface must be represented here. Do not stop after a few obvious issues.
 
-| # | Surface | Status: Pass / Finding / Unknown / N/A | Evidence or reason | Related finding IDs |
+| # | Surface | Status: Pass / Finding / Unknown / Not applicable | Evidence or reason | Related finding IDs |
 |---:|---|---|---|---|
 | 1 | Product purpose and users |  |  |  |
 | 2 | Stack and architecture |  |  |  |
@@ -112,8 +112,8 @@ Every relevant production surface must be represented here. Do not stop after a 
 
 List every finding that needs remediation. The first approval batch is only the starting point, not the full scope.
 
-| Order | Finding ID | Severity | Fix summary | Why this order | Approval needed | Verification | Rollback | Learning value | Status |
-|---:|---|---|---|---|---|---|---|---|---|
+| Order | Finding ID | Severity | Fix summary | Impact / blast radius | Why this order | Files/systems touched | Approval needed | Verification | Rollback | Learning value | Status |
+|---:|---|---|---|---|---|---|---|---|---|---|---|
 
 ## 13. Safest first approval batch
 

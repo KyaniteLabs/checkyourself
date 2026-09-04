@@ -4,9 +4,13 @@ CheckYourself is local-first and does not run a hosted service, but security
 reports still matter because the tool handles project context and may inspect
 files that contain sensitive signals.
 
-## Supported Version
+## Supported Versions
 
-The public `main` branch is the supported version until tagged releases begin.
+| Track | Support status | Meaning |
+|---|---|---|
+| Tagged `1.7.x` release line | Supported | The latest tagged release is `1.7.0`; security fixes target this line. |
+| Public `main` branch | Supported | The current development branch receives fixes and may change between releases. |
+| Tags older than `1.7.0` | Unsupported | Upgrade to the supported release line before requesting a security fix. |
 
 ## Reporting A Vulnerability
 

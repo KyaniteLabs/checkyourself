@@ -8,6 +8,9 @@ never prints secret values. The AI still supplies judgment. The CLI supplies
 repeatable receipts: discovery, schemas, coverage checks, scoring, backlog
 ranking, validation, and the thin MCP wrapper.
 
+For native host setup, discovery, and write boundaries, see the canonical
+[`native CLI/MCP adapter`](../06_ADAPTERS/native-cli-mcp.md).
+
 ## Fast Start
 
 ```bash
@@ -86,6 +89,14 @@ risk-surface path hints, and obvious deterministic risks. Each finding has a
 **stable, semantic rule ID** (for example `CY-SECRET-001`, `CY-CONFIG-001`)
 that stays the same across runs and releases, so you can suppress, diff, and
 cite findings reliably:
+
+### Canonical detector-rule registry
+
+The table below is the canonical detector-rule registry. `rules.md` defines the
+human review and safety workflow; it is not a second detector-ID registry.
+Manual reviewers reuse these IDs when the observed condition matches a shipped
+detector and use the manual fallback contract in `skills/checkyourself/SKILL.md`
+for conditions that the CLI does not detect.
 
 | Rule ID | Severity | What it catches |
 | --- | --- | --- |

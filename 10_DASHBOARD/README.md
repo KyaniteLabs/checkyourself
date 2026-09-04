@@ -40,10 +40,15 @@ move.
 
 The dashboard is **not** the source of truth. The Markdown Production Reality Report is the source of truth because it is easier to diff, update, and keep token-efficient.
 
-Only generate the dashboard when the user asks for it or includes:
+Only generate the dashboard when the user asks for it or includes one of these
+explicit triggers:
 
 ```text
 dashboard yes
+dashboard inline
 ```
+
+Use `dashboard yes` for the self-contained HTML/CSS dashboard. Use
+`dashboard inline` for the compact Markdown fallback.
 
 Do not generate it by default.

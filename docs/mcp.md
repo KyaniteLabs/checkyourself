@@ -10,6 +10,9 @@ It is intentionally thin. The MCP server does not implement separate audit
 logic. It calls the same functions as the CLI, returns the same schema-backed
 JSON, and keeps the product local-first.
 
+Use the canonical [`native CLI/MCP adapter`](../06_ADAPTERS/native-cli-mcp.md)
+for host discovery, scan-root setup, and write-boundary guidance.
+
 ## Why Local Stdio
 
 CheckYourself inspects local project folders. That makes local stdio the right
