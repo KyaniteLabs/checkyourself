@@ -233,6 +233,8 @@ SCORE_CATEGORIES = {
 SEVERITY_PENALTIES = {"P0": 1.0, "P1": 0.60, "P2": 0.25, "P3": 0.10}
 CRITICAL_CATEGORIES = {"C1", "C2", "C3"}
 HIGH_SCORE_GATE_CATEGORIES = {"C1", "C2", "C3", "C5", "C6", "C7"}
+VALID_COVERAGE_STATUSES = {"Pass", "Finding", "Unknown", "NotApplicable"}
+_NO_COVERAGE = object()
 
 
 class CliError(Exception):
@@ -1157,18 +1159,121 @@ def coverage_emit(project: str = "") -> dict:
     }
 
 
-def coverage_check(data: dict) -> dict:
-    errors: List[str] = []
-    warnings: List[str] = []
-    surfaces = data.get("surfaces") or data.get("coverage") or []
+def _coverage_surfaces(data: Any) -> Tuple[List[Any], List[str]]:
+    """Return coverage rows and structural errors without trusting input shape."""
+    if not isinstance(data, dict):
+        return [], ["coverage artifact must be an object"]
+    if "schema" in data and data.get("schema") != COVERAGE_SCHEMA_ID:
+        return [], [f"coverage artifact has unsupported schema: {data.get('schema')!r}"]
+    if "surfaces" in data:
+        surfaces = data["surfaces"]
+    elif "coverage" in data:
+        surfaces = data["coverage"]
+    else:
+        return [], ["coverage artifact must contain a surfaces array"]
     if not isinstance(surfaces, list):
-        raise CliError("coverage artifact must contain a surfaces array")
+        return [], ["coverage artifact must contain a surfaces array"]
+    return surfaces, []
+
+
+def _coverage_validation_errors(data: Any) -> List[str]:
+    """Validate rows that can influence a coverage-backed score.
+
+    Missing canonical rows remain valid incomplete evidence and are handled by
+    ``category_coverage``. Any supplied row, however, must identify one
+    canonical surface and must not contradict its category or status contract.
+    """
+    surfaces, errors = _coverage_surfaces(data)
+    if errors:
+        return errors
+
+    by_id = {sid: (surface, category) for sid, surface, category in COVERAGE_SURFACES}
+    by_name = {surface: sid for sid, surface, _category in COVERAGE_SURFACES}
+    seen_ids: set[str] = set()
+
+    for index, item in enumerate(surfaces):
+        prefix = f"coverage row {index}"
+        if not isinstance(item, dict):
+            errors.append(f"{prefix} must be an object")
+            continue
+
+        raw_id = item.get("id")
+        raw_surface = item.get("surface")
+        if "id" in item and (not isinstance(raw_id, str) or not raw_id.strip()):
+            errors.append(f"{prefix} has an invalid id: {raw_id!r}")
+            raw_id = None
+        if "surface" in item and (not isinstance(raw_surface, str) or not raw_surface.strip()):
+            errors.append(f"{prefix} has an invalid surface: {raw_surface!r}")
+            raw_surface = None
+
+        if "id" in item:
+            sid = raw_id
+        elif isinstance(raw_surface, str):
+            sid = by_name.get(raw_surface)
+        else:
+            sid = None
+
+        if not sid:
+            errors.append(f"{prefix} must identify a canonical surface by id or surface")
+            continue
+        if sid not in by_id:
+            errors.append(f"{prefix} has unknown coverage id: {sid!r}")
+            continue
+        if sid in seen_ids:
+            errors.append(f"{prefix} duplicates coverage id: {sid}")
+        seen_ids.add(sid)
+
+        expected_surface, expected_category = by_id[sid]
+        if raw_surface is not None and raw_surface != expected_surface:
+            errors.append(
+                f"{prefix} surface {raw_surface!r} does not match {sid} ({expected_surface!r})"
+            )
+
+        if "category" in item:
+            category = item.get("category")
+            if not isinstance(category, str) or not category.strip():
+                errors.append(f"{prefix} has an invalid category: {category!r}")
+            elif category != expected_category:
+                errors.append(
+                    f"{prefix} category {category!r} does not match {sid} ({expected_category!r})"
+                )
+
+        if "status" not in item or item.get("status") is None:
+            errors.append(f"{prefix} has a null or missing status")
+        elif not isinstance(item.get("status"), str) or item.get("status") not in VALID_COVERAGE_STATUSES:
+            errors.append(f"{prefix} has invalid status: {item.get('status')!r}")
+
+        for field in ("evidence_reviewed", "missing_evidence"):
+            if field in item:
+                value = item.get(field)
+                if not isinstance(value, list) or not all(isinstance(entry, str) for entry in value):
+                    errors.append(f"{prefix} has an invalid {field} array")
+        if "not_applicable_reason" in item and not isinstance(item.get("not_applicable_reason"), str):
+            errors.append(f"{prefix} has an invalid not_applicable_reason")
+
+    return list(dict.fromkeys(errors))
+
+
+def coverage_check(data: Any) -> dict:
+    errors = _coverage_validation_errors(data)
+    warnings: List[str] = []
+    surfaces, shape_errors = _coverage_surfaces(data)
+    if shape_errors:
+        return {
+            "tool": TOOL_NAME,
+            "schema": "checkyourself-coverage-check/1",
+            "complete": False,
+            "surface_count": 0,
+            "required_surface_count": len(COVERAGE_SURFACES),
+            "errors": errors,
+            "warnings": warnings,
+        }
 
     by_id = {str(item.get("id")): item for item in surfaces if isinstance(item, dict) and item.get("id")}
     # Key strictly on the surface name: falling back to category collapsed
     # multiple surfaces onto one key and over-reported missing rows.
     by_name = {str(item.get("surface")): item for item in surfaces if isinstance(item, dict) and item.get("surface")}
-    valid_statuses = {"Pass", "Finding", "Unknown", "NotApplicable"}
+    valid_statuses = VALID_COVERAGE_STATUSES
     pathlike_re = re.compile(r"[\w./\\-]+\.\w+|:\d+")
 
     for sid, surface, _category in COVERAGE_SURFACES:
@@ -1423,14 +1528,17 @@ def inferred_coverage_from_scan(scan_data: dict, findings: List[dict]) -> Dict[s
     return category_state
 
 
-def score_from_inputs(findings_data: Any, coverage_data: Optional[dict] = None) -> dict:
+def score_from_inputs(findings_data: Any, coverage_data: Any = _NO_COVERAGE) -> dict:
     findings = normalize_findings(findings_data)
     counts = {sev: 0 for sev in ("P0", "P1", "P2", "P3")}
     unresolved = [f for f in findings if f.get("status") not in RESOLVED_STATUSES]
     for f in unresolved:
         counts[f["severity"]] = counts.get(f["severity"], 0) + 1
 
-    if coverage_data is not None:
+    if coverage_data is not _NO_COVERAGE:
+        coverage_errors = _coverage_validation_errors(coverage_data)
+        if coverage_errors:
+            raise CliError("invalid coverage artifact: " + "; ".join(coverage_errors))
         coverage_by_category, coverage_complete = category_coverage(coverage_data)
         score_mode = "coverage-backed"
     elif isinstance(findings_data, dict) and findings_data.get("schema") == SCAN_SCHEMA_ID:
@@ -2037,8 +2145,10 @@ def command_coverage(args: argparse.Namespace) -> int:
 
 def command_score(args: argparse.Namespace) -> int:
     findings_data = load_json_arg(args.findings)
-    coverage_data = load_json_arg(args.coverage) if args.coverage else None
-    result = score_from_inputs(findings_data, coverage_data)
+    if args.coverage is not None:
+        result = score_from_inputs(findings_data, load_json_arg(args.coverage))
+    else:
+        result = score_from_inputs(findings_data)
     history_path = resolve_history_path(args.findings, None if not args.history else args.history)
     append_score_history(history_path, result, args.note)
     if args.format == "json":
@@ -2364,7 +2474,10 @@ def call_mcp_tool(name: str, arguments: dict) -> dict:
     if name == "coverage_check":
         return coverage_check(arguments.get("coverage") or {})
     if name == "score":
-        return score_from_inputs(arguments.get("findings") or {}, arguments.get("coverage"))
+        findings = arguments.get("findings") or {}
+        if "coverage" in arguments:
+            return score_from_inputs(findings, arguments["coverage"])
+        return score_from_inputs(findings)
     if name == "backlog":
         return backlog_from_findings(arguments.get("findings") or {})
     if name == "next":
