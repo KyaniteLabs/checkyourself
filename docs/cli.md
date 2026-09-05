@@ -40,7 +40,7 @@ python3 tools/checkyourself.py describe --format json
 | `scan --deep` | Adds slower validation checks for detected surfaces, including mutable GitHub Actions and dependency-update coverage. |
 | `coverage --emit` | Writes the 20-surface coverage skeleton for an agent to fill. Use `--format json` for stdout. |
 | `coverage --check FILE` | Checks a filled coverage artifact for completeness. |
-| `receipt` | Issues one verifier-hashed receipt bound to one coverage surface, source revision, command, claim, and observed result. |
+| `receipt` | Issues one verifier-hashed receipt whose subject digest is bound to one coverage surface, source revision, command, claim, and observed result. |
 | `score --findings FILE [--coverage FILE] [--claim TEXT]` | Computes the bounded evidence score or a low-confidence estimate; optionally records an accepted completion claim. |
 | `backlog --findings FILE` | Ranks the complete remediation backlog and emits a `highest_severity_batch`; it does not analyze safety. |
 | `next --findings FILE` | Returns the next unresolved `highest_severity_batch`; it does not analyze safety. |
@@ -214,9 +214,12 @@ python3 tools/checkyourself.py receipt \
 ```
 
 Coverage receipts must be issued by this command, bind to the row's canonical
-surface ID, and include a content hash plus a second hash covering the binding
-fields. A caller-authored `origin`, `source_state`, and `result` is not proof.
-The same receipt cannot be reused for another surface or claim.
+surface ID, and include a `subject_digest` equal to the content hash of the
+verification artifact that surface actually consumed or produced, plus a
+second hash covering the binding fields. A caller-authored `origin`,
+`source_state`, and `result` is not proof. The same receipt or subject artifact
+cannot be reused for another surface or claim, even if the receipt binding is
+recomputed.
 
 In text mode, `coverage --emit` writes
 `CHECKYOURSELF_COVERAGE.generated.json` in the current directory. Use
@@ -230,7 +233,8 @@ Coverage has 20 surfaces. Each surface must be marked:
 - `NotApplicable`.
 
 `Pass` needs reviewer assertions plus `evidence_receipts` whose referenced
-artifacts exist, are non-empty, match their recorded SHA-256 hash, and include
+artifacts exist, are non-empty, match their recorded SHA-256 and
+`subject_digest` hashes, and include
 verifier issuance, a canonical surface ID, source revision, command, claim,
 observed result, and a binding hash covering those fields. `Unknown` needs missing evidence.
 `NotApplicable` needs a reason plus `delegation_receipts` proving where the

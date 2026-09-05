@@ -1835,6 +1835,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         receipt = {
             "reference": path.relative_to(root).as_posix(),
             "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "subject_digest": hashlib.sha256(path.read_bytes()).hexdigest(),
             "surface_id": surface_id,
             "source_revision": "fixture-revision",
             "command": "fixture verifier command",
@@ -1846,7 +1847,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             "issued_at": "2026-09-05T00:00:00Z",
         }
         binding = {field: receipt.get(field) for field in (
-            "reference", "sha256", "surface_id", "source_revision", "command", "claim",
+            "reference", "sha256", "subject_digest", "surface_id", "source_revision", "command", "claim",
             "origin", "source_state", "result", "issuer", "issued_at",
         )}
         receipt["receipt_sha256"] = hashlib.sha256(
@@ -1997,6 +1998,108 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             tampered_result = self.run_cli("validate", "--kind", "receipt", str(tampered_path), "--format", "json")
             self.assertEqual(tampered_result.returncode, 1)
             self.assertIn("does not cover", json.loads(tampered_result.stdout)["semantic_errors"][0])
+
+    def test_receipt_subject_digest_must_match_registered_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            evidence = project / "evidence.txt"
+            evidence.write_text("observed output\n", encoding="utf-8")
+            result = self.run_cli(
+                "receipt",
+                "--root", str(project),
+                "--reference", evidence.name,
+                "--surface-id", "S11",
+                "--source-revision", "abc123",
+                "--source-state", "temporary test tree",
+                "--command", "pytest tests/test_app.py -q",
+                "--claim", "The focused quality gate passes",
+                "--result", "1 passed",
+                "--subject-digest", "0" * 64,
+                "--format", "json",
+            )
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("subject_digest must match", result.stderr)
+
+    def test_one_artifact_twenty_issued_receipts_fails_closed(self) -> None:
+        from importlib import util as _util
+        spec = _util.spec_from_file_location("cy", CLI)
+        cy = _util.module_from_spec(spec)
+        spec.loader.exec_module(cy)
+        coverage = self._full_coverage()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            evidence = project / "README.md"
+            evidence.write_text("One authentic artifact is not twenty surface verifications.\n", encoding="utf-8")
+            for row in coverage["surfaces"]:
+                row["evidence_reviewed"] = [evidence.name]
+                row["evidence_receipts"] = [cy.issue_receipt(
+                    evidence.name,
+                    project,
+                    surface_id=row["id"],
+                    source_revision="fixture-revision",
+                    source_state="temporary test tree",
+                    command=f"verify {row['id']}",
+                    claim=f"The {row['id']} verification passes",
+                    result="verified",
+                )]
+            findings_path = project / "findings.json"
+            coverage_path = project / "coverage.json"
+            findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
+            coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
+            result = self.run_cli(
+                "score", "--findings", str(findings_path), "--coverage", str(coverage_path),
+                "--no-history", "--format", "json",
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        score = json.loads(result.stdout)
+        self.assertLessEqual(score["score"], 84)
+        self.assertNotEqual(score["confidence"], "high")
+        self.assertIn(84, [cap["cap"] for cap in score["caps_applied"]])
+
+    def test_rebound_receipt_with_rehashed_binding_fails_closed(self) -> None:
+        from importlib import util as _util
+        spec = _util.spec_from_file_location("cy", CLI)
+        cy = _util.module_from_spec(spec)
+        spec.loader.exec_module(cy)
+        coverage = self._full_coverage()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            receipts = {}
+            for row in coverage["surfaces"]:
+                evidence = project / f"{row['id']}.txt"
+                evidence.write_text(f"verified {row['id']}\n", encoding="utf-8")
+                row["evidence_reviewed"] = [evidence.name]
+                receipts[row["id"]] = cy.issue_receipt(
+                    evidence.name,
+                    project,
+                    surface_id=row["id"],
+                    source_revision="fixture-revision",
+                    source_state="temporary test tree",
+                    command=f"verify {row['id']}",
+                    claim=f"The {row['id']} verification passes",
+                    result="verified",
+                )
+                row["evidence_receipts"] = [receipts[row["id"]]]
+
+            rebound = deepcopy(receipts["S01"])
+            rebound["surface_id"] = "S02"
+            rebound["receipt_sha256"] = cy._receipt_binding_digest(rebound)
+            s02 = next(row for row in coverage["surfaces"] if row["id"] == "S02")
+            s02["evidence_reviewed"] = ["S01.txt"]
+            s02["evidence_receipts"] = [rebound]
+            findings_path = project / "findings.json"
+            coverage_path = project / "coverage.json"
+            findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
+            coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
+            result = self.run_cli(
+                "score", "--findings", str(findings_path), "--coverage", str(coverage_path),
+                "--no-history", "--format", "json",
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        score = json.loads(result.stdout)
+        self.assertLessEqual(score["score"], 84)
+        self.assertNotEqual(score["confidence"], "high")
+        self.assertIn(84, [cap["cap"] for cap in score["caps_applied"]])
 
     def test_irrelevant_caller_receipt_reuse_cannot_earn_high_score(self) -> None:
         for status in ("Pass", "NotApplicable"):
