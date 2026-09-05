@@ -63,6 +63,29 @@ not production-safety certification or independent external custody.
   green after ASTRA, challenge-runner, hardening, and normalization work. The
   receipts are [`FINAL-grok.md`](_retrofit-2026-09-04/FINAL-grok.md) and [`FINAL-sol.md`](_retrofit-2026-09-04/FINAL-sol.md).
 
+### 2026-09-05 — Documentation and token-density passes
+
+- Public docs updated across Forgejo and GitHub: README, `llms.txt`, and this
+  changelog reflect the challenge runner, score-time re-execution, semantic
+  vacuity rejection, local-integrity binding, `--claim` binding, and the ASTRA
+  arc (see [`DOCS2-REPORT.md`](_retrofit-2026-09-04/DOCS2-REPORT.md)).
+- Token-density pass (caveman + ponytail compression; protected-verbatim
+  classes untouched), per [`DENSITY-PASS-REPORT.md`](_retrofit-2026-09-04/DENSITY-PASS-REPORT.md):
+
+  | Scope | Before (chars / tokens) | After (chars / tokens) | Reduction |
+  |---|---|---|---|
+  | `skills/checkyourself/SKILL.md` | 9,236 / 2,368.2 | 7,330 / 1,879.5 | 20.6% |
+  | `02_RUN_DIAGNOSTIC` | 13,110 / 3,361.5 | 10,379 / 2,661.3 | 20.8% |
+  | `05_OUTPUT_TEMPLATES` | 17,845 / 4,575.6 | 14,213 / 3,644.4 | 20.4% |
+  | `06_ADAPTERS` | 5,698 / 1,461.0 | 4,769 / 1,222.8 | 16.3% |
+  | **Combined** | **45,889 / 11,766.4** | **36,691 / 9,407.9** | **20.0%** |
+
+  Losslessness proven by the full verification chain after compression:
+  150 tests + 88 subtests green; `tools/validate_public.py` green.
+- Final landed state: verifier-executed challenges across 20 canonical
+  surfaces and 10 scored categories; ASTRA 8/8 findings closed; final
+  independent green pair (Grok-4.6 + Codex-SOL) at `cd9cf85`.
+
 ## 1.7.0 — 2026-06-12
 
 Major reliability, security, and detection-depth pass.
