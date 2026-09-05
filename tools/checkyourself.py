@@ -229,6 +229,25 @@ COVERAGE_SURFACES = [
     ("S20", "Learning needs and remediation history", "learning"),
 ]
 
+# A receipt's cryptographic subject must also be a verifier artifact that is
+# relevant to the surface it claims to prove.  Keep the default contract
+# intentionally narrow: one per-surface directory, JSON records only, and a
+# small common record shape that carries the surface identity and provenance.
+# Projects can override individual entries in .checkyourself.json when their
+# verifier emits artifacts elsewhere or uses a different record kind.
+DEFAULT_VERIFICATION_ARTIFACT_REGISTRY = {
+    sid: {
+        "path_roots": [f"coverage/verification/{sid}"],
+        "path_patterns": ["*.json"],
+        "expected_kind": "surface-verification-record",
+        "required_fields": ["surface_id", "kind", "source_revision", "command", "result"],
+        "required_values": {"surface_id": sid, "kind": "surface-verification-record"},
+    }
+    for sid, _surface, _category in COVERAGE_SURFACES
+}
+# Public name for callers that need to inspect the shipped default contract.
+VERIFICATION_ARTIFACT_REGISTRY = DEFAULT_VERIFICATION_ARTIFACT_REGISTRY
+
 SCORE_CATEGORIES = {
     "C1": ("Data, privacy, tenant/user isolation", 18),
     "C2": ("Auth, permissions, session safety", 14),
@@ -481,6 +500,114 @@ def validate_suppressions_config(data: Any, name: str) -> dict:
     return {"suppress": suppressions}
 
 
+def _copy_verification_registry(registry: dict) -> dict:
+    return {
+        sid: {
+            "path_roots": list(contract["path_roots"]),
+            "path_patterns": list(contract["path_patterns"]),
+            "expected_kind": contract["expected_kind"],
+            "required_fields": list(contract["required_fields"]),
+            "required_values": dict(contract.get("required_values") or {}),
+        }
+        for sid, contract in registry.items()
+    }
+
+
+def _registry_list(value: Any, field: str, name: str, sid: str) -> Tuple[Optional[List[str]], Optional[str]]:
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, list) or not value or not all(isinstance(item, str) and item.strip() for item in value):
+        return None, f"{name} verification registry {sid} field {field} must be a non-empty string list"
+    return [item.strip() for item in value], None
+
+
+def validate_verification_registry_config(data: Any, name: str) -> Tuple[dict, Optional[str]]:
+    """Validate and normalize explicit per-surface artifact contracts."""
+    defaults = _copy_verification_registry(DEFAULT_VERIFICATION_ARTIFACT_REGISTRY)
+    if not isinstance(data, dict):
+        return defaults, None
+    configured = data.get("verification_artifact_registry")
+    if configured is None:
+        return defaults, None
+    if not isinstance(configured, dict):
+        return defaults, f"{name} verification_artifact_registry must be an object"
+
+    registry = _copy_verification_registry(DEFAULT_VERIFICATION_ARTIFACT_REGISTRY)
+    canonical_ids = {sid for sid, _surface, _category in COVERAGE_SURFACES}
+    for sid, raw_contract in configured.items():
+        if sid not in canonical_ids:
+            return defaults, f"{name} verification registry has unknown surface: {sid!r}"
+        if not isinstance(raw_contract, dict):
+            return defaults, f"{name} verification registry {sid} must be an object"
+
+        # Accept the shorter aliases so an explicit config can stay readable,
+        # while exposing one stable normalized shape to the verifier.
+        contract = dict(registry[sid])
+        aliases = {
+            "path_roots": ("path_roots", "roots", "allowed_roots"),
+            "path_patterns": ("path_patterns", "patterns", "allowed_patterns"),
+        }
+        for target, keys in aliases.items():
+            for key in keys:
+                if key in raw_contract:
+                    values, error = _registry_list(raw_contract[key], target, name, sid)
+                    if error:
+                        return defaults, error
+                    contract[target] = values or []
+                    break
+        if "expected_kind" in raw_contract:
+            if not isinstance(raw_contract["expected_kind"], str) or not raw_contract["expected_kind"].strip():
+                return defaults, f"{name} verification registry {sid} field expected_kind must be a non-empty string"
+            contract["expected_kind"] = raw_contract["expected_kind"].strip()
+        if "required_fields" in raw_contract:
+            values, error = _registry_list(raw_contract["required_fields"], "required_fields", name, sid)
+            if error:
+                return defaults, error
+            contract["required_fields"] = values or []
+        if "required_values" in raw_contract:
+            values = raw_contract["required_values"]
+            if not isinstance(values, dict) or not all(
+                isinstance(key, str) and key.strip() and isinstance(value, (str, int, float, bool))
+                for key, value in values.items()
+            ):
+                return defaults, f"{name} verification registry {sid} field required_values must be an object of scalar values"
+            contract["required_values"] = dict(values)
+
+        for root in contract["path_roots"]:
+            root_path = Path(root)
+            if root_path.is_absolute() or ".." in root_path.parts:
+                return defaults, f"{name} verification registry {sid} path_roots must stay inside the evidence root"
+        for pattern in contract["path_patterns"]:
+            if Path(pattern).is_absolute() or ".." in Path(pattern).parts:
+                return defaults, f"{name} verification registry {sid} path_patterns must stay inside the surface root"
+
+        required_fields = list(dict.fromkeys(contract["required_fields"] + ["surface_id", "kind"]))
+        required_values = dict(contract.get("required_values") or {})
+        required_values["surface_id"] = sid
+        required_values.setdefault("kind", contract["expected_kind"])
+        contract["required_fields"] = required_fields
+        contract["required_values"] = required_values
+        registry[sid] = contract
+    return registry, None
+
+
+def _config_with_registry(data: Any, name: str) -> dict:
+    suppressions = validate_suppressions_config(data, name)
+    registry, registry_error = validate_verification_registry_config(data, name)
+    result = {
+        "suppress": suppressions.get("suppress", []),
+        "verification_artifact_registry": registry,
+    }
+    if suppressions.get("config_error"):
+        result["config_error"] = suppressions["config_error"]
+    if registry_error:
+        result["verification_registry_error"] = registry_error
+        result["config_error"] = "; ".join(
+            item for item in (result.get("config_error"), registry_error) if item
+        )
+    return result
+
+
 def load_checkyourself_config(root: Path) -> dict:
     for name in CONFIG_NAMES:
         path = root / name
@@ -489,17 +616,32 @@ def load_checkyourself_config(root: Path) -> dict:
         if path.suffix == ".json":
             try:
                 data = strict_json_loads(path.read_text(encoding="utf-8"))
-                return validate_suppressions_config(data, name)
+                return _config_with_registry(data, name)
             except (ValueError, OSError, UnicodeError):
-                return {"suppress": [], "config_error": f"{name} could not be parsed as JSON"}
+                return {
+                    "suppress": [],
+                    "verification_artifact_registry": _copy_verification_registry(DEFAULT_VERIFICATION_ARTIFACT_REGISTRY),
+                    "verification_registry_error": f"{name} could not be parsed as JSON",
+                    "config_error": f"{name} could not be parsed as JSON",
+                }
         try:
-            return validate_suppressions_config(
+            # The minimal YAML parser intentionally remains suppression-only.
+            # JSON is the explicit configuration format for registry overrides.
+            return _config_with_registry(
                 {"suppress": parse_minimal_yaml_suppressions(path.read_text(encoding="utf-8"))},
                 name,
             )
         except (OSError, UnicodeError, ValueError) as exc:
-            return {"suppress": [], "config_error": f"{name} is invalid: {exc}"}
-    return {"suppress": []}
+            return {
+                "suppress": [],
+                "verification_artifact_registry": _copy_verification_registry(DEFAULT_VERIFICATION_ARTIFACT_REGISTRY),
+                "verification_registry_error": f"{name} is invalid: {exc}",
+                "config_error": f"{name} is invalid: {exc}",
+            }
+    return {
+        "suppress": [],
+        "verification_artifact_registry": _copy_verification_registry(DEFAULT_VERIFICATION_ARTIFACT_REGISTRY),
+    }
 
 
 def evidence_path(evidence: str) -> str:
@@ -1540,6 +1682,78 @@ def _resolve_evidence_reference(reference: Any, root: Optional[Path]) -> Tuple[O
     return resolved, ""
 
 
+def _verification_registry_for_root(
+    root: Optional[Path], explicit_registry: Optional[dict] = None
+) -> Tuple[dict, Optional[str]]:
+    if explicit_registry is not None:
+        return validate_verification_registry_config(
+            {"verification_artifact_registry": explicit_registry},
+            "explicit registry",
+        )
+    config = load_checkyourself_config(_evidence_root(root))
+    registry = config.get("verification_artifact_registry")
+    if not isinstance(registry, dict):
+        registry = _copy_verification_registry(DEFAULT_VERIFICATION_ARTIFACT_REGISTRY)
+    return registry, config.get("verification_registry_error")
+
+
+def _verification_artifact_error(
+    artifact: Path,
+    root: Optional[Path],
+    surface_id: str,
+    explicit_registry: Optional[dict] = None,
+) -> Optional[str]:
+    registry, registry_error = _verification_registry_for_root(root, explicit_registry)
+    if registry_error:
+        return f"verification artifact registry is invalid: {registry_error}"
+    contract = registry.get(surface_id)
+    if not isinstance(contract, dict):
+        return f"surface {surface_id} has no registered verification artifact contract"
+    base = _evidence_root(root)
+    try:
+        relative = artifact.relative_to(base).as_posix()
+    except ValueError:
+        return f"artifact is outside evidence root {base}"
+
+    path_match = False
+    for root_pattern in contract.get("path_roots", []):
+        clean_root = str(root_pattern).strip().strip("/")
+        if not clean_root:
+            continue
+        prefix = clean_root + "/"
+        if relative.startswith(prefix):
+            within_root = relative[len(prefix):]
+            if within_root and any(
+                fnmatch.fnmatch(within_root, pattern)
+                or fnmatch.fnmatch(Path(within_root).name, pattern)
+                for pattern in contract.get("path_patterns", [])
+            ):
+                path_match = True
+                break
+    if not path_match:
+        roots = ", ".join(str(item) for item in contract.get("path_roots", []))
+        patterns = ", ".join(str(item) for item in contract.get("path_patterns", []))
+        return f"artifact path {relative!r} is not registered for {surface_id} (roots: {roots}; patterns: {patterns})"
+
+    try:
+        record = strict_json_loads(artifact.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError) as exc:
+        return f"artifact {relative!r} is not a valid JSON verification record: {exc}"
+    if not isinstance(record, dict):
+        return f"artifact {relative!r} must contain a JSON object verification record"
+    expected_kind = contract.get("expected_kind")
+    if record.get("kind") != expected_kind:
+        return f"artifact {relative!r} has kind {record.get('kind')!r}; expected {expected_kind!r}"
+    for field in contract.get("required_fields", []):
+        value = record.get(field)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return f"artifact {relative!r} is missing required verification field {field!r}"
+    for field, expected in (contract.get("required_values") or {}).items():
+        if record.get(field) != expected:
+            return f"artifact {relative!r} field {field!r} must equal {expected!r}"
+    return None
+
+
 def _receipt_binding_digest(receipt: dict) -> str:
     """Hash the complete verifier-issued receipt binding, excluding its hash."""
     binding = {field: receipt.get(field) for field in RECEIPT_BINDING_FIELDS}
@@ -1584,14 +1798,18 @@ def issue_receipt(
     result: str,
     source_state: str,
     subject_digest: Optional[str] = None,
+    registry: Optional[dict] = None,
 ) -> dict:
-    """Issue one receipt bound to the verifier-captured verification artifact."""
+    """Issue one receipt bound to a registered verification artifact."""
     canonical_surfaces = {sid for sid, _surface, _category in COVERAGE_SURFACES}
     if surface_id not in canonical_surfaces:
         raise CliError(f"receipt surface_id must be one canonical coverage surface: {surface_id!r}")
     resolved, reason = _resolve_evidence_reference(reference, root)
     if resolved is None:
         raise CliError(f"receipt reference is invalid: {reason}")
+    contract_error = _verification_artifact_error(resolved, root, surface_id, registry)
+    if contract_error:
+        raise CliError(f"receipt reference is not a registered verification artifact: {contract_error}")
     artifact_digest = hashlib.sha256(resolved.read_bytes()).hexdigest()
     if subject_digest is not None:
         if not isinstance(subject_digest, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", subject_digest):
@@ -1639,6 +1857,7 @@ def _verify_receipts(
     expected_surface_id: Optional[str] = None,
     expected_claim: Optional[str] = None,
     used_receipt_ids: Optional[set[str]] = None,
+    registry: Optional[dict] = None,
 ) -> Tuple[List[str], List[str]]:
     """Verify verifier-issued, surface-bound receipts without trusting prose."""
     if not isinstance(receipts, list) or not receipts:
@@ -1683,6 +1902,10 @@ def _verify_receipts(
         resolved, reason = _resolve_evidence_reference(reference, root)
         if resolved is None:
             errors.append(f"{prefix}: {reason}")
+            continue
+        contract_error = _verification_artifact_error(resolved, root, expected_surface_id, registry)
+        if contract_error:
+            errors.append(f"{prefix}: {contract_error}")
             continue
         expected_hash = receipt.get("sha256")
         if not isinstance(expected_hash, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", expected_hash):
@@ -2124,6 +2347,7 @@ def category_coverage(
     present_ids = set()
     used_receipt_ids: set[str] = set()
     unscored_verification_gaps: List[str] = []
+    verification_gap = False
 
     for item in surfaces:
         if not isinstance(item, dict):
@@ -2140,6 +2364,7 @@ def category_coverage(
                     used_receipt_ids=used_receipt_ids,
                 )
                 if evidence_state["status"] == "Unknown":
+                    verification_gap = True
                     unscored_verification_gaps.extend(
                         f"{sid or 'surface'}: {warning}" for warning in evidence_state["warnings"]
                     )
@@ -2161,6 +2386,7 @@ def category_coverage(
             status = "Unknown"
             state["missing_evidence"].append(f"{sid or 'surface'} marked NotApplicable without a reason")
         if evidence_state["status"] == "Unknown" and status in {"Pass", "NotApplicable"}:
+            verification_gap = True
             status = "Unknown"
             state["missing_evidence"].extend(
                 f"{sid or 'surface'}: {warning}" for warning in evidence_state["warnings"]
@@ -2213,7 +2439,7 @@ def category_coverage(
         state["missing_evidence"] = sorted(set(state["missing_evidence"]))
 
     required_ids = {sid for sid, _surface, _category in COVERAGE_SURFACES}
-    complete = required_ids <= present_ids
+    complete = required_ids <= present_ids and not verification_gap
     return category_state, complete
 
 
@@ -2719,7 +2945,7 @@ def describe_capabilities() -> dict:
         ("diagnostic", "Alias for scan; use it when docs or agents ask to run a diagnostic.", {"project": "path", "deep": "optional boolean"}, SCAN_SCHEMA_ID),
         ("coverage --emit", "Write the 20-surface coverage skeleton by default, or print JSON with --format json.", {"project": "optional string"}, COVERAGE_SCHEMA_ID),
         ("coverage --check", "Validate coverage completeness.", {"file": "coverage json path"}, "checkyourself-coverage-check/1"),
-        ("receipt", "Issue one verifier-hashed receipt with a subject digest bound to the surface verification artifact.", {"reference": "artifact path", "surface_id": "canonical surface ID", "source_revision": "revision", "command": "command recorded at issuance", "claim": "claim", "result": "observed result", "source_state": "source/environment state", "subject_digest": "optional content hash assertion"}, RECEIPT_SCHEMA_ID),
+        ("receipt", "Issue one verifier-hashed receipt only for a registered, surface-specific verification artifact.", {"reference": "registered artifact path", "surface_id": "canonical surface ID", "source_revision": "revision", "command": "command recorded at issuance", "claim": "claim", "result": "observed result", "source_state": "source/environment state", "subject_digest": "optional content hash assertion"}, RECEIPT_SCHEMA_ID),
         ("score", "Compute a deterministic Production Reality Score from findings and optional verifier-checked coverage; optionally record a completion claim without executing a challenge runner.", {"findings": "json path", "coverage": "optional json path", "claim": "optional accepted completion claim", "history": "optional path"}, SCORE_SCHEMA_ID),
         ("backlog", "Rank remediation backlog and return a highest-severity batch; safety analysis is not performed.", {"findings": "json path"}, "checkyourself-backlog/1"),
         ("next", "Return the next highest-severity unresolved approval batch; safety analysis is not performed.", {"findings": "json path"}, "checkyourself-next-batch/1"),
@@ -2743,6 +2969,7 @@ def describe_capabilities() -> dict:
             {"id": sid, "surface": surface, "category": category}
             for sid, surface, category in COVERAGE_SURFACES
         ],
+        "verification_artifact_registry": VERIFICATION_ARTIFACT_REGISTRY,
         "scoring": {
             "categories": [
                 {"id": cid, "category": name, "weight": weight}
@@ -3645,11 +3872,11 @@ def mcp_tools() -> List[dict]:
             "name": "receipt_issue",
             "title": "Issue Verifier Receipt",
             "description": description(
-                "Issue one verifier-hashed receipt for an existing verification artifact under the configured MCP scan root. "
+                "Issue one verifier-hashed receipt only for an existing, registered surface-specific verification artifact under the configured MCP scan root. "
                 "The result is returned inline and is not written to disk."
             ),
             "inputSchema": object_schema({
-                "reference": {"type": "string", "description": "In-root artifact path to hash."},
+                "reference": {"type": "string", "description": "In-root registered verification artifact path to hash."},
                 "surface_id": {"type": "string", "description": "Canonical coverage surface ID."},
                 "source_revision": {"type": "string", "description": "Source revision examined."},
                 "source_state": {"type": "string", "description": "Source/environment state examined."},
@@ -4010,8 +4237,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--format", choices=("text", "json"), default="text")
     p.set_defaults(func=command_coverage)
 
-    p = sub.add_parser("receipt", help="Issue one verifier-hashed, surface-bound evidence receipt.")
-    p.add_argument("--reference", required=True, help="In-root artifact path to hash.")
+    p = sub.add_parser("receipt", help="Issue one verifier-hashed receipt for a registered surface artifact.")
+    p.add_argument("--reference", required=True, help="In-root registered verification artifact path to hash.")
     p.add_argument("--surface-id", required=True, choices=[sid for sid, _surface, _category in COVERAGE_SURFACES], help="Canonical coverage surface this receipt proves.")
     p.add_argument("--source-revision", required=True, help="Source revision examined when the receipt was issued.")
     p.add_argument("--source-state", required=True, help="Source/environment state examined when the receipt was issued.")

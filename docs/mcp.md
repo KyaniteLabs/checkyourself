@@ -39,7 +39,7 @@ and [`Tools`](https://modelcontextprotocol.io/specification/2025-11-25/server/to
 | `scan` | `checkyourself scan PROJECT [--deep] --format json --no-write` |
 | `coverage_emit` | `checkyourself coverage --emit --format json` |
 | `coverage_check` | `checkyourself coverage --check FILE` logic, with an inline object |
-| `receipt_issue` | Issue one verifier-hashed receipt with a subject digest bound to one surface artifact under `CHECKYOURSELF_SCAN_ROOT`; returns it inline |
+| `receipt_issue` | Issue one verifier-hashed receipt only for a registered surface-specific verification artifact under `CHECKYOURSELF_SCAN_ROOT`; returns it inline |
 | `score` | `checkyourself score --findings FILE [--coverage FILE]` logic, with inline objects and no history write |
 | `backlog` | `checkyourself backlog --findings FILE` logic; emits a deterministic `highest_severity_batch`, not a safety judgment |
 | `next` | `checkyourself next --findings FILE` logic; emits the next deterministic `highest_severity_batch`, not a safety judgment |
