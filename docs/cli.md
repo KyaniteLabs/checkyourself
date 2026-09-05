@@ -201,7 +201,9 @@ transitions remain explicit in `regressions` or `count_regression`.
 configuration with `shell=False`, a bounded timeout, and the configured output
 assertions. It captures stdout and stderr under `.checkyourself/challenge-runs/`,
 then writes one `EXECUTED` receipt per surface. The receipt records the argv
-list, exit code, capture digest, current project tree hash, and timestamp. A
+list, exit code, capture digest, source tree hash computed before capture write,
+run identifier, runner HMAC, and timestamp. The runner key is created with
+mode `0600` under `.checkyourself/` and is never stored beside captures. A
 failed or timed-out command is a `FAIL` receipt and an open P1 finding; it is
 never silently ignored.
 
@@ -216,9 +218,13 @@ running one without that command fails closed. A command is always an argv
 list, never a shell string. Only an `EXECUTED` receipt can satisfy a coverage
 `Pass`. The compatibility `receipt` command remains available, but its
 caller-authored fields are labelled `UNVERIFIED` and cannot earn full credit or
-high confidence. On re-check, the verifier re-hashes the stored capture,
-re-applies the committed assertions, and rejects a receipt whose project tree
-or challenge definition changed.
+high confidence. On re-check, the verifier requires the runner HMAC and
+re-executes the committed argv with the same timeout discipline. Fresh stdout
+and stderr must hash to the receipt's capture digest, the exit and timeout
+state must match, and the source tree must still match the pre-capture hash.
+The verifier also re-hashes the stored capture, re-applies the committed
+assertions, and rejects a receipt whose project tree or challenge definition
+changed. Missing or invalid runner-key material earns no executed credit.
 
 ## Coverage
 
