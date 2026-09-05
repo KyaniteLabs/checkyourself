@@ -12,6 +12,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+# Symbol-to-test map for verifier paths that CodeGraph cannot infer through
+# subprocess/CLI indirection: challenge_from_root/_run_challenge are covered by
+# the challenge tests below; _executed_receipt_hmac by the HMAC tests;
+# semantic_challenge_errors and score_from_inputs by the vacuity/scoring tests.
 
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "tools" / "checkyourself.py"
@@ -2705,14 +2709,114 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         self.assertEqual(score.returncode, 0, score.stderr)
         return json.loads(score.stdout)
 
-    def test_executed_challenge_receipt_is_the_only_full_credit_class(self) -> None:
+    def test_true_command_challenge_is_rejected_before_credit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             self._write_challenges(project, {
                 "S11": {
-                    "command": [sys.executable, "-c", "print('challenge ok')"],
+                    "command": ["true"],
                     "timeout_s": 10,
                     "success": {"exit_zero": True},
+                    "output_kind": "text",
+                },
+            })
+            challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
+            self.assertEqual(challenge.returncode, 1)
+            result = json.loads(challenge.stdout)
+            self.assertEqual(result["surfaces"][0]["status"], "FAIL")
+            self.assertTrue(any("vacuous" in reason for reason in result["surfaces"][0]["reasons"]))
+            score = self._score_challenge_receipt(project, result["receipts"][0])
+            self.assertNotEqual(score["confidence"], "high")
+            self.assertLess(score["score"], 100)
+
+    def test_echo_only_output_is_rejected_even_with_a_positive_assertion(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            self._write_challenges(project, {
+                "S11": {
+                    "command": ["echo", "one two three"],
+                    "timeout_s": 10,
+                    "success": {"exit_zero": True, "regex_match": "one"},
+                    "output_kind": "text",
+                },
+            })
+            challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
+            self.assertEqual(challenge.returncode, 1)
+            result = json.loads(challenge.stdout)
+            self.assertTrue(any("vacuous" in reason for reason in result["surfaces"][0]["reasons"]))
+
+    def test_trivially_matching_regex_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            self._write_challenges(project, {
+                "S11": {
+                    "command": [sys.executable, "-c", "import pytest; print('1 passed in 0.01s')"],
+                    "timeout_s": 10,
+                    "success": {"exit_zero": True, "regex_match": ".*"},
+                    "output_kind": "text",
+                },
+            })
+            challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
+            self.assertEqual(challenge.returncode, 1)
+            result = json.loads(challenge.stdout)
+            self.assertTrue(any("vacuous" in reason for reason in result["surfaces"][0]["reasons"]))
+
+    def test_build_surface_requires_a_non_empty_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            self._write_challenges(project, {
+                "S13": {
+                    "command": [sys.executable, "-c", "import sys; sys.stdout.write('release status ready checks 1\\n')"],
+                    "timeout_s": 10,
+                    "success": {"exit_zero": True, "regex_match": "release\\s+status\\s+ready", "artifact": "build/release.json"},
+                    "output_kind": "text",
+                },
+            })
+            challenge = self.run_cli("challenge", str(project), "--surface", "S13", "--format", "json")
+            self.assertEqual(challenge.returncode, 1)
+            result = json.loads(challenge.stdout)
+            self.assertTrue(any("required artifact" in reason for reason in result["surfaces"][0]["reasons"]))
+
+    def test_build_surface_accepts_a_non_empty_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            self._write_challenges(project, {
+                "S13": {
+                    "command": [sys.executable, "-c", "from pathlib import Path; Path('build').mkdir(); Path('build/release.json').write_text('release'); import sys; sys.stdout.write('release status ready checks 1\\n')"],
+                    "timeout_s": 10,
+                    "success": {"exit_zero": True, "regex_match": "release\\s+status\\s+ready", "artifact": "build/release.json"},
+                    "output_kind": "text",
+                },
+            })
+            challenge = self.run_cli("challenge", str(project), "--surface", "S13", "--format", "json")
+            self.assertEqual(challenge.returncode, 0, challenge.stderr)
+            self.assertEqual(json.loads(challenge.stdout)["surfaces"][0]["status"], "PASS")
+
+    def test_analysis_surface_requires_structured_findings_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            self._write_challenges(project, {
+                "S19": {
+                    "command": [sys.executable, "-c", "import json; print(json.dumps({'status': 'pass'}))"],
+                    "timeout_s": 10,
+                    "success": {"json_field": {"status": "pass"}},
+                    "output_kind": "json",
+                },
+            })
+            challenge = self.run_cli("challenge", str(project), "--surface", "S19", "--format", "json")
+            self.assertEqual(challenge.returncode, 1)
+            result = json.loads(challenge.stdout)
+            self.assertTrue(any("structured fields" in reason for reason in result["surfaces"][0]["reasons"]))
+
+    def test_executed_challenge_receipt_is_the_only_full_credit_class(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "test_challenge.py").write_text("def test_challenge():\n    assert True\n", encoding="utf-8")
+            self._write_challenges(project, {
+                "S11": {
+                    "command": [sys.executable, "-m", "pytest", "-q"],
+                    "timeout_s": 10,
+                    "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
                     "output_kind": "text",
                 },
             })
@@ -2755,37 +2859,37 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             project = Path(tmp)
             self._write_challenges(project, {
                 "S11": {
-                    "command": [sys.executable, "-c", "print('challenge ok')"],
+                    "command": [sys.executable, "-c", "import pytest; print('1 passed in 0.01s')"],
                     "timeout_s": 10,
-                    "success": {"exit_zero": True},
+                    "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
                     "output_kind": "text",
                 },
             })
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
             self.assertEqual(challenge.returncode, 0, challenge.stderr)
             forged = json.loads(challenge.stdout)["receipts"][0]
-            forged.pop("receipt_hmac")
+            forged.pop("local_integrity_hmac")
             score = self._score_challenge_receipt(project, forged)
             c5 = next(item for item in score["per_category"] if item["id"] == "C5")
             self.assertEqual(c5["coverage_status"], "Unknown")
             self.assertIn(90, [cap["cap"] for cap in score["caps_applied"]])
-            self.assertTrue(any("runner HMAC" in needed for item in score["manual_evidence_needed"] for needed in item["needed"]))
+            self.assertTrue(any("local integrity binding HMAC" in needed for item in score["manual_evidence_needed"] for needed in item["needed"]))
 
     def test_executed_receipt_with_invalid_hmac_is_unknown(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             self._write_challenges(project, {
                 "S11": {
-                    "command": [sys.executable, "-c", "print('challenge ok')"],
+                    "command": [sys.executable, "-c", "import pytest; print('1 passed in 0.01s')"],
                     "timeout_s": 10,
-                    "success": {"exit_zero": True},
+                    "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
                     "output_kind": "text",
                 },
             })
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
             self.assertEqual(challenge.returncode, 0, challenge.stderr)
             invalid = json.loads(challenge.stdout)["receipts"][0]
-            invalid["receipt_hmac"] = "0" * 64
+            invalid["local_integrity_hmac"] = "0" * 64
             score = self._score_challenge_receipt(project, invalid)
             c5 = next(item for item in score["per_category"] if item["id"] == "C5")
             self.assertEqual(c5["coverage_status"], "Unknown")
@@ -2796,9 +2900,9 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             project = Path(tmp)
             self._write_challenges(project, {
                 "S11": {
-                    "command": [sys.executable, "-c", "print('challenge ok')"],
+                    "command": [sys.executable, "-c", "import pytest; print('1 passed in 0.01s')"],
                     "timeout_s": 10,
-                    "success": {"exit_zero": True},
+                    "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
                     "output_kind": "text",
                 },
             })
@@ -2822,10 +2926,10 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                     "command": [
                         sys.executable,
                         "-c",
-                        "from pathlib import Path; print(Path('.checkyourself/challenge-runs/input.txt').read_text(), end='')",
+                        "import pytest; from pathlib import Path; print(Path('.checkyourself/challenge-runs/input.txt').read_text().strip() + ' 1 passed')",
                     ],
                     "timeout_s": 10,
-                    "success": {"exit_zero": True},
+                    "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
                     "output_kind": "text",
                 },
             })
@@ -2878,8 +2982,8 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             self._write_challenges(project, {
-                "S02": {"command": [sys.executable, "-c", "import json; print(json.dumps({'ok': True}))"], "timeout_s": 10, "success": {"json_field": {"ok": True}, "regex_not_match": ["failure"]}, "output_kind": "json"},
-                "S05": {"command": [sys.executable, "-c", "print('auth')"], "timeout_s": 10, "success": {"exit_zero": True}, "output_kind": "text"},
+                "S02": {"command": [sys.executable, "-c", "import json; print(json.dumps({'status': 'ok', 'dependencies': 1}))"], "timeout_s": 10, "success": {"json_field": {"status": "ok", "dependencies": 1}, "regex_not_match": ["failure"]}, "output_kind": "json"},
+                "S05": {"command": [sys.executable, "-c", "import sys; sys.stdout.write('auth status ok checks 1\\n')"], "timeout_s": 10, "success": {"exit_zero": True, "regex_match": r"auth\s+status\s+ok"}, "output_kind": "text"},
             })
             challenge = self.run_cli("challenge", str(project), "--surface", "S02", "--format", "json")
             self.assertEqual(challenge.returncode, 0, challenge.stderr)
@@ -2918,7 +3022,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             self._write_challenges(project, {
-                "S11": {"command": [sys.executable, "-c", "raise SystemExit(3)"], "timeout_s": 10, "success": {"exit_zero": True}, "output_kind": "text"},
+                "S11": {"command": [sys.executable, "-c", "import pytest; print('0 passed in 0.01s'); raise SystemExit(3)"], "timeout_s": 10, "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"}, "output_kind": "text"},
             })
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
             self.assertEqual(challenge.returncode, 1)
@@ -2941,7 +3045,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             self._write_challenges(project, {
-                "S11": {"command": [sys.executable, "-c", "import time; time.sleep(2)"], "timeout_s": 0.1, "success": {"exit_zero": True}, "output_kind": "text"},
+                "S11": {"command": [sys.executable, "-c", "import pytest; import time; time.sleep(2)"], "timeout_s": 0.1, "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"}, "output_kind": "text"},
             })
             result = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
             self.assertEqual(result.returncode, 1)
@@ -2953,7 +3057,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             self._write_challenges(project, {
-                "S11": {"command": [sys.executable, "-c", "print('ok')"], "timeout_s": 10, "success": {"exit_zero": True}, "output_kind": "text"},
+                "S11": {"command": [sys.executable, "-c", "import pytest; print('1 passed in 0.01s')"], "timeout_s": 10, "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"}, "output_kind": "text"},
             })
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
             self.assertEqual(challenge.returncode, 0, challenge.stderr)

@@ -195,17 +195,21 @@ P0/P1, or an increase in the aggregate open P0/P1 count. Status-only
 open-to-resolved transitions appear in `resolved`; other status and severity
 transitions remain explicit in `regressions` or `count_regression`.
 
-## Verifier-owned challenges
+## Verifier-run challenges
 
 `challenge` executes commands from the committed `.checkyourself/challenges.json`
 configuration with `shell=False`, a bounded timeout, and the configured output
 assertions. It captures stdout and stderr under `.checkyourself/challenge-runs/`,
 then writes one `EXECUTED` receipt per surface. The receipt records the argv
 list, exit code, capture digest, source tree hash computed before capture write,
-run identifier, runner HMAC, and timestamp. The runner key is created with
-mode `0600` under `.checkyourself/` and is never stored beside captures. A
-failed or timed-out command is a `FAIL` receipt and an open P1 finding; it is
-never silently ignored.
+run identifier, local integrity binding HMAC, and timestamp. The local
+integrity binding key is created with mode `0600` at
+`.checkyourself/local-integrity-binding.key` and is never stored beside
+captures. It makes edits to project-local receipts detectable; it does not
+prove independent issuance or operator identity because it lives inside the
+project being inspected. Full external custody is future work. A failed or
+timed-out command is a `FAIL` receipt and an open P1 finding; it is never
+silently ignored.
 
 ```bash
 python3 tools/checkyourself.py challenge --surface S11 --format json
@@ -215,16 +219,26 @@ python3 tools/checkyourself.py challenge --format json
 The shipped configuration provides a working self-test challenge for S11. The
 other surfaces are explicitly marked as requiring a project-specific command;
 running one without that command fails closed. A command is always an argv
-list, never a shell string. Only an `EXECUTED` receipt can satisfy a coverage
-`Pass`. The compatibility `receipt` command remains available, but its
-caller-authored fields are labelled `UNVERIFIED` and cannot earn full credit or
-high confidence. On re-check, the verifier requires the runner HMAC and
-re-executes the committed argv with the same timeout discipline. Fresh stdout
-and stderr must hash to the receipt's capture digest, the exit and timeout
-state must match, and the source tree must still match the pre-capture hash.
-The verifier also re-hashes the stored capture, re-applies the committed
-assertions, and rejects a receipt whose project tree or challenge definition
-changed. Missing or invalid runner-key material earns no executed credit.
+list, never a shell string. Every canonical surface has a verifier-owned
+minimum semantic contract: a positive output assertion, at least three
+semantic output tokens, and no vacuous `true`, `false`, `echo`, `printf`, or
+print-only command. `regex_match` assertions are tested against empty and
+echo-only fixtures; patterns that match those fixtures are rejected. S11 must
+reference a recognized test runner and assert a numeric pass/fail/skip count.
+S12 through S14 must assert a non-empty artifact, preferably under an ignored
+build output directory such as `build/` or `dist/`. S19 must assert JSON
+`status` and `findings` fields. These contracts are enforced when definitions load and again
+when receipts are re-checked, so vacuous commands or thin output can never
+earn full credit. The compatibility `receipt` command remains available, but
+its caller-authored fields are labelled `UNVERIFIED` and cannot earn full
+credit or high confidence. On re-check, the verifier requires the
+`local_integrity_hmac` field and re-executes the committed argv with the same
+timeout discipline. Fresh stdout and stderr must hash to the receipt's capture
+digest, the exit and timeout state must match, and the source tree must still
+match the pre-capture hash. The verifier also re-hashes the stored capture,
+re-applies the committed assertions, and rejects a receipt whose project tree
+or challenge definition changed. Missing or invalid local-integrity-binding
+material earns no executed credit.
 
 ## Coverage
 

@@ -3,17 +3,17 @@
 ## Outcome
 
 The stored `EXECUTED` receipt escape is closed without a commit or push. Score
-verification now requires a runner HMAC, re-executes the committed challenge,
+verification now requires a local-integrity binding HMAC, re-executes the committed challenge,
 and accepts the receipt only when the fresh output digest, exit state, timeout
 state, execution state, and current source revision agree.
 
 ## Changes
 
 - `tools/checkyourself.py`
-  - creates or loads a 32-byte runner key at
-    `.checkyourself/challenge-runner.key` with mode `0600`;
-  - derives a per-invocation signing key from the runner key and receipt
-    `run_id`, then HMACs the executed receipt fields;
+  - creates or loads a 32-byte local integrity binding key at
+    `.checkyourself/local-integrity-binding.key` with mode `0600`;
+  - derives a per-invocation signing key from the local binding key and receipt
+    `run_id`, then records it as `local_integrity_hmac` over the executed receipt fields;
   - computes `source_revision` before writing captures and
     `captured_output_digest` after writing each capture;
   - re-runs the committed argv with the committed cwd, `shell=False`, and
@@ -36,7 +36,7 @@ Observed result from the forged merged-definition receipt regression:
 
 - the receipt had a valid shape, committed command, merged challenge digest,
   capture digest, source revision, and receipt binding hash;
-- it had no valid runner HMAC;
+- it had no valid local-integrity binding HMAC;
 - score verification reported the evidence as `Unknown` and applied the
   evidence cap; it did not grant executed credit or high confidence.
 
@@ -51,8 +51,12 @@ also fail closed before any score-time subprocess is launched.
   **complete: true**, **PASS**, exit code `0`, signed receipt, no findings.
 - In-memory score using the live S11 receipt — **C5 Pass** with the capture in
   `verified_evidence`; score-time re-execution accepted the genuine receipt.
-- Runtime key and S11 capture/receipt remain ignored local artifacts; no commit
+- Local integrity binding key and S11 capture/receipt remain ignored local artifacts; no commit
   or push was performed.
+
+The local integrity binding is project-local tamper evidence. It does not prove
+independent issuance or operator identity; full external custody remains future
+work.
 
 ## IMPROVEMENTS
 
