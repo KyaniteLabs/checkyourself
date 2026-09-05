@@ -1,8 +1,7 @@
 # Scoring Method
 
-The Production Reality Score is a 0–100 readiness confidence score.
-
-It is not a moral judgment and not a guarantee. It is an evidence-based estimate of how ready the app is for real users.
+Production Reality Score: 0–100 evidence-based readiness estimate, not a
+guarantee or production-safety proof.
 
 ## Category weights
 
@@ -19,35 +18,30 @@ It is not a moral judgment and not a guarantee. It is an evidence-based estimate
 | Frontend UX, accessibility, and client safety | 8 |
 | AI/RAG/agent governance, if applicable | 6 |
 
-If a category does not apply, mark it `NotApplicable`, provide an explicit
+If a category does not apply, mark `NotApplicable`, give
 `not_applicable_reason`, and attach a verifier-captured `delegation_receipts`
-artifact showing where the responsibility lives. A reason alone is Unknown.
-Its weight slot is not redistributed; the CLI awards the full weight only when
-the delegation receipt is non-empty, in-root, hash-matched, and records
-provenance. Do not adjust other category weights. Hand-scored totals must treat
-a verified NotApplicable category as if it received full credit for that
-weight, matching `score --findings --coverage`.
+artifact showing responsibility. A reason alone is Unknown. Do not redistribute
+weight: the CLI awards it fully only when the receipt is non-empty, in-root,
+hash-matched, and records provenance. Hand scores treat verified NotApplicable
+as full credit, matching `score --findings --coverage`.
 
-In prose, write **Not applicable**. In coverage JSON, use the exact enum
-`NotApplicable`; both spellings describe the same state.
+Prose: **Not applicable**. Coverage JSON: `NotApplicable`.
 
 ## Caps
 
-- Any unresolved P0 caps the final score at 49.
-- Any unresolved P1 caps the final score at 74.
-- Missing evidence in a critical category caps the final score at 84. This cap applies in every score mode, including estimates.
-- A score above 90 requires credible evidence for tests, secrets handling, deployment/rollback, observability, auth, and data boundaries. This cap applies in every score mode, including estimates.
+Unresolved P0 caps the final score at 49; unresolved P1 at 74; missing critical
+evidence at 84, including estimates. A score above 90 requires credible
+evidence for tests, secrets, deployment/rollback, observability, auth, and data
+boundaries; this cap also applies to estimates.
 
 ## Executable scoring contract
 
-The CLI computes the base score and caps deterministically:
+The CLI computes base score and caps deterministically:
 
-1. For each category, start with its weight.
-2. Subtract the evidence penalty for an `Unknown` category (`100%` of the
-   weight for critical categories C1/C2/C3, otherwise `50%`). Subtract each
-   unresolved finding penalty using `P0 = 100%`, `P1 = 60%`, `P2 = 25%`, or
-   `P3 = 10%` of that category's weight. Clamp each category award to
-   `[0, weight]`.
+1. Start each category at its weight.
+2. Subtract the evidence penalty for an `Unknown` category (`100%` for critical
+   C1/C2/C3, otherwise `50%`) and unresolved finding penalties: `P0 = 100%`,
+   `P1 = 60%`, `P2 = 25%`, `P3 = 10%` of category weight. Clamp to `[0, weight]`.
 3. `base_score = round(sum(category_award))`.
 4. `minimum_cap = min(100, 49 if unresolved P0, 74 if unresolved P1, 84 if
    critical evidence is missing, 90 if a high-score launch-gate category lacks
@@ -55,25 +49,19 @@ The CLI computes the base score and caps deterministically:
 5. `final_score = min(base_score, minimum_cap)`.
 
 `NotApplicable` with a concrete reason and verified delegation receipt retains
-the category's full weight. `accepted-risk`, `deferred`, and `suppressed` are
-workflow dispositions, not residual-risk closure; their finding penalties and
-caps remain until the exposure is fixed or proven not applicable. The
-executable reference is [`docs/cli.md#scoring`](../docs/cli.md#scoring), backed
-by [`tools/checkyourself.py`](../tools/checkyourself.py).
+full weight. `accepted-risk`, `deferred`, and `suppressed` are workflow
+dispositions, not residual-risk closure; penalties and caps remain until fixed
+or proven not applicable. The executable reference is
+[`docs/cli.md#scoring`](../docs/cli.md#scoring), backed by
+[`tools/checkyourself.py`](../tools/checkyourself.py).
 
 ## Confidence labels
 
-Every score must include a confidence label:
-
-- **High confidence** — direct repo/config/test evidence.
-- **Medium confidence** — enough evidence, but some assumptions.
-- **Low confidence** — limited context; score may change significantly.
+**High confidence** — direct repo/config/test evidence. **Medium confidence** —
+enough evidence, some assumptions. **Low confidence** — limited context; score
+may change significantly.
 
 ## Required explanation
 
-For each category, say:
-
-- what evidence was found;
-- what was missing;
-- what points were awarded;
-- what would raise the score.
+For each category: evidence found, missing evidence, awarded points, and score
+improvement needed.

@@ -1,27 +1,25 @@
 ---
 name: checkyourself
-description: Reviewable completion-evidence diagnostics and guided remediation for AI-built apps using CheckYourself. Use when the user asks for a pre-launch audit, bounded production score, evidence-backed findings register, safest first fix batch, learning plan, optional dashboard, or a read-only reality check before shipping a repository, app, website, agent, MCP server, or AI-generated project.
+description: Evidence-backed pre-launch diagnostics, production scores, approval-gated fixes, learning plans, and optional dashboards for AI-built projects.
 ---
 
 # CheckYourself
 
-## Overview
-
-Use CheckYourself to turn an AI assistant into a calm, evidence-first completion reviewer. Start read-only, inspect the whole relevant launch surface, distinguish observed, inferred, and untested claims, produce a bounded Production Reality Report, and ask for approval before changing code. Local receipts and semantic checks improve reviewability; they do not prove production safety or execute an independent challenge runner.
+Evidence-first review: start read-only, inspect the launch surface, label
+observed/inferred/untested claims, write a bounded Production Reality Report,
+and ask before edits. Receipts improve reviewability, not safety.
 
 ## Workflow
 
-1. Identify the project and available CheckYourself context.
-   - If this repository or a copied `checkyourself` folder is present, start with `CONTEXT.md`, `AGENTS.md`, `rules.md`, `02_RUN_DIAGNOSTIC/coverage-matrix.md`, and `02_RUN_DIAGNOSTIC/scoring-method.md`.
-   - If only this skill is available, use the workflow below and ask for the smallest missing project evidence.
-   - Infer stack, audience, data shape, deploy target, and risk level from files and configuration. Label guesses.
-
-2. Run deterministic checks when safe and available.
-   - Prefer read-only commands.
-   - Each scan finding carries a stable, semantic rule ID (for example
-     `CY-SECRET-001`, `CY-CONFIG-001`) that stays the same across runs, so you
-     can suppress, diff, and cite findings reliably.
-   - If `tools/checkyourself.py` exists, the deterministic pipeline is:
+1. **Load context.** In this repo or a copied `checkyourself` folder, start
+   with `CONTEXT.md`, `AGENTS.md`, `rules.md`,
+   `02_RUN_DIAGNOSTIC/coverage-matrix.md`, and
+   `02_RUN_DIAGNOSTIC/scoring-method.md`; otherwise ask for the smallest missing
+   evidence. Infer stack, audience, data shape, deploy target, and risk; label
+   guesses.
+2. **Run safe deterministic checks.** Prefer read-only commands. Stable
+   semantic IDs (for example `CY-SECRET-001` and `CY-CONFIG-001`) support
+   suppression, diff, and citation.
 
 ```bash
 python3 tools/checkyourself.py describe --format json
@@ -33,14 +31,13 @@ python3 tools/checkyourself.py next --findings scan.json --format json
 python3 tools/checkyourself.py diff --old baseline.json --new current.json --ci   # regression gate
 ```
 
-   - Treat scanner findings as deterministic local observations. Do not invent a separate
-     scoring or backlog path. If Python is unavailable, sweep manually and say
-     the score is hand-computed.
+   Treat findings as local observations; do not invent another scoring/backlog
+   path. If Python is unavailable, sweep manually and label the score
+   hand-computed.
 
 ### Manual fallback contract
 
-When the CLI is unavailable, manual output still uses a canonical rule-ID
-registry and evidence rubric:
+When the CLI is unavailable, use this canonical rule-ID registry and evidence rubric:
 
 | Rule ID | Canonical manual condition |
 |---|---|
@@ -54,65 +51,59 @@ registry and evidence rubric:
 | `CY-MANUAL-OTHER-001` | A material gap does not match another registered manual condition. |
 
 Reuse a detector ID from the [canonical detector-rule registry](../../docs/cli.md#canonical-detector-rule-registry)
-when the condition matches a shipped detector. Do not invent a new ID or
-renumber this registry for one report.
+when it matches a shipped detector. Never invent or renumber this registry.
 
-Every manual finding must include: the registry ID; severity and category; an
-exact file, command output, or owner-provided artifact with date/scope; the
-plain-English risk; and a status. A `Pass` needs reviewer assertions plus a
-receipt issued by `checkyourself receipt`, bound to one canonical surface,
-source revision, command, claim, and observed result. Its content hash and
-binding hash must verify, and a receipt cannot be reused across surfaces or
-claims. A caller-authored provenance string is not proof. A `Finding` needs
-evidence of the gap and its harm, `Unknown` needs an explicit missing-evidence
-request, and `Not applicable` needs a concrete reason plus the same verifier-
-captured receipt contract for delegated responsibility. If no artifact can be
-inspected, label the result as a low-confidence hand-computed estimate.
+Every manual finding needs registry ID, severity/category, exact dated evidence,
+plain-English risk, and status. `Pass` needs reviewer assertions plus a
+`checkyourself receipt` bound to one surface, source revision, command, claim,
+and result; content and binding hashes must verify. Receipts cannot be reused
+across surfaces/claims; caller-authored provenance is not proof. `Finding` needs
+evidence of gap and harm; `Unknown` needs an evidence request; `Not applicable`
+needs a concrete reason and the same verifier-captured delegation receipt
+contract. Without an inspectable artifact, label a low-confidence hand-computed
+estimate.
 
 ### Deterministic score contract
 
 The executable score is `final_score = min(base_score, minimum_cap)`, where
-`base_score` is the rounded sum of clamped per-category awards after evidence
-and unresolved-finding penalties. The cap is the minimum of 100, 49 for an
-unresolved P0, 74 for an unresolved P1, 84 for a missing critical-evidence
-category, and 90 for a missing high-score launch-gate category. `NotApplicable`
-with a concrete reason and verified delegation receipt retains its category
-weight. Accepted or deferred workflow dispositions do not close residual risk,
-and `--claim` records an accepted completion claim without running an
-independent challenge. See the [CLI scoring contract](../../docs/cli.md#scoring)
-and [executable implementation](../../tools/checkyourself.py).
+`base_score` is the rounded sum of clamped category awards after evidence and
+unresolved-finding penalties. The cap is the minimum of 100, 49 for unresolved
+P0, 74 for unresolved P1, 84 for missing critical evidence, and 90 for missing
+high-score launch-gate evidence. `NotApplicable` with a concrete reason and
+verified delegation receipt retains its category weight. Accepted/deferred
+dispositions do not close residual risk; `--claim` records an accepted claim
+without an independent challenge. See the [CLI scoring
+contract](../../docs/cli.md#scoring) and [executable
+implementation](../../tools/checkyourself.py).
 
-3. Sweep the production surface.
-   Cover product purpose, frontend UX, accessibility, backend/API behavior, auth, data storage, migrations, secrets, runtime config, tests, CI/CD, dependencies, deploy/rollback, observability, performance, privacy, compliance, and AI/RAG/agent governance when relevant.
+3. **Sweep the surface.** Cover product purpose, frontend UX/accessibility,
+   backend/API, auth, data/migrations, secrets/config, tests, CI/CD,
+   dependencies, deploy/rollback, observability, performance, privacy,
+   compliance, and AI/RAG/agent governance when relevant.
+4. **Write the report.** Include purpose; stack/confidence; unknowns;
+   Production Reality Score (0–100) with caps (P0 49, P1 74, missing critical
+   evidence 84, missing launch-gate evidence 90; no findings is Unknown, never
+   automatic Pass); complete Pass/Finding/Unknown/Not applicable coverage;
+   P0–P3 findings; evidence; complete backlog; safest first batch; questions;
+   and learning seeds.
+5. **Recommend before acting.** Each backlog item needs finding ID, severity,
+   fix, blast radius, reason, files/systems, verification, rollback, learning
+   value, and status. Do not edit until the user approves a named fix/batch.
+6. **Loop after approval.** Make the smallest reversible change, verify, update
+   status, rescore when evidence changes, and keep accepted-risk, deferred, and
+   suppressed dispositions visible as residual risk with owner and trigger.
+7. **Teach from findings.** Tie lessons to actual gaps/fixes; give next topics,
+   why, 7-day/30-day plans, project exercises, and what to ignore. Each top
+   priority gets a trusted written source and, when available, a relevant
+   YouTube video; record `source_type`, `authority_level`,
+   `why_this_source_is_trusted`, and `checked_at`; the written source is canonical.
 
-4. Produce a Production Reality Report.
-   Include:
-   - executive summary;
-   - what the app appears to do;
-   - detected stack and confidence;
-   - unknowns and assumptions;
-   - Production Reality Score from 0 to 100 with severity caps explained
-     (P0 caps at 49, P1 at 74, missing critical evidence at 84, missing
-     launch-gate evidence at 90; the evidence caps apply even to estimates,
-     and absence of findings is treated as Unknown, never an automatic Pass);
-   - coverage sweep marked Pass, Finding, Unknown, or Not applicable;
-   - P0/P1/P2/P3 findings;
-   - evidence table;
-   - complete ranked remediation backlog;
-   - safest first approval batch;
-   - questions that would change the diagnosis;
-   - learning-plan seeds based on the actual gaps.
+The report must sweep every relevant surface and explain plain-English risk
+before technical detail. Pass requires evidence; Finding evidence and risk;
+Unknown a question/evidence request; Not applicable a reason. The first batch
+is not the full scope.
 
-5. Recommend before acting.
-   For each backlog item include finding ID, severity, fix summary, impact or blast radius, why it matters, likely files/systems touched, verification, rollback idea, learning value, and status. Do not modify files until the user approves a specific fix or batch.
-
-6. After approval, run the guided fix loop.
-   Make the smallest reversible change, verify it, update finding status, and rescore when evidence changes. Fixed or verified not-applicable findings can close; accepted-risk, deferred, and suppressed dispositions remain visible residual risk with owner and trigger context.
-
-7. Create the learning plan.
-   Tie lessons to the real findings and fixes. Include what to learn next, why it matters, a 7-day plan, a 30-day plan, small exercises inside the app, and what to ignore for now.
-
-## Example Prompts
+## Example prompts
 
 ```text
 Use $checkyourself to run a read-only production-readiness diagnostic for this app. Do not change code yet.
@@ -126,29 +117,23 @@ Use $checkyourself to score this MCP server before launch, list every blocking u
 Use $checkyourself on this website repo. After the report, make a learning plan from the gaps you found. dashboard inline.
 ```
 
-## Safety Rules
+## Safety rules
 
-- Start read-only.
-- Do not change code, install dependencies, rotate secrets, touch production systems, or rewrite architecture without explicit approval.
-- Do not stop at the first few issues. The first approval batch is only the first safe batch, not the full scope.
-- Pass requires evidence. Finding requires evidence and risk. Unknown requires a question or evidence request. Not applicable requires a reason.
-- Do not invent evidence or inflate the score.
-- Do not paste long logs, source files, or reference docs back to the user unless needed.
-- For regulated, financial, health, legal, life-safety, security-critical, or high-volume systems, recommend qualified expert review.
-- Never ask for or expose live secrets, customer data, proprietary code, or unredacted `.env` values.
+- Start read-only. Without explicit approval, do not change code, install
+  dependencies, rotate secrets, touch production, or rewrite architecture.
+- Do not invent evidence/inflate the score or paste secrets, customer data,
+  proprietary code, unredacted `.env` values, or unnecessary long artifacts.
+- For regulated, financial, health, legal, life-safety, security-critical, or
+  high-volume systems, recommend qualified expert review.
 
-## Dashboard Modes
+## Dashboard modes
 
 - Default: no dashboard.
-- If the user says `dashboard yes`, create a self-contained HTML/CSS dashboard from the existing report. Do not rerun the audit just to make the dashboard.
-- If the user says `dashboard inline`, produce a compact Markdown dashboard.
+- `dashboard inline`: compact Markdown dashboard.
+- `dashboard yes`: self-contained HTML/CSS dashboard from the existing report;
+  do not rerun the audit; use the canonical template and complete backlog.
 
 ## Voice
 
-Be direct, useful, and evidence-first. A light reality-check tone is fine, but aim the sharpness at the project state, never the person. For high-stakes findings, be blunt and calm.
-
-Useful phrasing:
-
-- "Demo-ready is not launch-ready. Here is the receipt."
-- "This passes the happy path. Production does not grade on the happy path."
-- "Not a disaster. Definitely a future incident with a calendar invite."
+Be direct, useful, and evidence-first. Light reality-check tone may target
+project state, never the person; high-stakes findings stay blunt and calm.

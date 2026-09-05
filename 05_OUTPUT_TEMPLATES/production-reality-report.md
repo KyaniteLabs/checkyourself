@@ -2,9 +2,7 @@
 
 ## 1. Executive Summary
 
-
 ## 2. What this app appears to do
-
 
 ## 3. Detected stack
 
@@ -39,7 +37,8 @@
 **Score:** __ / 100
 **Confidence:** High / Medium / Low
 
-The score is a bounded summary of the captured evidence. It does not prove production safety, replace expert review, or execute an independent challenge of the original completion claim.
+The score summarizes captured evidence; it does not prove production safety,
+replace expert review, or independently challenge the original claim.
 
 ### Score breakdown
 
@@ -66,7 +65,7 @@ The score is a bounded summary of the captured evidence. It does not prove produ
 
 ## 6. Coverage Sweep
 
-Every relevant production surface must be represented here. Do not stop after a few obvious issues.
+Represent every relevant production surface; do not stop after obvious issues.
 
 | # | Surface | Status: Pass / Finding / Unknown / Not applicable | Evidence or reason | Related finding IDs |
 |---:|---|---|---|---|
@@ -93,23 +92,14 @@ Every relevant production surface must be represented here. Do not stop after a 
 
 ## 7. P0 findings — do not ship
 
-| ID | Finding | Plain-English risk | Evidence | Recommended fix |
-|---|---|---|---|---|
-
 ## 8. P1 findings — serious before launch
-
-| ID | Finding | Plain-English risk | Evidence | Recommended fix |
-|---|---|---|---|---|
 
 ## 9. P2 findings — important hardening gaps
 
-| ID | Finding | Plain-English risk | Evidence | Recommended fix |
-|---|---|---|---|---|
-
 ## 10. P3 findings — improvements
 
-| ID | Finding | Why it helps | Evidence | Suggested timing |
-|---|---|---|---|---|
+| Severity | ID | Finding | Plain-English risk / why it helps | Evidence | Recommended fix / timing |
+|---|---|---|---|---|---|
 
 ## 11. Evidence table
 
@@ -118,14 +108,16 @@ Every relevant production surface must be represented here. Do not stop after a 
 
 ## 12. Complete ranked remediation backlog
 
-List every finding that needs remediation. The first approval batch is only the starting point, not the full scope.
+List every finding needing remediation. The first approval batch is only the
+start, not the full scope.
 
 | Order | Finding ID | Severity | Fix summary | Impact / blast radius | Why this order | Files/systems touched | Approval needed | Verification | Rollback | Learning value | Status |
 |---:|---|---|---|---|---|---|---|---|---|---|---|
 
 ## 13. Safest first approval batch
 
-Select the smallest safe batch to approve first from the complete backlog. This may be one fix, several related fixes, or all P0 fixes if they are tightly coupled. Do not present this as the whole project scope.
+Choose the smallest safe batch from the complete backlog; it is not the whole
+scope.
 
 ### Fix card
 
@@ -141,8 +133,6 @@ Select the smallest safe batch to approve first from the complete backlog. This 
 
 ## 14. Full remediation path
 
-Explain how to continue after the first approved batch.
-
 | Wave | Included findings | Goal | Exit criteria |
 |---|---|---|---|
 | Wave 1 |  | Remove do-not-ship blockers |  |
@@ -152,13 +142,12 @@ Explain how to continue after the first approved batch.
 
 ## 15. What can wait, and why
 
-This section is not for hiding issues. Anything deferred must still appear in the backlog.
+Deferred items remain in the backlog.
 
 | Deferred item | Why it can wait | Trigger that makes it urgent |
 |---|---|---|
 
 ## 16. Questions that would change this diagnosis
-
 
 ## 17. Learning-plan seeds
 
@@ -167,9 +156,7 @@ This section is not for hiding issues. Anything deferred must still appear in th
 
 ## 18. Optional dashboard offer
 
-The dashboard is optional. Ask the user before generating it.
-
-Suggested language:
+Ask before generating:
 
 ```text
 I can also generate a visual CheckYourself HTML/CSS dashboard from this report. It is optional and may use extra tokens. Do you want the dashboard?
@@ -177,22 +164,9 @@ I can also generate a visual CheckYourself HTML/CSS dashboard from this report. 
 
 ## 19. Optional dashboard handoff
 
-Dashboard generated? Yes / No
-
-Default: No. Offer the dashboard only after the report is complete. Generate it only when the user explicitly asks, with wording such as `dashboard yes` or `dashboard inline`.
-
-If generated, use `10_DASHBOARD/CONTEXT.md` and include the complete remediation backlog. Do not re-run the audit just to build the dashboard.
-
-If the user declines HTML/CSS, provide the inline Markdown dashboard fallback with:
-
-- project name;
-- score before/after, if applicable;
-- ship status;
-- counts by severity and status;
-- coverage summary;
-- complete findings table;
-- complete remediation backlog;
-- current approval batch;
-- learning-plan highlights.
-
-Keep dashboard evidence concise. Link or reference files by path instead of pasting raw file content.
+Dashboard generated? Yes / No. Default: No. Generate only after explicit
+`dashboard yes` or `dashboard inline`; use `10_DASHBOARD/CONTEXT.md`, include
+the complete backlog, and do not rerun the audit. If HTML/CSS is declined,
+provide the inline fallback with project, score before/after, ship status,
+severity/status counts, coverage, complete findings/backlog, approval batch,
+and learning highlights. Reference paths; do not paste raw evidence.

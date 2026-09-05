@@ -1,17 +1,15 @@
 # Local Agents
 
-Start with [`native-cli-mcp.md`](native-cli-mcp.md); this file only adds
-file-aware local-agent context steps.
+Start with [`native-cli-mcp.md`](native-cli-mcp.md); this file adds local-agent
+steps.
 
-Use CheckYourself with any local or repo-aware AI assistant that can read files.
+Use CheckYourself with any local or repo-aware file-reading AI assistant:
 
-Recommended flow:
+1. Put this folder beside/inside the repo; point it at `CONTEXT.md` first (the
+   canonical router).
+3. Ask it to read `START_HERE.md`, `AGENTS.md`, and
+   `02_RUN_DIAGNOSTIC/coverage-matrix.md`.
+4. Ask for a read-only diagnostic; approve fixes one at a time or in safe
+   batches; re-run after each batch.
 
-1. Put this folder beside or inside the repo.
-2. Point the file-aware tool at `CONTEXT.md` first — this is the canonical router that loads the right stage context.
-3. Ask the assistant to read `START_HERE.md`, `AGENTS.md`, and `02_RUN_DIAGNOSTIC/coverage-matrix.md`.
-4. Ask for a read-only diagnostic.
-5. Approve fixes one at a time or in safe batches.
-6. Re-run the diagnostic after each batch.
-
-Keep the advanced folder unloaded until the assistant needs a specific domain.
+Keep `90_ADVANCED/` unloaded until a specific domain needs it.

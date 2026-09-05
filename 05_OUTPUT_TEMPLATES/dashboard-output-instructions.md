@@ -1,8 +1,6 @@
 # Optional Human Dashboard Instructions
 
-The dashboard is optional because it costs extra tokens.
-
-Generate the HTML/CSS dashboard only when the user explicitly asks for it, or when the user sets:
+Generate only when the user asks or sets:
 
 ```text
 dashboard yes
@@ -14,18 +12,13 @@ dashboard. If the user does not want HTML/CSS, use
 
 ## Rules
 
-- Do not generate the dashboard by default.
-- Do not include secret values, tokens, private keys, personal data, or long code blocks.
-- Keep the dashboard as a visual summary of the report, not a duplicate of every detail.
-- Use finding IDs to avoid repeating long explanations.
-- Include the complete remediation backlog in compact table form.
-- Show the safest next approval batch, but make clear the backlog continues after that batch.
-- Use one self-contained HTML file with inline CSS and no external assets.
-- Prefer short sentences and plain language.
-- Detect primary language and candidate second language at runtime. If the
-  second language is inferred rather than explicitly requested, ask before
-  making labels or learning sections bilingual.
-- Design for ADHD, autism, and dyslexia: predictable structure, generous
-  spacing, high contrast, no flashing, no dense walls of text, and text labels
-  in addition to color.
-- If the report is very large, summarize P2/P3 rows compactly and offer a second dashboard page only if the user asks.
+- Never generate by default.
+- Exclude secrets, tokens, private keys, personal data, and long code.
+- Summarize with finding IDs; include the complete backlog and safest next
+  approval batch, and show the backlog continues.
+- HTML: one self-contained file, inline CSS, no external assets.
+- Use short, plain sentences. Detect primary/candidate second language at
+  runtime; if inferred, ask before bilingual labels or learning sections.
+- Support ADHD, autism, and dyslexia: predictable structure/spacing, high
+  contrast, no flashing, and text labels beyond color.
+- Compact P2/P3 rows; offer another page only on request.
