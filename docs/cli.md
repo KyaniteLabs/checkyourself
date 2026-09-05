@@ -40,6 +40,7 @@ python3 tools/checkyourself.py describe --format json
 | `scan --deep` | Adds slower validation checks for detected surfaces, including mutable GitHub Actions and dependency-update coverage. |
 | `coverage --emit` | Writes the 20-surface coverage skeleton for an agent to fill. Use `--format json` for stdout. |
 | `coverage --check FILE` | Checks a filled coverage artifact for completeness. |
+| `receipt` | Issues one verifier-hashed receipt bound to one coverage surface, source revision, command, claim, and observed result. |
 | `score --findings FILE [--coverage FILE] [--claim TEXT]` | Computes the bounded evidence score or a low-confidence estimate; optionally records an accepted completion claim. |
 | `backlog --findings FILE` | Ranks the complete remediation backlog and emits a `highest_severity_batch`; it does not analyze safety. |
 | `next --findings FILE` | Returns the next unresolved `highest_severity_batch`; it does not analyze safety. |
@@ -201,6 +202,22 @@ python3 tools/checkyourself.py coverage --emit --format json > CHECKYOURSELF_COV
 python3 tools/checkyourself.py coverage --check CHECKYOURSELF_COVERAGE.generated.json
 ```
 
+Issue a receipt with the verifier command before adding it to one coverage row:
+
+```bash
+python3 tools/checkyourself.py receipt \
+  --root . --reference tests/test_app.py --surface-id S11 \
+  --source-revision "<revision>" --source-state "<environment state>" \
+  --command "pytest tests/test_app.py -q" \
+  --claim "The focused quality gate passes" --result "1 passed" \
+  --out S11-receipt.json --format json
+```
+
+Coverage receipts must be issued by this command, bind to the row's canonical
+surface ID, and include a content hash plus a second hash covering the binding
+fields. A caller-authored `origin`, `source_state`, and `result` is not proof.
+The same receipt cannot be reused for another surface or claim.
+
 In text mode, `coverage --emit` writes
 `CHECKYOURSELF_COVERAGE.generated.json` in the current directory. Use
 `--out PATH` to choose a path, or `--format json` when another tool wants stdout.
@@ -214,11 +231,13 @@ Coverage has 20 surfaces. Each surface must be marked:
 
 `Pass` needs reviewer assertions plus `evidence_receipts` whose referenced
 artifacts exist, are non-empty, match their recorded SHA-256 hash, and include
-origin, source-state, and result provenance. `Unknown` needs missing evidence.
+verifier issuance, a canonical surface ID, source revision, command, claim,
+observed result, and a binding hash covering those fields. `Unknown` needs missing evidence.
 `NotApplicable` needs a reason plus `delegation_receipts` proving where the
-responsibility lives. A missing or unresolvable receipt is treated as Unknown
-with a warning. A `Finding` row creates a coverage finding penalty unless it is
-linked to a registered finding with `finding_ids`.
+responsibility lives under the same receipt contract. A missing, unresolvable,
+mismatched, or reused receipt is treated as Unknown with a warning. A `Finding`
+row creates an independent coverage penalty and evidence block unless its
+`finding_ids` include an unresolved registered finding.
 
 ## Scoring
 

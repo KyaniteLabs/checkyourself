@@ -741,14 +741,14 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             project = Path(tmp)
             delegation = project / "delegation.md"
             delegation.write_text("The hosting provider owns model execution.\n", encoding="utf-8")
-            row["delegation_receipts"] = [self._receipt(delegation, project, "provider contract", "temporary test tree", "delegated responsibility documented")]
+            row["delegation_receipts"] = [self._receipt(delegation, project, "provider contract", "temporary test tree", "delegated responsibility documented", surface_id="S19")]
             for item in coverage["surfaces"]:
                 if item["id"] == "S19":
                     continue
                 evidence = project / f"{item['id']}.txt"
                 evidence.write_text(f"verified {item['id']}\n", encoding="utf-8")
                 item["evidence_reviewed"] = [evidence.name]
-                item["evidence_receipts"] = [self._receipt(evidence, project, "fixture verifier", "temporary test tree", "non-empty artifact observed")]
+                item["evidence_receipts"] = [self._receipt(evidence, project, "fixture verifier", "temporary test tree", "non-empty artifact observed", surface_id=item["id"])]
             findings_path = project / "findings.json"
             coverage_path = project / "coverage.json"
             findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
@@ -1831,14 +1831,28 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             ],
         }
 
-    def _receipt(self, path: Path, root: Path, origin: str, source_state: str, result: str) -> dict:
-        return {
+    def _receipt(self, path: Path, root: Path, origin: str, source_state: str, result: str, *, surface_id: str, claim: str = "fixture claim") -> dict:
+        receipt = {
             "reference": path.relative_to(root).as_posix(),
             "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-            "origin": origin,
+            "surface_id": surface_id,
+            "source_revision": "fixture-revision",
+            "command": "fixture verifier command",
+            "claim": claim,
+            "origin": "checkyourself verifier receipt command",
             "source_state": source_state,
             "result": result,
+            "issuer": "checkyourself-verifier/1",
+            "issued_at": "2026-09-05T00:00:00Z",
         }
+        binding = {field: receipt.get(field) for field in (
+            "reference", "sha256", "surface_id", "source_revision", "command", "claim",
+            "origin", "source_state", "result", "issuer", "issued_at",
+        )}
+        receipt["receipt_sha256"] = hashlib.sha256(
+            json.dumps(binding, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        ).hexdigest()
+        return receipt
 
     def _run_mcp_score(self, coverage: object) -> dict:
         messages = "\n".join([
@@ -1936,7 +1950,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                 surfaces.append({
                     "id": sid, "surface": surface, "category": category,
                     "status": "Pass", "evidence_reviewed": [evidence.name],
-                    "evidence_receipts": [self._receipt(evidence, Path(tmp), "fixture verifier", "temporary test tree", "non-empty artifact observed")],
+                    "evidence_receipts": [self._receipt(evidence, Path(tmp), "fixture verifier", "temporary test tree", "non-empty artifact observed", surface_id=sid)],
                 })
             coverage = {"schema": "checkyourself-coverage/1", "surfaces": surfaces}
             findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
@@ -1950,6 +1964,117 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         self.assertTrue(score["coverage_complete"])
         self.assertEqual(score["confidence"], "high")
         self.assertEqual(score["score"], 100)
+
+    def test_verifier_receipt_command_emits_surface_bound_binding_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            evidence = project / "evidence.txt"
+            evidence.write_text("observed output\n", encoding="utf-8")
+            receipt_path = project / "receipt.json"
+            result = self.run_cli(
+                "receipt",
+                "--root", str(project),
+                "--reference", evidence.name,
+                "--surface-id", "S11",
+                "--source-revision", "abc123",
+                "--source-state", "temporary test tree",
+                "--command", "pytest tests/test_app.py -q",
+                "--claim", "The focused quality gate passes",
+                "--result", "1 passed",
+                "--out", str(receipt_path),
+                "--format", "json",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            self.assertEqual(receipt["issuer"], "checkyourself-verifier/1")
+            self.assertEqual(receipt["surface_id"], "S11")
+            self.assertEqual(receipt["reference"], "evidence.txt")
+            self.assertEqual(self.run_cli("validate", "--kind", "receipt", str(receipt_path)).returncode, 0)
+            tampered_path = project / "tampered-receipt.json"
+            tampered = deepcopy(receipt)
+            tampered["result"] = "2 passed"
+            tampered_path.write_text(json.dumps(tampered), encoding="utf-8")
+            tampered_result = self.run_cli("validate", "--kind", "receipt", str(tampered_path), "--format", "json")
+            self.assertEqual(tampered_result.returncode, 1)
+            self.assertIn("does not cover", json.loads(tampered_result.stdout)["semantic_errors"][0])
+
+    def test_irrelevant_caller_receipt_reuse_cannot_earn_high_score(self) -> None:
+        for status in ("Pass", "NotApplicable"):
+            with self.subTest(status=status):
+                coverage = self._full_coverage()
+                with tempfile.TemporaryDirectory() as tmp:
+                    project = Path(tmp)
+                    evidence = project / "README.md"
+                    evidence.write_text("This file is authentic but irrelevant to every surface.\n", encoding="utf-8")
+                    caller_receipt = {
+                        "reference": evidence.name,
+                        "sha256": hashlib.sha256(evidence.read_bytes()).hexdigest(),
+                        "origin": "caller-authored",
+                        "source_state": "caller claim",
+                        "result": "pass",
+                    }
+                    for row in coverage["surfaces"]:
+                        row["status"] = status
+                        row["evidence_reviewed"] = [] if status == "NotApplicable" else [evidence.name]
+                        row["evidence_receipts"] = []
+                        row["delegation_receipts"] = [caller_receipt] if status == "NotApplicable" else []
+                        if status == "NotApplicable":
+                            row["not_applicable_reason"] = "Delegated to the caller."
+                        else:
+                            row["evidence_receipts"] = [caller_receipt]
+                    findings_path = project / "findings.json"
+                    coverage_path = project / "coverage.json"
+                    findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
+                    coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
+                    result = self.run_cli(
+                        "score", "--findings", str(findings_path), "--coverage", str(coverage_path),
+                        "--no-history", "--format", "json",
+                    )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                score = json.loads(result.stdout)
+                self.assertEqual(score["score"], 29)
+                self.assertNotEqual(score["confidence"], "high")
+                self.assertLessEqual(score["score"], 84)
+                self.assertIn(84, [cap["cap"] for cap in score["caps_applied"]])
+                self.assertTrue(score["manual_evidence_needed"])
+
+    def test_finding_linked_only_to_fixed_finding_is_independently_blocked(self) -> None:
+        coverage = self._full_coverage()
+        findings = {
+            "findings": [{
+                "id": "F-FIXED-ISOLATION", "severity": "P0", "category": "C1",
+                "finding": "Prior isolation issue is fixed", "status": "fixed",
+            }]
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            for row in coverage["surfaces"]:
+                evidence = project / f"{row['id']}.txt"
+                evidence.write_text(f"verified {row['id']}\n", encoding="utf-8")
+                row["evidence_reviewed"] = [evidence.name]
+                row["evidence_receipts"] = [self._receipt(
+                    evidence, project, "fixture verifier", "temporary test tree",
+                    "non-empty artifact observed", surface_id=row["id"],
+                )]
+            s07 = next(row for row in coverage["surfaces"] if row["id"] == "S07")
+            s07.update(status="Finding", finding_ids=["F-FIXED-ISOLATION"])
+            findings_path = project / "findings.json"
+            coverage_path = project / "coverage.json"
+            findings_path.write_text(json.dumps(findings), encoding="utf-8")
+            coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
+            result = self.run_cli(
+                "score", "--findings", str(findings_path), "--coverage", str(coverage_path),
+                "--no-history", "--format", "json",
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        score = json.loads(result.stdout)
+        self.assertEqual(score["score"], 82)
+        self.assertNotEqual(score["confidence"], "high")
+        self.assertLessEqual(score["score"], 84)
+        self.assertIn(84, [cap["cap"] for cap in score["caps_applied"]])
+        self.assertIn("CY-COVERAGE-S07", score["findings_scored"])
+        c1 = next(category for category in score["per_category"] if category["id"] == "C1")
+        self.assertTrue(any("no linked unresolved finding" in item for item in c1["missing_evidence"]))
 
     def test_fabricated_evidence_references_cannot_earn_pass_credit(self) -> None:
         coverage = self._full_coverage()
