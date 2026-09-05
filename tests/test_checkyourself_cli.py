@@ -12,6 +12,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import tools.checkyourself as cy
+
 # Symbol-to-test map for verifier paths that CodeGraph cannot infer through
 # subprocess/CLI indirection: challenge_from_root/_run_challenge are covered by
 # the challenge tests below; _executed_receipt_hmac by the HMAC tests;
@@ -2853,6 +2855,126 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             c5 = next(item for item in json.loads(score.stdout)["per_category"] if item["id"] == "C5")
             self.assertEqual(c5["coverage_status"], "Pass")
             self.assertEqual(c5["verified_evidence"], [receipt["captured_output"]])
+
+    def test_semantic_normalizer_ignores_runtime_noise_but_keeps_content(self) -> None:
+        root = Path("/private/tmp/checkyourself-project")
+        first = cy.normalize_captured_output(
+            "1 passed in 0.012s  \r\n"
+            "finished 2026-09-05T12:34:56.123Z at /private/tmp/checkyourself-project/a.py (0:01:02)\n",
+            "",
+            root=root,
+        )
+        second = cy.normalize_captured_output(
+            "1 passed in 91ms\n"
+            "finished 2027-01-01T00:00:00+00:00 at /private/tmp/checkyourself-project/b.py (0:00:03)\n",
+            "",
+            root=root,
+        )
+        self.assertEqual(first, second)
+        changed = cy.normalize_captured_output("2 passed in 91ms\n", "", root=root)
+        self.assertNotEqual(first, changed)
+
+    def test_duration_printing_reexecution_keeps_executed_credit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            self._write_challenges(project, {
+                "S11": {
+                    "command": [
+                        sys.executable,
+                        "-c",
+                        "import pytest, time; print(f'1 passed in {time.time_ns()}ms')",
+                    ],
+                    "timeout_s": 10,
+                    "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
+                    "output_kind": "text",
+                },
+            })
+            challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
+            self.assertEqual(challenge.returncode, 0, challenge.stderr)
+            receipt = json.loads(challenge.stdout)["receipts"][0]
+            self.assertRegex(receipt["semantic_output_digest"], r"^[0-9a-f]{64}$")
+            first_score = self._score_challenge_receipt(project, receipt)
+            second_score = self._score_challenge_receipt(project, receipt)
+            for score in (first_score, second_score):
+                c5 = next(item for item in score["per_category"] if item["id"] == "C5")
+                self.assertEqual(c5["coverage_status"], "Pass")
+                self.assertEqual(c5["awarded"], 10)
+
+    def test_legacy_executed_receipt_rederives_semantic_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            self._write_challenges(project, {
+                "S11": {
+                    "command": [sys.executable, "-c", "import pytest; print('1 passed in 0.01s')"],
+                    "timeout_s": 10,
+                    "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
+                    "output_kind": "text",
+                },
+            })
+            challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
+            self.assertEqual(challenge.returncode, 0, challenge.stderr)
+            legacy = json.loads(challenge.stdout)["receipts"][0]
+            legacy.pop("semantic_output_digest")
+            legacy["receipt_sha256"] = cy._executed_receipt_binding_digest(legacy)
+            key = (project / ".checkyourself" / "local-integrity-binding.key").read_bytes()
+            legacy["local_integrity_hmac"] = cy._executed_receipt_hmac(legacy, key)
+            score = self._score_challenge_receipt(project, legacy)
+            c5 = next(item for item in score["per_category"] if item["id"] == "C5")
+            self.assertEqual(c5["coverage_status"], "Pass")
+
+    def test_exit_code_drift_is_unknown_even_when_output_is_similar(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            state_path = project / ".checkyourself" / "challenge-runs" / "state.txt"
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            state_path.write_text("pass\n", encoding="utf-8")
+            self._write_challenges(project, {
+                "S11": {
+                    "command": [
+                        sys.executable,
+                        "-c",
+                        "from pathlib import Path; import pytest, sys; print('1 passed checks'); raise SystemExit(0 if Path('.checkyourself/challenge-runs/state.txt').read_text().strip() == 'pass' else 7)",
+                    ],
+                    "timeout_s": 10,
+                    "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
+                    "output_kind": "text",
+                },
+            })
+            challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
+            self.assertEqual(challenge.returncode, 0, challenge.stderr)
+            receipt = json.loads(challenge.stdout)["receipts"][0]
+            state_path.write_text("fail\n", encoding="utf-8")
+            score = self._score_challenge_receipt(project, receipt)
+            c5 = next(item for item in score["per_category"] if item["id"] == "C5")
+            self.assertEqual(c5["coverage_status"], "Unknown")
+            self.assertTrue(any("exit code" in needed for item in score["manual_evidence_needed"] for needed in item["needed"]))
+
+    def test_fresh_assertion_failure_is_unknown(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            state_path = project / ".checkyourself" / "challenge-runs" / "state.txt"
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            state_path.write_text("pass\n", encoding="utf-8")
+            self._write_challenges(project, {
+                "S11": {
+                    "command": [
+                        sys.executable,
+                        "-c",
+                        "from pathlib import Path; import pytest; print('1 passed checks' if Path('.checkyourself/challenge-runs/state.txt').read_text().strip() == 'pass' else 'not a test result')",
+                    ],
+                    "timeout_s": 10,
+                    "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
+                    "output_kind": "text",
+                },
+            })
+            challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
+            self.assertEqual(challenge.returncode, 0, challenge.stderr)
+            receipt = json.loads(challenge.stdout)["receipts"][0]
+            state_path.write_text("fail\n", encoding="utf-8")
+            score = self._score_challenge_receipt(project, receipt)
+            c5 = next(item for item in score["per_category"] if item["id"] == "C5")
+            self.assertEqual(c5["coverage_status"], "Unknown")
+            self.assertTrue(any("assertions failed" in needed for item in score["manual_evidence_needed"] for needed in item["needed"]))
 
     def test_probe_e1_forged_merged_definition_receipt_is_unknown_without_hmac(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

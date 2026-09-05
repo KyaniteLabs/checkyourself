@@ -283,6 +283,20 @@ TEST_COUNT_RE = re.compile(r"(?im)\b\d+\s+(?:passed|failed|skipped|xfailed|xpass
 VACUOUS_REGEX_FIXTURES = ("", "echo", "echo-only", "ok", "success")
 LOCAL_INTEGRITY_HMAC_FIELD = "local_integrity_hmac"
 
+# Re-execution compares the meaning of captured output, not incidental process
+# bytes. Keep these patterns narrow: only values that are expected to change
+# between identical runs are normalized. Content edits must still change the
+# semantic digest.
+_DURATION_RE = re.compile(r"\bin\s+\d+(?:\.\d+)?\s*(?:ms|s)\b", re.IGNORECASE)
+_CLOCK_DURATION_RE = re.compile(r"\b\d+:\d{2}:\d{2}(?:\.\d+)?\b")
+_ISO_TIMESTAMP_RE = re.compile(
+    r"\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}"
+    r"(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})\b"
+)
+_TEMP_PATH_RE = re.compile(
+    r"(?<![A-Za-z0-9_])(?:/private)?/(?:tmp|var/folders)(?:/[^\s\"'<>]+)*"
+)
+
 # A receipt's cryptographic subject must also be a verifier artifact that is
 # relevant to the surface it claims to prove.  Keep the default contract
 # intentionally narrow: one per-surface directory, JSON records only, and a
@@ -341,6 +355,7 @@ EXECUTED_RECEIPT_BINDING_FIELDS = (
     "exit_code",
     "captured_output",
     "captured_output_digest",
+    "semantic_output_digest",
     "source_revision",
     "timestamp",
     "timed_out",
@@ -348,6 +363,9 @@ EXECUTED_RECEIPT_BINDING_FIELDS = (
     "execution_error",
     "challenge_config_digest",
     "run_id",
+)
+LEGACY_EXECUTED_RECEIPT_BINDING_FIELDS = tuple(
+    field for field in EXECUTED_RECEIPT_BINDING_FIELDS if field != "semantic_output_digest"
 )
 _NO_COVERAGE = object()
 EVIDENCE_PATH_RE = re.compile(
@@ -1198,7 +1216,14 @@ def _load_local_integrity_binding_key(root: Path, *, create: bool) -> bytes:
 
 
 def _executed_receipt_binding_bytes(receipt: dict) -> bytes:
-    binding = {field: receipt.get(field) for field in EXECUTED_RECEIPT_BINDING_FIELDS}
+    # Receipts minted before semantic re-execution existed have no semantic
+    # field and must retain their original binding so they can be re-derived.
+    fields = (
+        EXECUTED_RECEIPT_BINDING_FIELDS
+        if "semantic_output_digest" in receipt
+        else LEGACY_EXECUTED_RECEIPT_BINDING_FIELDS
+    )
+    binding = {field: receipt.get(field) for field in fields}
     return json.dumps(
         binding,
         sort_keys=True,
@@ -1224,6 +1249,68 @@ def _executed_receipt_hmac(receipt: dict, binding_key: bytes) -> str:
 
 def _captured_output_payload(stdout: str, stderr: str) -> str:
     return json.dumps({"stdout": stdout, "stderr": stderr}, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+
+
+def _normalize_output_text(value: str, *, root: Optional[Path] = None) -> str:
+    """Normalize only re-execution noise from one captured output stream.
+
+    The contract is deliberately deterministic: remove carriage returns, replace
+    durations, ISO-8601 timestamps, and absolute project/temp paths, then strip
+    trailing whitespace from each line. All other content remains significant.
+    """
+    text = value.replace("\r", "")
+    if root is not None:
+        try:
+            project_path = str(root.resolve())
+        except (OSError, RuntimeError):
+            project_path = str(root)
+        if project_path:
+            project_pattern = re.compile(
+                re.escape(project_path) + r"(?:[/\\][^\s\"'<>]+)*"
+            )
+            text = project_pattern.sub("<path>", text)
+    text = _TEMP_PATH_RE.sub("<path>", text)
+    text = _ISO_TIMESTAMP_RE.sub("<timestamp>", text)
+    text = _DURATION_RE.sub("in <duration>", text)
+    text = _CLOCK_DURATION_RE.sub("<duration>", text)
+    return "\n".join(line.rstrip() for line in text.split("\n"))
+
+
+def normalize_captured_output(
+    stdout: str,
+    stderr: str,
+    *,
+    root: Optional[Path] = None,
+) -> dict:
+    """Return the canonical semantic form of captured stdout and stderr."""
+    return {
+        "stdout": _normalize_output_text(stdout, root=root),
+        "stderr": _normalize_output_text(stderr, root=root),
+    }
+
+
+def semantic_output_digest(
+    exit_code: Optional[int],
+    stdout: str,
+    stderr: str,
+    command: Sequence[str],
+    *,
+    root: Optional[Path] = None,
+) -> str:
+    """Hash exit code, normalized output, and argv using canonical JSON."""
+    binding = {
+        "command": list(command),
+        "exit_code": exit_code,
+        "normalized_output": normalize_captured_output(stdout, stderr, root=root),
+    }
+    encoded = json.dumps(
+        binding,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _run_challenge(
@@ -1327,6 +1414,14 @@ def _make_challenge_receipt(
 ) -> dict:
     command = definition.get("command")
     argv = list(command) if isinstance(command, list) else []
+    capture = strict_json_loads(output_path.read_text(encoding="utf-8"))
+    semantic_digest = semantic_output_digest(
+        exit_code,
+        capture.get("stdout", ""),
+        capture.get("stderr", ""),
+        argv,
+        root=root,
+    )
     receipt = {
         "receipt_type": "EXECUTED",
         "surface_id": surface_id,
@@ -1335,6 +1430,7 @@ def _make_challenge_receipt(
         "exit_code": exit_code,
         "captured_output": output_path.relative_to(root).as_posix(),
         "captured_output_digest": hashlib.sha256(output_path.read_bytes()).hexdigest(),
+        "semantic_output_digest": semantic_digest,
         "source_revision": source_revision,
         "timestamp": now_iso(),
         "timed_out": timed_out,
@@ -2646,6 +2742,25 @@ def _verify_executed_receipt(
         return None, None, f"{prefix}: captured output record must contain stdout and stderr strings"
 
     base = _evidence_root(root)
+    stored_semantic_digest = receipt.get("semantic_output_digest")
+    if stored_semantic_digest is not None and (
+        not isinstance(stored_semantic_digest, str)
+        or not re.fullmatch(r"[0-9a-fA-F]{64}", stored_semantic_digest)
+    ):
+        return None, None, f"{prefix}: semantic_output_digest must be a 64-character hexadecimal hash"
+    derived_stored_semantic_digest = semantic_output_digest(
+        receipt.get("exit_code"),
+        capture["stdout"],
+        capture["stderr"],
+        receipt["command"],
+        root=base,
+    )
+    if stored_semantic_digest is not None and (
+        stored_semantic_digest.lower() != derived_stored_semantic_digest.lower()
+    ):
+        return None, None, f"{prefix}: semantic output digest does not match the stored capture"
+    stored_semantic_digest = stored_semantic_digest or derived_stored_semantic_digest
+
     definitions, config_error = load_challenge_config(base)
     if config_error:
         return None, None, f"{prefix}: current challenge configuration is invalid: {config_error}"
@@ -2662,18 +2777,35 @@ def _verify_executed_receipt(
     if receipt.get("source_revision") != current_revision:
         return None, None, f"{prefix}: source revision no longer matches the current project tree"
     fresh = _run_challenge(base, definition, surface_id=expected_surface_id)
-    fresh_capture = _captured_output_payload(fresh["stdout"], fresh["stderr"]).encode("utf-8")
-    fresh_digest = hashlib.sha256(fresh_capture).hexdigest()
-    if fresh_digest.lower() != expected_digest.lower():
-        return None, None, f"{prefix}: re-executed output digest does not match the receipt"
     if fresh["exit_code"] != receipt.get("exit_code"):
         return None, None, f"{prefix}: re-executed exit code does not match the receipt"
     if fresh["timed_out"] != receipt.get("timed_out"):
         return None, None, f"{prefix}: re-executed timeout state does not match the receipt"
     if fresh["execution_error"] != str(receipt.get("execution_error") or ""):
         return None, None, f"{prefix}: re-executed error state does not match the receipt"
+    fresh_status, fresh_reasons = _challenge_result(
+        definition,
+        surface_id=expected_surface_id,
+        exit_code=fresh["exit_code"],
+        stdout=fresh["stdout"],
+        stderr=fresh["stderr"],
+        timed_out=fresh["timed_out"],
+        execution_error=fresh["execution_error"],
+        root=base,
+    )
+    if receipt.get("status") == "PASS" and fresh_status != "PASS":
+        return None, None, f"{prefix}: re-executed challenge assertions failed: {'; '.join(fresh_reasons)}"
     if fresh["status"] != receipt.get("status"):
         return None, None, f"{prefix}: re-executed challenge status does not match the receipt"
+    fresh_semantic_digest = semantic_output_digest(
+        fresh["exit_code"],
+        fresh["stdout"],
+        fresh["stderr"],
+        definition.get("command") or [],
+        root=base,
+    )
+    if fresh_semantic_digest.lower() != stored_semantic_digest.lower():
+        return None, None, f"{prefix}: re-executed output digest does not match the receipt (semantic digest mismatch)"
     if current_tree_hash(base) != current_revision:
         return None, None, f"{prefix}: re-execution changed the current project tree"
     derived_status, reasons = _challenge_result(

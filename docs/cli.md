@@ -201,8 +201,15 @@ transitions remain explicit in `regressions` or `count_regression`.
 configuration with `shell=False`, a bounded timeout, and the configured output
 assertions. It captures stdout and stderr under `.checkyourself/challenge-runs/`,
 then writes one `EXECUTED` receipt per surface. The receipt records the argv
-list, exit code, capture digest, source tree hash computed before capture write,
-run identifier, local integrity binding HMAC, and timestamp. The local
+list, exit code, raw capture digest, semantic output digest, source tree hash
+computed before capture write, run identifier, local integrity binding HMAC,
+and timestamp. The raw capture digest is tamper evidence for the stored capture;
+the semantic digest is SHA-256 over canonical JSON containing the exit code,
+normalized stdout/stderr, and argv. Normalization removes carriage returns,
+replaces `in <number>s|ms` and `H:MM:SS` durations with duration placeholders,
+replaces ISO-8601 timestamps and absolute project/temp paths with placeholders,
+and strips trailing whitespace per line. All other output content remains
+significant. The local
 integrity binding key is created with mode `0600` at
 `.checkyourself/local-integrity-binding.key` and is never stored beside
 captures. It makes edits to project-local receipts detectable; it does not
@@ -233,11 +240,13 @@ earn full credit. The compatibility `receipt` command remains available, but
 its caller-authored fields are labelled `UNVERIFIED` and cannot earn full
 credit or high confidence. On re-check, the verifier requires the
 `local_integrity_hmac` field and re-executes the committed argv with the same
-timeout discipline. Fresh stdout and stderr must hash to the receipt's capture
-digest, the exit and timeout state must match, and the source tree must still
-match the pre-capture hash. The verifier also re-hashes the stored capture,
-re-applies the committed assertions, and rejects a receipt whose project tree
-or challenge definition changed. Missing or invalid local-integrity-binding
+timeout discipline. Fresh output must satisfy the committed assertions, match
+the receipt's exit and timeout/error state, and produce the same semantic
+digest; raw-byte equality is intentionally not required. The verifier also
+re-hashes the stored capture, re-applies the committed assertions to it, and
+rejects a receipt whose project tree or challenge definition changed. Receipts
+from before semantic digests existed are re-derived from their stored capture
+using the legacy receipt binding. Missing or invalid local-integrity-binding
 material earns no executed credit.
 
 ## Coverage
