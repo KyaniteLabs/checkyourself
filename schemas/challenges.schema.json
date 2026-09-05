@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CheckYourself Executed Challenge Configuration",
+  "type": "object",
+  "required": ["schema", "challenges"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schema": { "type": "string", "const": "checkyourself-challenges/1" },
+    "challenges": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "oneOf": [
+              { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 },
+              { "type": "null" }
+            ]
+          },
+          "cwd": { "type": "string", "minLength": 1 },
+          "timeout_s": { "type": "number", "exclusiveMinimum": 0 },
+          "success": {
+            "type": "object",
+            "properties": {
+              "exit_zero": { "type": "boolean" },
+              "json_field": {
+                "oneOf": [
+                  { "type": "object", "additionalProperties": { "type": ["string", "number", "boolean", "null"] } },
+                  { "type": "array", "items": {
+                    "type": "object",
+                    "required": ["path"],
+                    "properties": {
+                      "path": { "type": "string", "minLength": 1 },
+                      "equals": { "type": ["string", "number", "boolean", "null"] },
+                      "value": { "type": ["string", "number", "boolean", "null"] }
+                    },
+                    "additionalProperties": false
+                  } }
+                ]
+              },
+              "regex_not_match": {
+                "oneOf": [
+                  { "type": "string" },
+                  { "type": "array", "items": { "type": "string" } }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "output_kind": { "type": "string", "enum": ["text", "json"] },
+          "requires_explicit_config": { "type": "boolean" },
+          "description": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

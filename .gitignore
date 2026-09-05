@@ -20,3 +20,4 @@ CHECKYOURSELF_RECHECK.md
 CHECKYOURSELF_*.generated.md
 CHECKYOURSELF_*.generated.json
 .checkyourself-score-history.json
+.checkyourself/challenge-runs/

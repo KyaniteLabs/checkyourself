@@ -19,6 +19,7 @@ import json
 import math
 import os
 import re
+import subprocess
 import sys
 import tempfile
 import traceback
@@ -32,6 +33,8 @@ COVERAGE_SCHEMA_ID = "checkyourself-coverage/1"
 SCORE_SCHEMA_ID = "checkyourself-score/1"
 CAPABILITIES_SCHEMA_ID = "checkyourself-capabilities/1"
 RECEIPT_SCHEMA_ID = "checkyourself-receipt/1"
+CHALLENGE_SCHEMA_ID = "checkyourself-challenges/1"
+CHALLENGE_RESULT_SCHEMA_ID = "checkyourself-challenge/1"
 RECEIPT_ISSUER = "checkyourself-verifier/1"
 MCP_PROTOCOL_VERSION = "2025-11-25"
 SUPPORTED_MCP_PROTOCOLS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
@@ -49,6 +52,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_DIR = ROOT / "schemas"
 DEFAULT_COVERAGE_PATH = "CHECKYOURSELF_COVERAGE.generated.json"
 DEFAULT_SCORE_HISTORY_PATH = ".checkyourself-score-history.json"
+DEFAULT_CHALLENGES_PATH = ".checkyourself/challenges.json"
+DEFAULT_CHALLENGE_OUTPUT_DIR = ".checkyourself/challenge-runs"
 CONFIG_NAMES = (".checkyourself.yml", ".checkyourself.yaml", ".checkyourself.json")
 
 IGNORED_DIRS = {
@@ -278,6 +283,21 @@ RECEIPT_BINDING_FIELDS = (
     "result",
     "issuer",
     "issued_at",
+)
+EXECUTED_RECEIPT_BINDING_FIELDS = (
+    "receipt_type",
+    "surface_id",
+    "command",
+    "cwd",
+    "exit_code",
+    "captured_output",
+    "captured_output_digest",
+    "source_revision",
+    "timestamp",
+    "timed_out",
+    "status",
+    "execution_error",
+    "challenge_config_digest",
 )
 _NO_COVERAGE = object()
 EVIDENCE_PATH_RE = re.compile(
@@ -642,6 +662,442 @@ def load_checkyourself_config(root: Path) -> dict:
         "suppress": [],
         "verification_artifact_registry": _copy_verification_registry(DEFAULT_VERIFICATION_ARTIFACT_REGISTRY),
     }
+
+
+def _default_challenge_definitions() -> dict:
+    """Return fail-closed challenge defaults for every canonical surface."""
+    return {
+        sid: {
+            "requires_explicit_config": True,
+            "cwd": ".",
+            "timeout_s": 60,
+            "success": {"exit_zero": True},
+            "output_kind": "text",
+            "description": "Provide a project-specific verifier command for this surface.",
+        }
+        for sid, _surface, _category in COVERAGE_SURFACES
+    }
+
+
+def _challenge_surface_map(data: Any) -> Optional[dict]:
+    if not isinstance(data, dict):
+        return None
+    for key in ("challenges", "surfaces", "challenge_registry"):
+        value = data.get(key)
+        if value is not None:
+            return value if isinstance(value, dict) else {}
+    return None
+
+
+def _challenge_definition_errors(definition: Any, surface_id: str) -> List[str]:
+    if not isinstance(definition, dict):
+        return [f"{surface_id} challenge must be an object"]
+    errors: List[str] = []
+    command = definition.get("command")
+    explicit = definition.get("requires_explicit_config", False)
+    if not isinstance(explicit, bool):
+        errors.append(f"{surface_id} requires_explicit_config must be boolean")
+    if command is not None:
+        if not isinstance(command, list) or not command or not all(
+            isinstance(part, str) and part.strip() for part in command
+        ):
+            errors.append(f"{surface_id} command must be a non-empty argv list of strings")
+    elif not explicit:
+        errors.append(f"{surface_id} challenge is missing a command")
+    if "cwd" in definition:
+        cwd = definition.get("cwd")
+        if not isinstance(cwd, str) or not cwd.strip():
+            errors.append(f"{surface_id} cwd must be a non-empty relative path")
+        elif Path(cwd).is_absolute() or ".." in Path(cwd).parts:
+            errors.append(f"{surface_id} cwd must stay inside the project root")
+    timeout = definition.get("timeout_s", 60)
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(float(timeout)) or timeout <= 0:
+        errors.append(f"{surface_id} timeout_s must be a finite positive number")
+    if definition.get("output_kind", "text") not in {"text", "json"}:
+        errors.append(f"{surface_id} output_kind must be text or json")
+
+    success = definition.get("success", {"exit_zero": True})
+    if not isinstance(success, dict):
+        errors.append(f"{surface_id} success must be an object")
+    else:
+        exit_zero = success.get("exit_zero", True)
+        if not isinstance(exit_zero, bool):
+            errors.append(f"{surface_id} success.exit_zero must be boolean")
+        json_field = success.get("json_field")
+        if json_field is not None and not isinstance(json_field, (dict, list)):
+            errors.append(f"{surface_id} success.json_field must be an object or array")
+        regex_not_match = success.get("regex_not_match", [])
+        if isinstance(regex_not_match, str):
+            regex_not_match = [regex_not_match]
+        if not isinstance(regex_not_match, list) or not all(isinstance(pattern, str) for pattern in regex_not_match):
+            errors.append(f"{surface_id} success.regex_not_match must be a string array")
+        else:
+            for pattern in regex_not_match:
+                try:
+                    re.compile(pattern)
+                except re.error as exc:
+                    errors.append(f"{surface_id} success.regex_not_match has invalid regex: {exc}")
+    return errors
+
+
+def load_challenge_config(root: Path) -> Tuple[dict, Optional[str]]:
+    """Load committed challenge definitions and merge only explicit overrides."""
+    root = root.resolve()
+    definitions = _default_challenge_definitions()
+    candidates: List[Tuple[Path, Any]] = []
+    dedicated = root / DEFAULT_CHALLENGES_PATH
+    if dedicated.exists():
+        try:
+            data = strict_json_loads(dedicated.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, ValueError) as exc:
+            return definitions, f"{dedicated}: could not be parsed as JSON: {exc}"
+        candidates.append((dedicated, data))
+    else:
+        for name in (".checkyourself.json",):
+            path = root / name
+            if not path.exists():
+                continue
+            try:
+                candidates.append((path, strict_json_loads(path.read_text(encoding="utf-8"))))
+            except (OSError, UnicodeError, ValueError) as exc:
+                return definitions, f"{path}: could not be parsed as JSON: {exc}"
+
+    config_error: Optional[str] = None
+    canonical_ids = {sid for sid, _surface, _category in COVERAGE_SURFACES}
+    for path, data in candidates:
+        surface_map = _challenge_surface_map(data)
+        if surface_map is None:
+            continue
+        if not isinstance(surface_map, dict):
+            config_error = f"{path}: challenge registry must be an object"
+            continue
+        if path.name == "challenges.json":
+            schema_errors = validate_json_schema(data, load_schema("challenges"))
+            if schema_errors:
+                config_error = f"{path}: invalid challenge configuration: {'; '.join(schema_errors)}"
+        for sid, raw_definition in surface_map.items():
+            if sid not in canonical_ids:
+                config_error = f"{path}: unknown challenge surface {sid!r}"
+                continue
+            if not isinstance(raw_definition, dict):
+                config_error = f"{path}: {sid} challenge must be an object"
+                definitions[sid] = raw_definition
+                continue
+            merged = dict(definitions[sid])
+            merged.update(raw_definition)
+            definitions[sid] = merged
+
+    definition_errors = [
+        error
+        for sid, definition in definitions.items()
+        for error in _challenge_definition_errors(definition, sid)
+    ]
+    if definition_errors:
+        config_error = "; ".join(item for item in (config_error, *definition_errors) if item)
+    return definitions, config_error
+
+
+def _challenge_config_digest(definition: dict) -> str:
+    encoded = json.dumps(definition, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _challenge_tree_excluded(relative: Path) -> bool:
+    parts = relative.parts
+    if ".git" in parts or any(part in IGNORED_DIRS or part in {".codegraph", ".omx", ".omc", ".claude"} for part in parts):
+        return True
+    if parts[:2] == (".checkyourself", "challenge-runs"):
+        return True
+    if parts and parts[0].startswith("_retrofit-"):
+        return True
+    if relative.name.startswith("CHECKYOURSELF_") and relative.name.endswith(".generated.json"):
+        return True
+    if relative.name in {"findings.json", "coverage.json", "score.json"}:
+        return True
+    return False
+
+
+def current_tree_hash(root: Path) -> str:
+    """Hash the current project tree, including dirty and untracked source."""
+    root = root.resolve()
+    digest = hashlib.sha256()
+    files: List[Path] = []
+    for directory, dirnames, filenames in os.walk(root, followlinks=False):
+        dirnames[:] = sorted(name for name in dirnames if name not in IGNORED_DIRS and name not in {".codegraph", ".omx", ".omc", ".claude"})
+        for name in sorted(filenames):
+            path = Path(directory) / name
+            relative = path.relative_to(root)
+            if _challenge_tree_excluded(relative) or path.is_symlink():
+                continue
+            files.append(path)
+    for path in sorted(files):
+        relative = path.relative_to(root).as_posix().encode("utf-8")
+        try:
+            content = path.read_bytes()
+        except OSError as exc:
+            content = f"<unreadable:{exc}>".encode("utf-8", "replace")
+        digest.update(relative + b"\0" + hashlib.sha256(content).digest() + b"\0")
+    return digest.hexdigest()
+
+
+def _challenge_cwd(root: Path, definition: dict) -> Path:
+    raw = str(definition.get("cwd") or ".")
+    candidate = (root / raw).resolve()
+    try:
+        candidate.relative_to(root.resolve())
+    except ValueError as exc:
+        raise CliError(f"challenge cwd escapes project root: {raw!r}") from exc
+    if not candidate.is_dir():
+        raise CliError(f"challenge cwd does not exist: {candidate}")
+    return candidate
+
+
+def _json_path_value(value: Any, path: str) -> Tuple[bool, Any]:
+    current = value
+    for component in path.split(".") if path else []:
+        if isinstance(current, dict) and component in current:
+            current = current[component]
+        else:
+            return False, None
+    return True, current
+
+
+def _json_field_assertions(value: Any) -> List[Tuple[str, Any]]:
+    if isinstance(value, dict) and "path" in value:
+        return [(str(value.get("path") or ""), value.get("equals", value.get("value")))]
+    if isinstance(value, dict):
+        return [(str(path), expected) for path, expected in value.items()]
+    if isinstance(value, list):
+        assertions: List[Tuple[str, Any]] = []
+        for item in value:
+            if isinstance(item, dict) and "path" in item:
+                assertions.append((str(item.get("path") or ""), item.get("equals", item.get("value"))))
+        return assertions
+    return []
+
+
+def _challenge_result(
+    definition: dict,
+    *,
+    exit_code: Optional[int],
+    stdout: str,
+    stderr: str,
+    timed_out: bool,
+    execution_error: str,
+) -> Tuple[str, List[str]]:
+    """Evaluate committed assertions against verifier-captured subprocess output."""
+    success = definition.get("success") or {"exit_zero": True}
+    reasons: List[str] = []
+    if timed_out:
+        reasons.append("challenge timed out")
+    if execution_error:
+        reasons.append(execution_error)
+    expected_zero = success.get("exit_zero", True)
+    if expected_zero and exit_code != 0:
+        reasons.append(f"exit code was {exit_code!r}, expected zero")
+    if not expected_zero and exit_code == 0:
+        reasons.append("exit code was zero, expected a non-zero result")
+    output_kind = definition.get("output_kind", "text")
+    parsed: Any = None
+    if output_kind == "json" or success.get("json_field") is not None:
+        try:
+            parsed = strict_json_loads(stdout)
+        except (ValueError, UnicodeError) as exc:
+            reasons.append(f"stdout was not valid JSON: {exc}")
+    for path, expected in _json_field_assertions(success.get("json_field")):
+        found, actual = _json_path_value(parsed, path)
+        if not found or actual != expected:
+            reasons.append(f"JSON field {path!r} did not equal the configured expected value")
+    combined = stdout + ("\n" if stdout and stderr else "") + stderr
+    patterns = success.get("regex_not_match", [])
+    if isinstance(patterns, str):
+        patterns = [patterns]
+    for pattern in patterns or []:
+        if re.search(pattern, combined):
+            reasons.append(f"captured output matched forbidden regex {pattern!r}")
+    return ("PASS" if not reasons else "FAIL"), reasons
+
+
+def _executed_receipt_binding_digest(receipt: dict) -> str:
+    binding = {field: receipt.get(field) for field in EXECUTED_RECEIPT_BINDING_FIELDS}
+    encoded = json.dumps(binding, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _captured_output_payload(stdout: str, stderr: str) -> str:
+    return json.dumps({"stdout": stdout, "stderr": stderr}, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+
+
+def _make_challenge_receipt(
+    root: Path,
+    surface_id: str,
+    definition: dict,
+    output_path: Path,
+    *,
+    exit_code: Optional[int],
+    status: str,
+    timed_out: bool,
+    execution_error: str,
+    source_revision: str,
+) -> dict:
+    command = definition.get("command")
+    argv = list(command) if isinstance(command, list) else []
+    receipt = {
+        "receipt_type": "EXECUTED",
+        "surface_id": surface_id,
+        "command": argv,
+        "cwd": str(definition.get("cwd") or "."),
+        "exit_code": exit_code,
+        "captured_output": output_path.relative_to(root).as_posix(),
+        "captured_output_digest": hashlib.sha256(output_path.read_bytes()).hexdigest(),
+        "source_revision": source_revision,
+        "timestamp": now_iso(),
+        "timed_out": timed_out,
+        "status": status,
+        "execution_error": execution_error,
+        "challenge_config_digest": _challenge_config_digest(definition),
+    }
+    receipt["receipt_sha256"] = _executed_receipt_binding_digest(receipt)
+    return receipt
+
+
+def _challenge_finding(surface_id: str, reason: str, evidence: str) -> dict:
+    category = next((category for sid, _surface, category in COVERAGE_SURFACES if sid == surface_id), "C5")
+    if category not in SCORE_CATEGORIES:
+        category = "C5"
+    return {
+        "id": f"CY-CHALLENGE-{surface_id}",
+        "severity": "P1",
+        "category": category,
+        "finding": f"Executed challenge failed for {surface_id}",
+        "plain_english_risk": reason,
+        "evidence": [evidence],
+        "recommended_fix": "Fix the challenged surface or update its committed command/assertions, then rerun the challenge.",
+        "status": "open",
+    }
+
+
+def challenge_from_root(root: Path, surface_id: Optional[str] = None, output_dir: Optional[Path] = None) -> dict:
+    root = root.resolve()
+    if not root.is_dir():
+        raise CliError(f"project root not found: {root}")
+    definitions, config_error = load_challenge_config(root)
+    selected = [surface_id] if surface_id else [sid for sid, _surface, _category in COVERAGE_SURFACES]
+    canonical_ids = {sid for sid, _surface, _category in COVERAGE_SURFACES}
+    unknown = sorted(set(selected) - canonical_ids)
+    if unknown:
+        raise CliError(f"challenge surface must be canonical: {', '.join(unknown)}")
+    destination = (output_dir or (root / DEFAULT_CHALLENGE_OUTPUT_DIR)).resolve()
+    try:
+        destination.relative_to(root)
+    except ValueError as exc:
+        raise CliError("challenge output directory must stay inside the project root") from exc
+    destination.mkdir(parents=True, exist_ok=True)
+    source_revision = current_tree_hash(root)
+    receipts: List[dict] = []
+    findings: List[dict] = []
+    surface_results: List[dict] = []
+    for sid in selected:
+        definition = definitions.get(sid, {})
+        stdout = ""
+        stderr = ""
+        exit_code: Optional[int] = None
+        timed_out = False
+        execution_error = config_error or ""
+        status = "FAIL"
+        reasons: List[str] = []
+        command = definition.get("command") if isinstance(definition, dict) else None
+        if not execution_error and isinstance(command, list) and command:
+            try:
+                cwd = _challenge_cwd(root, definition)
+                completed = subprocess.run(
+                    command,
+                    cwd=str(cwd),
+                    shell=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=float(definition.get("timeout_s", 60)),
+                    check=False,
+                )
+                stdout = completed.stdout or ""
+                stderr = completed.stderr or ""
+                exit_code = completed.returncode
+                status, reasons = _challenge_result(
+                    definition,
+                    exit_code=exit_code,
+                    stdout=stdout,
+                    stderr=stderr,
+                    timed_out=False,
+                    execution_error="",
+                )
+            except subprocess.TimeoutExpired as exc:
+                timed_out = True
+                stdout = exc.stdout or ""
+                stderr = exc.stderr or ""
+                if isinstance(stdout, bytes):
+                    stdout = stdout.decode("utf-8", "replace")
+                if isinstance(stderr, bytes):
+                    stderr = stderr.decode("utf-8", "replace")
+                status, reasons = _challenge_result(
+                    definition,
+                    exit_code=None,
+                    stdout=stdout,
+                    stderr=stderr,
+                    timed_out=True,
+                    execution_error="",
+                )
+            except (OSError, ValueError, CliError) as exc:
+                execution_error = str(exc)
+                status, reasons = _challenge_result(
+                    definition,
+                    exit_code=None,
+                    stdout=stdout,
+                    stderr=stderr,
+                    timed_out=False,
+                    execution_error=execution_error,
+                )
+        else:
+            if not execution_error:
+                execution_error = f"{sid} requires an explicit committed command; no command was configured"
+            reasons = [execution_error]
+        output_path = destination / f"{sid}.capture.json"
+        safe_write_text(output_path, _captured_output_payload(stdout, stderr))
+        receipt = _make_challenge_receipt(
+            root,
+            sid,
+            definition if isinstance(definition, dict) else {},
+            output_path,
+            exit_code=exit_code,
+            status=status,
+            timed_out=timed_out,
+            execution_error=execution_error,
+            source_revision=source_revision,
+        )
+        receipt_path = destination / f"{sid}.receipt.json"
+        safe_write_text(receipt_path, json.dumps(receipt, indent=2, sort_keys=True, allow_nan=False) + "\n")
+        receipt["receipt_path"] = receipt_path.relative_to(root).as_posix()
+        receipt["captured_output"] = output_path.relative_to(root).as_posix()
+        receipts.append(receipt)
+        if status != "PASS":
+            findings.append(_challenge_finding(sid, "; ".join(reasons), receipt["captured_output"]))
+        surface_results.append({
+            "surface_id": sid,
+            "status": status,
+            "reasons": reasons,
+            "receipt": receipt,
+        })
+    result = {
+        "tool": TOOL_NAME,
+        "schema": CHALLENGE_RESULT_SCHEMA_ID,
+        "generated_at": now_iso(),
+        "project": str(root),
+        "source_revision": source_revision,
+        "complete": not findings and not config_error,
+        "surfaces": surface_results,
+        "receipts": receipts,
+        "findings": findings,
+    }
+    return result
 
 
 def evidence_path(evidence: str) -> str:
@@ -1767,6 +2223,102 @@ def _receipt_binding_digest(receipt: dict) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _resolve_captured_output(reference: Any, root: Optional[Path]) -> Tuple[Optional[Path], str]:
+    extracted = _evidence_reference(reference)
+    if not extracted:
+        return None, "captured output reference does not contain a file path"
+    base = _evidence_root(root)
+    candidate = Path(extracted)
+    if not candidate.is_absolute():
+        candidate = base / candidate
+    try:
+        resolved = candidate.resolve()
+        resolved.relative_to(base)
+    except (OSError, RuntimeError, ValueError):
+        return None, f"captured output is outside evidence root {base}"
+    if not resolved.is_file() or resolved.is_symlink():
+        return None, "captured output file does not exist as a regular file"
+    return resolved, ""
+
+
+def _verify_executed_receipt(
+    receipt: dict,
+    root: Optional[Path],
+    *,
+    expected_surface_id: Optional[str],
+) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """Verify an executed receipt from its stored capture, never caller prose."""
+    prefix = "executed receipt"
+    if expected_surface_id is None or receipt.get("surface_id") != expected_surface_id:
+        return None, None, f"{prefix}: surface binding does not match the coverage surface"
+    receipt_id = receipt.get("receipt_sha256")
+    if not isinstance(receipt_id, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", receipt_id):
+        return None, None, f"{prefix}: receipt_sha256 must be a 64-character hexadecimal binding hash"
+    if receipt_id.lower() != _executed_receipt_binding_digest(receipt).lower():
+        return None, None, f"{prefix}: receipt_sha256 does not cover executed fields"
+    if receipt.get("status") not in {"PASS", "FAIL"}:
+        return None, None, f"{prefix}: status must be PASS or FAIL"
+    if not isinstance(receipt.get("command"), list) or not all(isinstance(part, str) for part in receipt["command"]):
+        return None, None, f"{prefix}: command must be an argv list"
+    if not isinstance(receipt.get("source_revision"), str) or not receipt["source_revision"].strip():
+        return None, None, f"{prefix}: source_revision is missing"
+    if not isinstance(receipt.get("timed_out"), bool):
+        return None, None, f"{prefix}: timed_out must be boolean"
+    output_path, reason = _resolve_captured_output(receipt.get("captured_output"), root)
+    if output_path is None:
+        return None, None, f"{prefix}: {reason}"
+    try:
+        raw_capture = output_path.read_bytes()
+    except OSError as exc:
+        return None, None, f"{prefix}: could not read captured output: {exc}"
+    expected_digest = receipt.get("captured_output_digest")
+    if not isinstance(expected_digest, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", expected_digest):
+        return None, None, f"{prefix}: captured_output_digest must be a 64-character hexadecimal hash"
+    actual_digest = hashlib.sha256(raw_capture).hexdigest()
+    if actual_digest.lower() != expected_digest.lower():
+        return None, None, f"{prefix}: captured output digest does not match the stored file"
+    try:
+        capture = strict_json_loads(raw_capture.decode("utf-8"))
+    except (UnicodeError, ValueError) as exc:
+        return None, None, f"{prefix}: captured output is not a valid capture record: {exc}"
+    if not isinstance(capture, dict) or not isinstance(capture.get("stdout"), str) or not isinstance(capture.get("stderr"), str):
+        return None, None, f"{prefix}: captured output record must contain stdout and stderr strings"
+
+    base = _evidence_root(root)
+    definitions, config_error = load_challenge_config(base)
+    if config_error:
+        return None, None, f"{prefix}: current challenge configuration is invalid: {config_error}"
+    definition = definitions.get(expected_surface_id)
+    if not isinstance(definition, dict):
+        return None, None, f"{prefix}: current challenge definition is missing"
+    if receipt.get("challenge_config_digest") != _challenge_config_digest(definition):
+        return None, None, f"{prefix}: challenge definition changed since execution"
+    if receipt.get("command") != list(definition.get("command") or []):
+        return None, None, f"{prefix}: command does not match the committed challenge definition"
+    if receipt.get("cwd") != str(definition.get("cwd") or "."):
+        return None, None, f"{prefix}: cwd does not match the committed challenge definition"
+    current_revision = current_tree_hash(base)
+    if receipt.get("source_revision") != current_revision:
+        return None, None, f"{prefix}: source revision no longer matches the current project tree"
+    derived_status, reasons = _challenge_result(
+        definition,
+        exit_code=receipt.get("exit_code"),
+        stdout=capture["stdout"],
+        stderr=capture["stderr"],
+        timed_out=receipt.get("timed_out", False),
+        execution_error=str(receipt.get("execution_error") or ""),
+    )
+    if derived_status != receipt.get("status"):
+        return None, None, f"{prefix}: stored status does not match captured output and assertions"
+    try:
+        relative = output_path.relative_to(base).as_posix()
+    except ValueError:
+        relative = str(output_path)
+    if derived_status == "FAIL":
+        return relative, "; ".join(reasons) or "executed challenge failed", None
+    return relative, None, None
+
+
 def _receipt_text_fields(receipt: dict) -> List[str]:
     return [
         field
@@ -1832,6 +2384,7 @@ def issue_receipt(
     except ValueError:
         relative = str(resolved)
     receipt = {
+        "receipt_class": "UNVERIFIED",
         "reference": relative,
         "sha256": artifact_digest,
         "subject_digest": subject_digest,
@@ -1858,6 +2411,7 @@ def _verify_receipts(
     expected_claim: Optional[str] = None,
     used_receipt_ids: Optional[set[str]] = None,
     registry: Optional[dict] = None,
+    failed_receipts: Optional[List[dict]] = None,
 ) -> Tuple[List[str], List[str]]:
     """Verify verifier-issued, surface-bound receipts without trusting prose."""
     if not isinstance(receipts, list) or not receipts:
@@ -1870,6 +2424,40 @@ def _verify_receipts(
         if not isinstance(receipt, dict):
             errors.append(f"{prefix} is not an object")
             continue
+        if receipt.get("receipt_type") == "EXECUTED":
+            receipt_id = receipt.get("receipt_sha256")
+            if isinstance(receipt_id, str) and receipt_id.lower() in seen_receipt_ids:
+                errors.append(f"{prefix}: receipt reuse is not allowed across surfaces or claims")
+                continue
+            relative, failure, executed_error = _verify_executed_receipt(
+                receipt,
+                root,
+                expected_surface_id=expected_surface_id,
+            )
+            if executed_error:
+                errors.append(f"{prefix}: {executed_error}")
+                continue
+            if relative is None:
+                errors.append(f"{prefix}: executed receipt did not identify captured output")
+                continue
+            if receipt_id is not None:
+                seen_receipt_ids.add(receipt_id.lower())
+            if failure:
+                if failed_receipts is not None:
+                    failed_receipts.append({
+                        "surface_id": receipt.get("surface_id"),
+                        "reference": relative,
+                        "reason": failure,
+                    })
+                errors.append(f"{prefix}: FAIL — {failure}")
+                continue
+            verified.append(relative)
+            continue
+        # Keep the compatibility receipt command, but make its trust boundary
+        # explicit. Its fields still originate with the caller and cannot prove
+        # that the verifier executed anything.
+        errors.append(f"{prefix}: UNVERIFIED caller-issued receipt; run challenge to mint executed evidence")
+        continue
         missing_fields = _receipt_text_fields(receipt)
         if missing_fields:
             errors.append(f"{prefix}: missing verifier binding fields: {', '.join(missing_fields)}")
@@ -1967,6 +2555,7 @@ def _coverage_evidence_state(
         "status": status,
         "verified_evidence": [],
         "verified_delegation": [],
+        "failed_receipts": [],
         "warnings": [],
     }
     surface_id = _coverage_surface_id(item)
@@ -1981,6 +2570,7 @@ def _coverage_evidence_state(
             expected_surface_id=surface_id,
             expected_claim=claim,
             used_receipt_ids=used_receipt_ids,
+            failed_receipts=result["failed_receipts"],
         )
         asserted: List[str] = []
         for assertion in item.get("evidence_reviewed") or []:
@@ -2005,6 +2595,7 @@ def _coverage_evidence_state(
             expected_surface_id=surface_id,
             expected_claim=claim,
             used_receipt_ids=used_receipt_ids,
+            failed_receipts=result["failed_receipts"],
         )
         result["verified_delegation"] = verified
         result["warnings"].extend(f"delegation receipt: {error}" for error in errors)
@@ -2391,6 +2982,22 @@ def category_coverage(
             state["missing_evidence"].extend(
                 f"{sid or 'surface'}: {warning}" for warning in evidence_state["warnings"]
             )
+        for failed in evidence_state.get("failed_receipts") or []:
+            failed_id = f"CY-CHALLENGE-{sid or category}"
+            state["coverage_findings"].append({
+                "id": failed_id,
+                "finding_id": failed_id,
+                "severity": "P1",
+                "category": category,
+                "finding": f"Executed challenge failed for {sid or category}",
+                "plain_english_risk": str(failed.get("reason") or "The verifier-owned challenge failed."),
+                "status": "open",
+                "linked_finding_ids": [],
+            })
+            state["has_unknown"] = True
+            state["missing_evidence"].append(
+                f"{sid or category}: executed challenge failed ({failed.get('reference') or 'capture'})"
+            )
         if status == "Unknown":
             state["has_unknown"] = True
         if status == "Finding":
@@ -2549,6 +3156,7 @@ def score_from_inputs(
     per_category: List[dict] = []
     raw_total = 0.0
     coverage_findings_scored: List[str] = []
+    challenge_failure_ids: set[str] = set()
 
     for cid, (name, weight) in SCORE_CATEGORIES.items():
         if (
@@ -2566,6 +3174,8 @@ def score_from_inputs(
             if not live_linked:
                 category_findings.append(coverage_finding)
                 coverage_findings_scored.append(coverage_finding["id"])
+                if str(coverage_finding.get("id") or "").startswith("CY-CHALLENGE-"):
+                    challenge_failure_ids.add(str(coverage_finding["id"]))
                 coverage_state = coverage_by_category[cid]
                 coverage_state["has_unknown"] = True
                 coverage_state["missing_evidence"].append(
@@ -2630,6 +3240,11 @@ def score_from_inputs(
     if counts["P1"]:
         cap_value = min(cap_value, 74)
         caps.append({"cap": 74, "reason": "unresolved P1 finding"})
+    if challenge_failure_ids:
+        counts["P1"] += len(challenge_failure_ids)
+        if cap_value > 74:
+            cap_value = 74
+            caps.append({"cap": 74, "reason": "failing executed challenge"})
 
     critical_gap = False
     high_score_gap = False
@@ -2945,6 +3560,7 @@ def describe_capabilities() -> dict:
         ("diagnostic", "Alias for scan; use it when docs or agents ask to run a diagnostic.", {"project": "path", "deep": "optional boolean"}, SCAN_SCHEMA_ID),
         ("coverage --emit", "Write the 20-surface coverage skeleton by default, or print JSON with --format json.", {"project": "optional string"}, COVERAGE_SCHEMA_ID),
         ("coverage --check", "Validate coverage completeness.", {"file": "coverage json path"}, "checkyourself-coverage-check/1"),
+        ("challenge", "Execute committed per-surface commands and mint executed receipts from verifier-captured output.", {"project": "optional path", "surface": "optional canonical surface ID"}, CHALLENGE_RESULT_SCHEMA_ID),
         ("receipt", "Issue one verifier-hashed receipt only for a registered, surface-specific verification artifact.", {"reference": "registered artifact path", "surface_id": "canonical surface ID", "source_revision": "revision", "command": "command recorded at issuance", "claim": "claim", "result": "observed result", "source_state": "source/environment state", "subject_digest": "optional content hash assertion"}, RECEIPT_SCHEMA_ID),
         ("score", "Compute a deterministic Production Reality Score from findings and optional verifier-checked coverage; optionally record a completion claim without executing a challenge runner.", {"findings": "json path", "coverage": "optional json path", "claim": "optional accepted completion claim", "history": "optional path"}, SCORE_SCHEMA_ID),
         ("backlog", "Rank remediation backlog and return a highest-severity batch; safety analysis is not performed.", {"findings": "json path"}, "checkyourself-backlog/1"),
@@ -3016,6 +3632,8 @@ def schema_registry() -> Dict[str, str]:
         "learning-plan": "learning-plan.schema.json",
         "scan": "scan.schema.json",
         "coverage": "coverage.schema.json",
+        "challenges": "challenges.schema.json",
+        "challenge": "challenge-result.schema.json",
         "receipt": "receipt.schema.json",
         "score": "score-result.schema.json",
         "backlog": "backlog.schema.json",
@@ -3641,6 +4259,31 @@ def command_coverage(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_challenge(args: argparse.Namespace) -> int:
+    root = Path(args.root or args.project).resolve()
+    output_dir = None
+    if args.output_dir:
+        output_dir = Path(args.output_dir)
+        if not output_dir.is_absolute():
+            output_dir = root / output_dir
+    result = challenge_from_root(root, args.surface, output_dir)
+    if args.out:
+        out = Path(args.out)
+        if not out.is_absolute():
+            out = Path.cwd() / out
+        safe_write_text(out, json.dumps(result, indent=2, sort_keys=True, allow_nan=False) + "\n")
+    if args.format == "json":
+        write_json(result)
+    else:
+        print("Challenges passed" if result["complete"] else "Challenges incomplete")
+        for item in result["surfaces"]:
+            print(f"- {item['surface_id']}: {item['status']}")
+            for reason in item.get("reasons") or []:
+                print(f"  {reason}")
+        print(f"Receipts: {len(result['receipts'])}")
+    return 0 if result["complete"] else 1
+
+
 def command_receipt(args: argparse.Namespace) -> int:
     root = Path(args.root).resolve()
     if not root.is_dir():
@@ -4237,6 +4880,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--format", choices=("text", "json"), default="text")
     p.set_defaults(func=command_coverage)
 
+    p = sub.add_parser("challenge", help="Execute committed per-surface challenges and mint verifier-owned receipts.")
+    p.add_argument("project", nargs="?", default=".", help="Project root to challenge (default: current directory).")
+    p.add_argument("--root", help="Alias for the project root; useful when composing commands.")
+    p.add_argument("--surface", choices=[sid for sid, _surface, _category in COVERAGE_SURFACES], help="Run one canonical surface instead of all configured surfaces.")
+    p.add_argument("--output-dir", help="Directory under the project root for captured output and receipts.")
+    p.add_argument("--out", help="Write the challenge result JSON to this path.")
+    p.add_argument("--format", choices=("text", "json"), default="text")
+    p.set_defaults(func=command_challenge)
+
     p = sub.add_parser("receipt", help="Issue one verifier-hashed receipt for a registered surface artifact.")
     p.add_argument("--reference", required=True, help="In-root registered verification artifact path to hash.")
     p.add_argument("--surface-id", required=True, choices=[sid for sid, _surface, _category in COVERAGE_SURFACES], help="Canonical coverage surface this receipt proves.")
@@ -4309,7 +4961,7 @@ def legacy_scan_main(argv: Sequence[str]) -> int:
 
 def main(argv: Optional[List[str]] = None) -> int:
     raw = list(sys.argv[1:] if argv is None else argv)
-    commands = {"describe", "scan", "diagnostic", "schema", "coverage", "receipt", "score", "backlog", "next", "diff", "validate", "init", "mcp"}
+    commands = {"describe", "scan", "diagnostic", "schema", "coverage", "challenge", "receipt", "score", "backlog", "next", "diff", "validate", "init", "mcp"}
     try:
         if raw and raw[0] in {"-h", "--help"}:
             build_parser().print_help()
