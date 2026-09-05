@@ -1,8 +1,9 @@
-# Build Plan — Agent-Accessible CheckYourself CLI
+# Agent-Accessible CheckYourself CLI — Decision Record
 
-Status: **implemented in v1.6.0.** This document is now the decision record for
-turning `tools/checkyourself.py` from a one-shot scanner into the machine interface that lets an
-AI agent **discover, run, score, and self-verify** CheckYourself with no human in the loop.
+Status: **implemented in v1.6.0 and present in the v1.7.0 public manifest.**
+This document records the shipped machine interface that lets an AI agent
+**discover, run, score, and self-verify** CheckYourself with no human in the
+loop.
 
 Current decision: **CLI is the canonical engine, MCP is a thin local wrapper, no hosted API for
 now.** The CLI is local, offline, scriptable, CI-friendly, and easiest for AI agents to call
@@ -23,8 +24,9 @@ The single design idea behind everything below:
 - **The agent supplies judgment** — what it found (findings), which surfaces it inspected
   (coverage), what evidence it reviewed.
 - **The CLI owns determinism** — it computes the score from `scoring-method.md` (weights +
-  caps), ranks the backlog, selects the next safe batch, and validates output against
-  `schemas/`.
+  caps), ranks the backlog, selects the next highest-severity batch, and validates output against
+  `schemas/`. It does not decide whether a batch is safe to approve; that remains a diagnostic and
+  human-review decision.
 
 Today an LLM eyeballs the score. That is neither reproducible nor verifiable. When the CLI
 owns the math and the schemas, **any agent, any model, gets the same score from the same
@@ -81,13 +83,13 @@ Global conventions:
 - **Determinism:** pure; derived from constants and the bundled schema/method files.
 - **Example:** `python3 tools/checkyourself.py describe --format json`
 
-### 3.2 `scan` — deterministic discovery (built, to extend)
+### 3.2 `scan` — deterministic discovery (implemented)
 
 - **Purpose:** detect stack, dependencies, scripts, env files, tests, CI, risk-surface path
   hints; raise deterministic findings (credential shapes, lower-confidence secret-like
   assignments, committed `.env`, missing `.env.example`, no tests, no CI) ranked P0-P3.
-- **Extend with:** `--format json` returning a `checkyourself-scan/1` object that already
-  carries `findings[]` and `counts` so it can pipe straight into `score` and `backlog`.
+- **Behavior:** `--format json` returns a `checkyourself-scan/1` object with `findings[]` and
+  `counts` so it can pipe straight into `score` and `backlog`.
 - **Output:** context Markdown + scan JSON with suppression status. `diagnostic` is an alias
   for `scan`, and `scan --deep` adds conservative CI/supply-chain validation checks.
 
@@ -110,29 +112,43 @@ Global conventions:
 - **Input:** `score --findings findings.json [--coverage coverage.json]`.
 - **Algorithm:** coverage-backed scores apply the full evidence caps. Without coverage, scan
   JSON produces a low-confidence `scan-derived-estimate` and lists `manual_evidence_needed`.
+  Detected test or CI paths are discovery signals only: they remain `Unknown` until a focused
+  test-execution or CI parse/success receipt is supplied.
 - **Output:** `{ score, confidence, per_category:[{category, weight, raw, penalties[], awarded}],
   caps_applied:[...], score_mode, manual_evidence_needed, counts }` conforming to
   `schemas/score-result.schema.json`.
 - **Why it matters:** the score stops being a vibe. Same evidence → same number, every time.
 
-### 3.5 `backlog` / `next` — ranking and the safe batch (usable)
+### 3.5 `backlog` / `next` — ranking and the highest-severity batch (usable)
 
 - **`backlog --findings F`:** rank every Finding and high-impact Unknown by
-  severity → reversibility/safety → dependency order; output the **complete ranked backlog** plus
-  the **safest first approval batch** (small, reversible) — mirroring the report contract.
-- **`next --findings F`:** given current statuses (fixed / accepted-risk / deferred / blocked /
-  not-applicable), emit the next safest batch. This drives the guided-fix loop deterministically.
-- **Output:** conforms to the `remediation_backlog` / `first_approval_batch` shapes already in
-  `schemas/checkyourself-report.schema.json`.
+  severity → category → finding ID; output the **complete ranked backlog** plus the
+  **`highest_severity_batch`** (at most three unresolved findings at the highest severity).
+  The CLI does not analyze reversibility, dependencies, coupling, or blast radius, so this field is
+  not a safety judgment. `first_approval_batch` remains as a compatibility alias.
+- **`next --findings F`:** given current statuses (fixed / accepted-risk / deferred /
+  not-applicable), emit the next `highest_severity_batch` using the same deterministic rule.
+  The result also retains `next_approval_batch` as a compatibility alias.
+- **Output:** the complete backlog and batch basis are machine-readable; consumers should use
+  `batch_basis.name` to distinguish the highest-severity slice from a future safety-ranked batch.
+
+### 3.5.1 `diff` — identity-aware regression gate
+
+- `diff` reports status-only open-to-resolved transitions in `resolved` and details every
+  status/severity transition separately.
+- `diff --ci` fails for a newly open P0/P1 finding, a reopened P0/P1 finding, a severity escalation
+  into open P0/P1, or an increased aggregate open P0/P1 count. Identity events are retained in
+  `regressions`; count-only changes are reported as `count_regression`.
 
 ### 3.6 `validate` — schema self-check (readable / accessible)
 
 - **Purpose:** let an agent prove its own output is well-formed, and let CI gate on it.
-- **Input:** `validate --kind {report,dashboard,learning-plan,scan,coverage,score} FILE`.
+- **Input:** `validate --kind {capabilities,report,dashboard,dashboard-data,learning-plan,scan,coverage,score,backlog,next,diff} FILE`.
 - **Behavior:** validate against the matching schema in `schemas/`; print errors; non-zero exit
   on invalid.
-- **Note:** implement a small stdlib JSON-Schema subset checker (required/type/enum/min/max/items)
-  to stay dependency-free; document the supported subset.
+- **Behavior:** the standard-library-only checker executes every validation keyword used by the
+  bundled schemas and fails closed on unsupported schema keywords, so a contract cannot silently
+  lose constraints.
 
 ### 3.7 `schema` — emit a contract (readable)
 
@@ -160,7 +176,8 @@ was reused initially and retired in v1.7.0; `dashboard-data.schema.json` covers 
 - `schemas/scan.schema.json` — the `checkyourself-scan/1` object `scan` emits.
 - `schemas/coverage.schema.json` — the 20-surface matrix with status enum + evidence arrays.
 - `schemas/score-result.schema.json` — the `score` breakdown (per-category, caps, confidence).
-- `schemas/backlog.schema.json` — the ranked backlog and first approval batch.
+- `schemas/backlog.schema.json` — the ranked backlog and highest-severity batch (with the legacy
+  `first_approval_batch` compatibility field).
 - `schemas/next-batch.schema.json` — the next unresolved approval batch.
 - `schemas/capabilities.schema.json` — the `describe` manifest shape.
 
@@ -168,9 +185,11 @@ Every new schema must be added to the public validator's JSON checks and link-ch
 
 ---
 
-## 5. Deterministic scoring algorithm (proposed)
+## 5. Deterministic scoring algorithm (current contract)
 
-This operationalizes `scoring-method.md`. Tunable, but must stay faithful to that file.
+This is the decision record for the executable behavior in `scoring-method.md`.
+The scoring-method file is the canonical prose contract; this section must stay
+faithful to it.
 
 **Categories and weights** (sum = 100), taken verbatim from `scoring-method.md`:
 
@@ -215,9 +234,8 @@ This operationalizes `scoring-method.md`. Tunable, but must stay faithful to tha
 4. `Unknown` earns reduced or zero credit depending on criticality, records `missing_evidence`,
    and prevents high-confidence scoring. Critical unknowns in C1/C2/C3 should usually earn 0 until
    evidence is supplied.
-5. `NotApplicable` categories are excluded from the denominator only when the report gives a
-   concrete reason. Normalize across applicable categories without inflating scores for missing
-   evidence.
+5. `NotApplicable` surfaces with a concrete reason retain their category weight. Their weight is
+   not redistributed, and the denominator is not normalized to inflate scores for missing evidence.
 6. Raw total = normalized sum of awarded category points (0–100).
 7. **Apply caps** in order, taking the minimum:
    - any unresolved P0 → cap 49;
@@ -277,17 +295,19 @@ security/privacy risk.
 
 Recommendation: **ship CLI as the engine, ship MCP as a local wrapper, do not build an API now.**
 
-## 9. MCP server (`checkyourself mcp`) — Phase 3
+## 9. MCP server (`checkyourself mcp`) — delivered in v1.6.0
 
-Make the verbs callable as **native agent tools** in Claude / Cursor / Codex.
+The shipped server makes the verbs callable as **native agent tools** in Claude /
+Cursor / Codex.
 
 - **Transport:** JSON-RPC 2.0 over stdio, implemented with the standard library only. The current
   MCP stdio transport uses newline-delimited JSON-RPC messages on stdin/stdout. No third-party MCP
   SDK, preserving the zero-dependency promise.
 - **Handshake:** implements `initialize`, `notifications/initialized`, `ping`, `tools/list`, and
   `tools/call`.
-- **Tools exposed:** `scan`, `coverage_emit`, `coverage_check`, `score`, `backlog`, `next`,
-  `validate`, `describe` — each a thin wrapper over the same internal functions the CLI uses, so
+- **Tools exposed:** `scan`, `coverage_emit`, `coverage_check`, `score`, `backlog`, `next`, `diff`,
+  `validate`, `schema`, `describe` — each a thin wrapper over the same internal functions the CLI
+  uses, so
   there is one implementation and one contract.
 - **Inputs/outputs:** JSON arguments mirroring the CLI flags; results are the same schema-backed
   objects, returned as MCP tool content.
@@ -301,11 +321,13 @@ The native stdlib server is shipped as `python3 tools/checkyourself.py mcp`.
 
 ## 10. Discoverability wiring
 
-- Add to `AGENTS.md`: a short "Machine interface" note — *"To discover and drive CheckYourself
+The shipped wiring includes:
+
+- `AGENTS.md`'s "Machine interface" note: *"To discover and drive CheckYourself
   programmatically, run `python3 tools/checkyourself.py describe --format json`."*
-- Add a `capabilities` pointer in `checkyourself.manifest.json` entrypoints.
-- README: extend the "Optional local CLI" section with the agent-facing verbs.
-- `docs/cli.md`: full command reference (expand from current scan-only docs).
+- A `capabilities` pointer in `checkyourself.manifest.json` entrypoints.
+- README coverage of the agent-facing verbs in the optional local CLI section.
+- The full command reference in `docs/cli.md`.
 
 ---
 
@@ -322,20 +344,32 @@ The native stdlib server is shipped as `python3 tools/checkyourself.py mcp`.
   fixture `scan`→`score`→`validate` pipeline, and run the scoring unit tests.
 - **No-secret guarantee test:** assert secret *values* never appear in any output.
 
+The contract matrix is implemented in `tests/test_checkyourself_cli.py`. It also covers negative
+schema artifacts through CLI and MCP, status-only and severity diff transitions, read-only scan and
+score defaults, timestamp-normalized `scan`/`score`/`backlog` goldens, all documented score caps,
+and the CLI/MCP `scan`→`score`→`validate` pipeline. File presence alone cannot certify tests or CI;
+the scan-derived path records the missing execution or validation receipt instead.
+
 ---
 
 ## 12. Versioning, docs, release
 
-- Target **v1.6.0** (new agent interface is a feature release).
-- Update `CHANGELOG.md`, `checkyourself.manifest.json` (version, modes:
-  add `agent_cli` / `mcp_server`; entrypoints: add `capabilities`), `docs/cli.md`, `docs/mcp.md`,
-  README, and the new schemas — then run `tools/validate_public.py`.
+- The agent interface was delivered in **v1.6.0** and is part of the current
+  **v1.7.0** public manifest.
+- The release artifacts are `CHANGELOG.md`, `checkyourself.manifest.json`,
+  `docs/cli.md`, `docs/mcp.md`, README, and the bundled schemas. Validate them
+  with `tools/validate_public.py` and the full test suite.
 
 ---
 
-## 13. Phased rollout & acceptance criteria
+## 13. Historical rollout & acceptance criteria
 
-All phases below are delivered in v1.6.0 unless a future enhancement is called out explicitly.
+The phases below describe the delivered v1.6.0 rollout. Any future enhancement
+is called out explicitly.
+
+The canonical resolution statuses are `fixed`, `accepted-risk`, `deferred`,
+`not-applicable`, and `suppressed`. An unresolved item remains `open` and
+carries blocker context when work cannot proceed.
 
 **Phase 1A — Agent contract foundation**
 - Add subcommands while preserving `python3 tools/checkyourself.py <path>` as `scan <path>`.

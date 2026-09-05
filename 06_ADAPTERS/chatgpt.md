@@ -1,11 +1,12 @@
 # ChatGPT Adapter
 
+If a local shell or MCP client is available, start with
+[`native-cli-mcp.md`](native-cli-mcp.md); this file covers ChatGPT sharing.
+
 ## Best path
 
-1. Upload the project files you can share, or paste key files and app context.
-2. Load the CheckYourself bootstrap (`PASTE_THIS_INTO_YOUR_AI.md`) as your operating instructions.
-3. Ask for diagnostic mode first.
-4. Use guided fix mode only after reviewing the report.
+Share project files or key files/context; load `PASTE_THIS_INTO_YOUR_AI.md`;
+ask for diagnostic mode; use guided fix mode after reviewing the report.
 
 ## Prompt
 

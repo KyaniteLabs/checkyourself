@@ -14,10 +14,17 @@ from __future__ import annotations
 import argparse
 import datetime as _dt
 import fnmatch
+import hashlib
+import hmac
 import json
+import math
 import os
 import re
+import secrets
+import stat
+import subprocess
 import sys
+import tempfile
 import traceback
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
@@ -28,6 +35,10 @@ SCAN_SCHEMA_ID = "checkyourself-scan/1"
 COVERAGE_SCHEMA_ID = "checkyourself-coverage/1"
 SCORE_SCHEMA_ID = "checkyourself-score/1"
 CAPABILITIES_SCHEMA_ID = "checkyourself-capabilities/1"
+RECEIPT_SCHEMA_ID = "checkyourself-receipt/1"
+CHALLENGE_SCHEMA_ID = "checkyourself-challenges/1"
+CHALLENGE_RESULT_SCHEMA_ID = "checkyourself-challenge/1"
+RECEIPT_ISSUER = "checkyourself-verifier/1"
 MCP_PROTOCOL_VERSION = "2025-11-25"
 SUPPORTED_MCP_PROTOCOLS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
 PUBLIC_REPO_SCOPE_GUARDRAILS = [
@@ -44,6 +55,10 @@ ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_DIR = ROOT / "schemas"
 DEFAULT_COVERAGE_PATH = "CHECKYOURSELF_COVERAGE.generated.json"
 DEFAULT_SCORE_HISTORY_PATH = ".checkyourself-score-history.json"
+DEFAULT_CHALLENGES_PATH = ".checkyourself/challenges.json"
+DEFAULT_CHALLENGE_OUTPUT_DIR = ".checkyourself/challenge-runs"
+DEFAULT_LOCAL_INTEGRITY_BINDING_PATH = ".checkyourself/local-integrity-binding.key"
+LOCAL_INTEGRITY_KEY_BYTES = 32
 CONFIG_NAMES = (".checkyourself.yml", ".checkyourself.yaml", ".checkyourself.json")
 
 IGNORED_DIRS = {
@@ -65,6 +80,9 @@ CODE_EXTENSIONS = {
 }
 
 CONFIG_EXTENSIONS = {".env", ".cfg", ".ini", ".conf", ".properties", ".toml", ".yaml", ".yml"}
+# These files carry configuration even though their names have no useful
+# suffix. They must receive the same content checks as extension-based config.
+EXTENSIONLESS_CONFIG_NAMES = {"dockerfile", "makefile", "jenkinsfile"}
 
 # One credential-name token list feeds both detection and redaction so the two
 # regexes cannot drift apart. The trailing (?![a-z]) rejects identifier
@@ -132,6 +150,7 @@ LLM_DEPENDENCY_LABELS = {"OpenAI API", "Anthropic SDK", "LangChain", "LlamaIndex
 TEST_PATH_MARKERS = ("test", "tests", "spec", "specs", "__tests__", "fixture", "fixtures",
                      "mock", "mocks", "example", "examples", "sample", "samples", "doc", "docs",
                      "__mocks__", "e2e", "stories")
+CONTEXT_ONLY_PATH_MARKERS = TEST_PATH_MARKERS + ("audit", "audits", "snapshot", "snapshots")
 
 STACK_FILES = {
     "package.json": "JavaScript/TypeScript project",
@@ -192,7 +211,10 @@ RISK_PATH_HINTS = [
 
 ENV_EXAMPLE_NAMES = {".env.example", ".env.sample", ".env.template", "env.example"}
 SEVERITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
-RESOLVED_STATUSES = {"fixed", "accepted-risk", "deferred", "not-applicable", "suppressed"}
+# Workflow disposition and residual risk are deliberately separate.  A ticket
+# can be deferred or accepted while the underlying exposure remains open.
+WORKFLOW_DISPOSITIONS = {"fixed", "accepted-risk", "deferred", "not-applicable", "suppressed"}
+RESOLVED_STATUSES = {"fixed", "not-applicable"}
 
 COVERAGE_SURFACES = [
     ("S01", "Product purpose, users, and harm model", "context"),
@@ -217,6 +239,83 @@ COVERAGE_SURFACES = [
     ("S20", "Learning needs and remediation history", "learning"),
 ]
 
+# These contracts are verifier-owned. A project can choose the command and the
+# expected values, but it cannot remove the minimum substance needed for an
+# executed challenge to count as evidence. Keep the contract shape explicit for
+# every canonical surface so a new surface cannot silently fall back to
+# exit-zero-only credit.
+CHALLENGE_SEMANTIC_CONTRACTS = {
+    "S01": {"minimum_output_tokens": 3},
+    "S02": {"minimum_output_tokens": 3},
+    "S03": {"minimum_output_tokens": 3},
+    "S04": {"minimum_output_tokens": 3},
+    "S05": {"minimum_output_tokens": 3},
+    "S06": {"minimum_output_tokens": 3},
+    "S07": {"minimum_output_tokens": 3},
+    "S08": {"minimum_output_tokens": 3},
+    "S09": {"minimum_output_tokens": 3},
+    "S10": {"minimum_output_tokens": 3},
+    "S11": {
+        "minimum_output_tokens": 3,
+        "requires_test_runner": True,
+        "requires_test_count": True,
+    },
+    "S12": {"minimum_output_tokens": 3, "requires_artifact": True},
+    "S13": {"minimum_output_tokens": 3, "requires_artifact": True},
+    "S14": {"minimum_output_tokens": 3, "requires_artifact": True},
+    "S15": {"minimum_output_tokens": 3},
+    "S16": {"minimum_output_tokens": 3},
+    "S17": {"minimum_output_tokens": 3},
+    "S18": {"minimum_output_tokens": 3},
+    "S19": {
+        "minimum_output_tokens": 3,
+        "required_output_kind": "json",
+        "required_json_fields": ("status", "findings"),
+    },
+    "S20": {"minimum_output_tokens": 3},
+}
+
+TEST_RUNNER_MARKERS = (
+    "pytest", "unittest", "jest", "vitest", "mocha", "ava", "go test",
+    "cargo test", "rspec", "phpunit", "dotnet test", "mvn test", "gradle test",
+)
+TEST_COUNT_RE = re.compile(r"(?im)\b\d+\s+(?:passed|failed|skipped|xfailed|xpassed|tests?)\b")
+VACUOUS_REGEX_FIXTURES = ("", "echo", "echo-only", "ok", "success")
+LOCAL_INTEGRITY_HMAC_FIELD = "local_integrity_hmac"
+
+# Re-execution compares the meaning of captured output, not incidental process
+# bytes. Keep these patterns narrow: only values that are expected to change
+# between identical runs are normalized. Content edits must still change the
+# semantic digest.
+_DURATION_RE = re.compile(r"\bin\s+\d+(?:\.\d+)?\s*(?:ms|s)\b", re.IGNORECASE)
+_CLOCK_DURATION_RE = re.compile(r"\b\d+:\d{2}:\d{2}(?:\.\d+)?\b")
+_ISO_TIMESTAMP_RE = re.compile(
+    r"\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}"
+    r"(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})\b"
+)
+_TEMP_PATH_RE = re.compile(
+    r"(?<![A-Za-z0-9_])(?:/private)?/(?:tmp|var/folders)(?:/[^\s\"'<>]+)*"
+)
+
+# A receipt's cryptographic subject must also be a verifier artifact that is
+# relevant to the surface it claims to prove.  Keep the default contract
+# intentionally narrow: one per-surface directory, JSON records only, and a
+# small common record shape that carries the surface identity and provenance.
+# Projects can override individual entries in .checkyourself.json when their
+# verifier emits artifacts elsewhere or uses a different record kind.
+DEFAULT_VERIFICATION_ARTIFACT_REGISTRY = {
+    sid: {
+        "path_roots": [f"coverage/verification/{sid}"],
+        "path_patterns": ["*.json"],
+        "expected_kind": "surface-verification-record",
+        "required_fields": ["surface_id", "kind", "source_revision", "command", "result"],
+        "required_values": {"surface_id": sid, "kind": "surface-verification-record"},
+    }
+    for sid, _surface, _category in COVERAGE_SURFACES
+}
+# Public name for callers that need to inspect the shipped default contract.
+VERIFICATION_ARTIFACT_REGISTRY = DEFAULT_VERIFICATION_ARTIFACT_REGISTRY
+
 SCORE_CATEGORIES = {
     "C1": ("Data, privacy, tenant/user isolation", 18),
     "C2": ("Auth, permissions, session safety", 14),
@@ -233,6 +332,45 @@ SCORE_CATEGORIES = {
 SEVERITY_PENALTIES = {"P0": 1.0, "P1": 0.60, "P2": 0.25, "P3": 0.10}
 CRITICAL_CATEGORIES = {"C1", "C2", "C3"}
 HIGH_SCORE_GATE_CATEGORIES = {"C1", "C2", "C3", "C5", "C6", "C7"}
+VALID_COVERAGE_STATUSES = {"Pass", "Finding", "Unknown", "NotApplicable"}
+RECEIPT_BINDING_FIELDS = (
+    "reference",
+    "sha256",
+    "subject_digest",
+    "surface_id",
+    "source_revision",
+    "command",
+    "claim",
+    "origin",
+    "source_state",
+    "result",
+    "issuer",
+    "issued_at",
+)
+EXECUTED_RECEIPT_BINDING_FIELDS = (
+    "receipt_type",
+    "surface_id",
+    "command",
+    "cwd",
+    "exit_code",
+    "captured_output",
+    "captured_output_digest",
+    "semantic_output_digest",
+    "source_revision",
+    "timestamp",
+    "timed_out",
+    "status",
+    "execution_error",
+    "challenge_config_digest",
+    "run_id",
+)
+LEGACY_EXECUTED_RECEIPT_BINDING_FIELDS = tuple(
+    field for field in EXECUTED_RECEIPT_BINDING_FIELDS if field != "semantic_output_digest"
+)
+_NO_COVERAGE = object()
+EVIDENCE_PATH_RE = re.compile(
+    r"(?<![A-Za-z0-9_])(?P<path>(?:[A-Za-z0-9_./~\\-]+/)?[A-Za-z0-9_.~-]+\.[A-Za-z0-9_-]+)(?::\d+(?::\d+)?)?"
+)
 
 
 class CliError(Exception):
@@ -302,6 +440,18 @@ def read_text(path: Path, max_chars: int = 200_000) -> str:
         return ""
 
 
+def read_text_with_status(path: Path, max_chars: int) -> Tuple[str, bool, bool]:
+    """Read bounded text and distinguish truncation from an unreadable file."""
+    try:
+        if path.is_symlink():
+            return "", False, True
+        with path.open("r", encoding="utf-8", errors="ignore") as handle:
+            text = handle.read(max_chars + 1)
+        return text[:max_chars], len(text) > max_chars, False
+    except OSError:
+        return "", False, True
+
+
 def looks_binary(text: str) -> bool:
     return "\x00" in text[:2048]
 
@@ -355,6 +505,8 @@ def parse_scalar(value: str) -> Any:
 def parse_minimal_yaml_suppressions(text: str) -> List[dict]:
     suppressions: List[dict] = []
     current: Optional[dict] = None
+    current_item_indent: Optional[int] = None
+    current_list_key: Optional[str] = None
     in_suppress = False
 
     for raw_line in text.splitlines():
@@ -362,7 +514,10 @@ def parse_minimal_yaml_suppressions(text: str) -> List[dict]:
         if not line.strip():
             continue
         stripped = line.strip()
-        if stripped == "suppress:":
+        if stripped.startswith("suppress:"):
+            value = stripped.split(":", 1)[1].strip()
+            if value not in {"", "[]"}:
+                raise ValueError("suppress must be a YAML list")
             in_suppress = True
             continue
         if in_suppress and not raw_line[:1].isspace() and not stripped.startswith("- "):
@@ -370,25 +525,175 @@ def parse_minimal_yaml_suppressions(text: str) -> List[dict]:
             if current:
                 suppressions.append(current)
                 current = None
+            current_list_key = None
             in_suppress = False
         if not in_suppress:
             continue
         if stripped.startswith("- "):
+            indent = len(raw_line) - len(raw_line.lstrip())
+            if current is not None and current_list_key and current_item_indent is not None and indent > current_item_indent:
+                current[current_list_key].append(parse_scalar(stripped[2:].strip()))
+                continue
             if current:
                 suppressions.append(current)
             current = {}
+            current_item_indent = indent
+            current_list_key = None
             stripped = stripped[2:].strip()
             if stripped and ":" in stripped:
                 key, value = stripped.split(":", 1)
                 current[key.strip()] = parse_scalar(value)
+            elif stripped:
+                raise ValueError("suppression list items must be mappings")
             continue
         if current is not None and ":" in stripped:
             key, value = stripped.split(":", 1)
-            current[key.strip()] = parse_scalar(value)
+            key = key.strip()
+            current[key] = [] if not value.strip() else parse_scalar(value)
+            current_list_key = key if not value.strip() else None
 
     if current:
         suppressions.append(current)
     return suppressions
+
+
+def validate_suppressions_config(data: Any, name: str) -> dict:
+    if not isinstance(data, dict):
+        return {"suppress": [], "config_error": f"{name} must contain a JSON/YAML object"}
+    suppressions = data.get("suppress", [])
+    if not isinstance(suppressions, list):
+        return {"suppress": [], "config_error": f"{name} suppress must be a list"}
+    for index, suppression in enumerate(suppressions):
+        if not isinstance(suppression, dict):
+            return {"suppress": [], "config_error": f"{name} suppression {index} must be an object"}
+        for key in ("id", "reason", "reviewed_by", "reviewed_at"):
+            if key in suppression and not isinstance(suppression[key], str):
+                return {"suppress": [], "config_error": f"{name} suppression {index} field {key} must be a string"}
+        for key in ("files", "paths"):
+            if key not in suppression:
+                continue
+            value = suppression[key]
+            if isinstance(value, str):
+                continue
+            if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+                return {"suppress": [], "config_error": f"{name} suppression {index} field {key} must be a string or list of strings"}
+        has_id = isinstance(suppression.get("id"), str) and bool(suppression["id"].strip())
+        has_path = any(
+            (isinstance(suppression.get(key), str) and bool(suppression[key].strip()))
+            or (isinstance(suppression.get(key), list) and bool(suppression[key]))
+            for key in ("files", "paths")
+        )
+        if not has_id and not has_path:
+            return {"suppress": [], "config_error": f"{name} suppression {index} needs id, files, or paths"}
+    return {"suppress": suppressions}
+
+
+def _copy_verification_registry(registry: dict) -> dict:
+    return {
+        sid: {
+            "path_roots": list(contract["path_roots"]),
+            "path_patterns": list(contract["path_patterns"]),
+            "expected_kind": contract["expected_kind"],
+            "required_fields": list(contract["required_fields"]),
+            "required_values": dict(contract.get("required_values") or {}),
+        }
+        for sid, contract in registry.items()
+    }
+
+
+def _registry_list(value: Any, field: str, name: str, sid: str) -> Tuple[Optional[List[str]], Optional[str]]:
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, list) or not value or not all(isinstance(item, str) and item.strip() for item in value):
+        return None, f"{name} verification registry {sid} field {field} must be a non-empty string list"
+    return [item.strip() for item in value], None
+
+
+def validate_verification_registry_config(data: Any, name: str) -> Tuple[dict, Optional[str]]:
+    """Validate and normalize explicit per-surface artifact contracts."""
+    defaults = _copy_verification_registry(DEFAULT_VERIFICATION_ARTIFACT_REGISTRY)
+    if not isinstance(data, dict):
+        return defaults, None
+    configured = data.get("verification_artifact_registry")
+    if configured is None:
+        return defaults, None
+    if not isinstance(configured, dict):
+        return defaults, f"{name} verification_artifact_registry must be an object"
+
+    registry = _copy_verification_registry(DEFAULT_VERIFICATION_ARTIFACT_REGISTRY)
+    canonical_ids = {sid for sid, _surface, _category in COVERAGE_SURFACES}
+    for sid, raw_contract in configured.items():
+        if sid not in canonical_ids:
+            return defaults, f"{name} verification registry has unknown surface: {sid!r}"
+        if not isinstance(raw_contract, dict):
+            return defaults, f"{name} verification registry {sid} must be an object"
+
+        # Accept the shorter aliases so an explicit config can stay readable,
+        # while exposing one stable normalized shape to the verifier.
+        contract = dict(registry[sid])
+        aliases = {
+            "path_roots": ("path_roots", "roots", "allowed_roots"),
+            "path_patterns": ("path_patterns", "patterns", "allowed_patterns"),
+        }
+        for target, keys in aliases.items():
+            for key in keys:
+                if key in raw_contract:
+                    values, error = _registry_list(raw_contract[key], target, name, sid)
+                    if error:
+                        return defaults, error
+                    contract[target] = values or []
+                    break
+        if "expected_kind" in raw_contract:
+            if not isinstance(raw_contract["expected_kind"], str) or not raw_contract["expected_kind"].strip():
+                return defaults, f"{name} verification registry {sid} field expected_kind must be a non-empty string"
+            contract["expected_kind"] = raw_contract["expected_kind"].strip()
+        if "required_fields" in raw_contract:
+            values, error = _registry_list(raw_contract["required_fields"], "required_fields", name, sid)
+            if error:
+                return defaults, error
+            contract["required_fields"] = values or []
+        if "required_values" in raw_contract:
+            values = raw_contract["required_values"]
+            if not isinstance(values, dict) or not all(
+                isinstance(key, str) and key.strip() and isinstance(value, (str, int, float, bool))
+                for key, value in values.items()
+            ):
+                return defaults, f"{name} verification registry {sid} field required_values must be an object of scalar values"
+            contract["required_values"] = dict(values)
+
+        for root in contract["path_roots"]:
+            root_path = Path(root)
+            if root_path.is_absolute() or ".." in root_path.parts:
+                return defaults, f"{name} verification registry {sid} path_roots must stay inside the evidence root"
+        for pattern in contract["path_patterns"]:
+            if Path(pattern).is_absolute() or ".." in Path(pattern).parts:
+                return defaults, f"{name} verification registry {sid} path_patterns must stay inside the surface root"
+
+        required_fields = list(dict.fromkeys(contract["required_fields"] + ["surface_id", "kind"]))
+        required_values = dict(contract.get("required_values") or {})
+        required_values["surface_id"] = sid
+        required_values.setdefault("kind", contract["expected_kind"])
+        contract["required_fields"] = required_fields
+        contract["required_values"] = required_values
+        registry[sid] = contract
+    return registry, None
+
+
+def _config_with_registry(data: Any, name: str) -> dict:
+    suppressions = validate_suppressions_config(data, name)
+    registry, registry_error = validate_verification_registry_config(data, name)
+    result = {
+        "suppress": suppressions.get("suppress", []),
+        "verification_artifact_registry": registry,
+    }
+    if suppressions.get("config_error"):
+        result["config_error"] = suppressions["config_error"]
+    if registry_error:
+        result["verification_registry_error"] = registry_error
+        result["config_error"] = "; ".join(
+            item for item in (result.get("config_error"), registry_error) if item
+        )
+    return result
 
 
 def load_checkyourself_config(root: Path) -> dict:
@@ -398,12 +703,846 @@ def load_checkyourself_config(root: Path) -> dict:
             continue
         if path.suffix == ".json":
             try:
-                data = json.loads(path.read_text(encoding="utf-8"))
-                return data if isinstance(data, dict) else {"suppress": []}
-            except json.JSONDecodeError:
-                return {"suppress": [], "config_error": f"{name} could not be parsed as JSON"}
-        return {"suppress": parse_minimal_yaml_suppressions(path.read_text(encoding="utf-8"))}
-    return {"suppress": []}
+                data = strict_json_loads(path.read_text(encoding="utf-8"))
+                return _config_with_registry(data, name)
+            except (ValueError, OSError, UnicodeError):
+                return {
+                    "suppress": [],
+                    "verification_artifact_registry": _copy_verification_registry(DEFAULT_VERIFICATION_ARTIFACT_REGISTRY),
+                    "verification_registry_error": f"{name} could not be parsed as JSON",
+                    "config_error": f"{name} could not be parsed as JSON",
+                }
+        try:
+            # The minimal YAML parser intentionally remains suppression-only.
+            # JSON is the explicit configuration format for registry overrides.
+            return _config_with_registry(
+                {"suppress": parse_minimal_yaml_suppressions(path.read_text(encoding="utf-8"))},
+                name,
+            )
+        except (OSError, UnicodeError, ValueError) as exc:
+            return {
+                "suppress": [],
+                "verification_artifact_registry": _copy_verification_registry(DEFAULT_VERIFICATION_ARTIFACT_REGISTRY),
+                "verification_registry_error": f"{name} is invalid: {exc}",
+                "config_error": f"{name} is invalid: {exc}",
+            }
+    return {
+        "suppress": [],
+        "verification_artifact_registry": _copy_verification_registry(DEFAULT_VERIFICATION_ARTIFACT_REGISTRY),
+    }
+
+
+def _default_challenge_definitions() -> dict:
+    """Return fail-closed challenge defaults for every canonical surface."""
+    return {
+        sid: {
+            "requires_explicit_config": True,
+            "cwd": ".",
+            "timeout_s": 60,
+            "success": {"exit_zero": True},
+            "output_kind": "text",
+            "description": "Provide a project-specific verifier command for this surface.",
+        }
+        for sid, _surface, _category in COVERAGE_SURFACES
+    }
+
+
+def _challenge_surface_map(data: Any) -> Optional[dict]:
+    if not isinstance(data, dict):
+        return None
+    for key in ("challenges", "surfaces", "challenge_registry"):
+        value = data.get(key)
+        if value is not None:
+            return value if isinstance(value, dict) else {}
+    return None
+
+
+def _challenge_patterns(value: Any) -> List[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        return [pattern for pattern in value if isinstance(pattern, str)]
+    return []
+
+
+def _challenge_artifact_paths(value: Any) -> List[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        return [path for path in value if isinstance(path, str)]
+    return []
+
+
+def _regex_matches_vacuous_fixture(pattern: str) -> bool:
+    try:
+        compiled = re.compile(pattern)
+    except re.error:
+        return False
+    return any(compiled.search(fixture) is not None for fixture in VACUOUS_REGEX_FIXTURES)
+
+
+def _challenge_semantic_contract_errors(definition: dict, surface_id: str) -> List[str]:
+    """Reject challenge definitions that cannot produce probative evidence."""
+    contract = CHALLENGE_SEMANTIC_CONTRACTS.get(surface_id)
+    if contract is None or not isinstance(definition.get("command"), list):
+        return []
+
+    command = definition["command"]
+    if not command or not all(isinstance(part, str) for part in command):
+        return []
+    errors: List[str] = []
+    executable = Path(command[0]).name.lower()
+    command_text = " ".join(command).lower()
+    if executable in {"true", "false", "echo", "printf", ":"}:
+        errors.append(f"{surface_id} challenge command is a vacuous {executable!r} command")
+    for index, part in enumerate(command[:-1]):
+        if part == "-c" and re.fullmatch(r"\s*(?:echo|printf)\b.*", command[index + 1], re.I | re.S):
+            errors.append(f"{surface_id} challenge command is echo-only and cannot establish evidence")
+            break
+    for index, part in enumerate(command[:-1]):
+        if part == "-c" and re.fullmatch(
+            r"\s*(?:print|puts|console\.log)\s*\(?.*?\)?\s*;?\s*", command[index + 1], re.I | re.S
+        ):
+            errors.append(f"{surface_id} challenge command is print-only and cannot establish evidence")
+            break
+
+    success = definition.get("success")
+    if not isinstance(success, dict):
+        return errors
+    json_assertions = _json_field_assertions(success.get("json_field"))
+    if any(not path.strip() for path, _expected in json_assertions):
+        errors.append(f"{surface_id} challenge JSON assertions must name non-empty fields")
+    regex_matches = _challenge_patterns(success.get("regex_match"))
+    if not json_assertions and not regex_matches:
+        errors.append(
+            f"{surface_id} challenge needs a positive output assertion; exit_zero-only evidence is not allowed"
+        )
+    for pattern in regex_matches:
+        if _regex_matches_vacuous_fixture(pattern):
+            errors.append(
+                f"{surface_id} challenge regex_match {pattern!r} is vacuous against empty/echo fixtures"
+            )
+
+    required_kind = contract.get("required_output_kind")
+    if required_kind and definition.get("output_kind", "text") != required_kind:
+        errors.append(f"{surface_id} challenge must use {required_kind} output for structured findings")
+    required_fields = set(contract.get("required_json_fields") or ())
+    if required_fields:
+        asserted_fields = {path.split(".", 1)[0] for path, _expected in json_assertions}
+        missing = sorted(required_fields - asserted_fields)
+        if missing:
+            errors.append(
+                f"{surface_id} challenge JSON assertions must include structured fields: {', '.join(missing)}"
+            )
+
+    if contract.get("requires_test_runner") and not any(marker in command_text for marker in TEST_RUNNER_MARKERS):
+        errors.append(f"{surface_id} challenge command must reference a test runner")
+    if contract.get("requires_test_count") and not any(
+        _pattern_matches_test_count(pattern) for pattern in regex_matches
+    ):
+        errors.append(f"{surface_id} challenge assertions must include a test pass-count output")
+
+    artifact_paths = _challenge_artifact_paths(success.get("artifact"))
+    if contract.get("requires_artifact") and not artifact_paths:
+        errors.append(f"{surface_id} challenge must assert a non-empty output artifact")
+    for artifact_path in artifact_paths:
+        candidate = Path(artifact_path)
+        if candidate.is_absolute() or ".." in candidate.parts or not artifact_path.strip():
+            errors.append(f"{surface_id} challenge artifact path must stay inside the project root")
+    return errors
+
+
+def _pattern_matches_test_count(pattern: str) -> bool:
+    try:
+        return TEST_COUNT_RE.search(pattern) is not None or any(
+            re.search(pattern, fixture) is not None
+            for fixture in ("1 passed", "2 failed", "3 skipped")
+        )
+    except re.error:
+        return False
+
+
+def semantic_challenge_errors(data: Any) -> List[str]:
+    """Validate verifier-owned semantic contracts for a challenge artifact."""
+    surface_map = _challenge_surface_map(data)
+    if surface_map is None:
+        return []
+    if not isinstance(surface_map, dict):
+        return ["challenge registry must be an object"]
+    canonical_ids = {sid for sid, _surface, _category in COVERAGE_SURFACES}
+    errors: List[str] = []
+    for surface_id, definition in surface_map.items():
+        if surface_id not in canonical_ids or not isinstance(definition, dict):
+            continue
+        errors.extend(_challenge_semantic_contract_errors(definition, surface_id))
+    return list(dict.fromkeys(errors))
+
+
+def _challenge_definition_errors(definition: Any, surface_id: str) -> List[str]:
+    if not isinstance(definition, dict):
+        return [f"{surface_id} challenge must be an object"]
+    errors: List[str] = []
+    command = definition.get("command")
+    explicit = definition.get("requires_explicit_config", False)
+    if not isinstance(explicit, bool):
+        errors.append(f"{surface_id} requires_explicit_config must be boolean")
+    if command is not None:
+        if not isinstance(command, list) or not command or not all(
+            isinstance(part, str) and part.strip() for part in command
+        ):
+            errors.append(f"{surface_id} command must be a non-empty argv list of strings")
+    elif not explicit:
+        errors.append(f"{surface_id} challenge is missing a command")
+    if "cwd" in definition:
+        cwd = definition.get("cwd")
+        if not isinstance(cwd, str) or not cwd.strip():
+            errors.append(f"{surface_id} cwd must be a non-empty relative path")
+        elif Path(cwd).is_absolute() or ".." in Path(cwd).parts:
+            errors.append(f"{surface_id} cwd must stay inside the project root")
+    timeout = definition.get("timeout_s", 60)
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(float(timeout)) or timeout <= 0:
+        errors.append(f"{surface_id} timeout_s must be a finite positive number")
+    if definition.get("output_kind", "text") not in {"text", "json"}:
+        errors.append(f"{surface_id} output_kind must be text or json")
+
+    success = definition.get("success", {"exit_zero": True})
+    if not isinstance(success, dict):
+        errors.append(f"{surface_id} success must be an object")
+    else:
+        exit_zero = success.get("exit_zero", True)
+        if not isinstance(exit_zero, bool):
+            errors.append(f"{surface_id} success.exit_zero must be boolean")
+        json_field = success.get("json_field")
+        if json_field is not None and not isinstance(json_field, (dict, list)):
+            errors.append(f"{surface_id} success.json_field must be an object or array")
+        regex_not_match = success.get("regex_not_match", [])
+        if isinstance(regex_not_match, str):
+            regex_not_match = [regex_not_match]
+        if not isinstance(regex_not_match, list) or not all(isinstance(pattern, str) for pattern in regex_not_match):
+            errors.append(f"{surface_id} success.regex_not_match must be a string array")
+        else:
+            for pattern in regex_not_match:
+                try:
+                    re.compile(pattern)
+                except re.error as exc:
+                    errors.append(f"{surface_id} success.regex_not_match has invalid regex: {exc}")
+        regex_match = success.get("regex_match", [])
+        if isinstance(regex_match, str):
+            regex_match = [regex_match]
+        if not isinstance(regex_match, list) or not all(isinstance(pattern, str) for pattern in regex_match):
+            errors.append(f"{surface_id} success.regex_match must be a string array")
+        else:
+            for pattern in regex_match:
+                try:
+                    re.compile(pattern)
+                except re.error as exc:
+                    errors.append(f"{surface_id} success.regex_match has invalid regex: {exc}")
+        artifact = success.get("artifact")
+        if artifact is not None:
+            artifact_paths = _challenge_artifact_paths(artifact)
+            if not artifact_paths or len(artifact_paths) != (1 if isinstance(artifact, str) else len(artifact) if isinstance(artifact, list) else 0):
+                errors.append(f"{surface_id} success.artifact must be a string or string array")
+            elif not all(path.strip() for path in artifact_paths):
+                errors.append(f"{surface_id} success.artifact paths must be non-empty strings")
+    if not errors:
+        errors.extend(_challenge_semantic_contract_errors(definition, surface_id))
+    return errors
+
+
+def load_challenge_config(root: Path) -> Tuple[dict, Optional[str]]:
+    """Load committed challenge definitions and merge only explicit overrides."""
+    root = root.resolve()
+    definitions = _default_challenge_definitions()
+    candidates: List[Tuple[Path, Any]] = []
+    dedicated = root / DEFAULT_CHALLENGES_PATH
+    if dedicated.exists():
+        try:
+            data = strict_json_loads(dedicated.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, ValueError) as exc:
+            return definitions, f"{dedicated}: could not be parsed as JSON: {exc}"
+        candidates.append((dedicated, data))
+    else:
+        for name in (".checkyourself.json",):
+            path = root / name
+            if not path.exists():
+                continue
+            try:
+                candidates.append((path, strict_json_loads(path.read_text(encoding="utf-8"))))
+            except (OSError, UnicodeError, ValueError) as exc:
+                return definitions, f"{path}: could not be parsed as JSON: {exc}"
+
+    config_error: Optional[str] = None
+    canonical_ids = {sid for sid, _surface, _category in COVERAGE_SURFACES}
+    for path, data in candidates:
+        surface_map = _challenge_surface_map(data)
+        if surface_map is None:
+            continue
+        if not isinstance(surface_map, dict):
+            config_error = f"{path}: challenge registry must be an object"
+            continue
+        if path.name == "challenges.json":
+            schema_errors = validate_json_schema(data, load_schema("challenges"))
+            if schema_errors:
+                config_error = f"{path}: invalid challenge configuration: {'; '.join(schema_errors)}"
+        for sid, raw_definition in surface_map.items():
+            if sid not in canonical_ids:
+                config_error = f"{path}: unknown challenge surface {sid!r}"
+                continue
+            if not isinstance(raw_definition, dict):
+                config_error = f"{path}: {sid} challenge must be an object"
+                definitions[sid] = raw_definition
+                continue
+            merged = dict(definitions[sid])
+            merged.update(raw_definition)
+            definitions[sid] = merged
+
+    definition_errors = [
+        error
+        for sid, definition in definitions.items()
+        for error in _challenge_definition_errors(definition, sid)
+    ]
+    if definition_errors:
+        config_error = "; ".join(item for item in (config_error, *definition_errors) if item)
+    return definitions, config_error
+
+
+def _challenge_config_digest(definition: dict) -> str:
+    encoded = json.dumps(definition, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _challenge_tree_excluded(relative: Path) -> bool:
+    parts = relative.parts
+    if ".git" in parts or any(part in IGNORED_DIRS or part in {".codegraph", ".omx", ".omc", ".claude"} for part in parts):
+        return True
+    if parts[:2] == (".checkyourself", "challenge-runs"):
+        return True
+    if relative.as_posix() == DEFAULT_LOCAL_INTEGRITY_BINDING_PATH:
+        return True
+    if parts and parts[0].startswith("_retrofit-"):
+        return True
+    if relative.name.startswith("CHECKYOURSELF_") and relative.name.endswith(".generated.json"):
+        return True
+    if relative.name in {"findings.json", "coverage.json", "score.json"}:
+        return True
+    return False
+
+
+def current_tree_hash(root: Path) -> str:
+    """Hash the current project tree, including dirty and untracked source."""
+    root = root.resolve()
+    digest = hashlib.sha256()
+    files: List[Path] = []
+    for directory, dirnames, filenames in os.walk(root, followlinks=False):
+        dirnames[:] = sorted(name for name in dirnames if name not in IGNORED_DIRS and name not in {".codegraph", ".omx", ".omc", ".claude"})
+        for name in sorted(filenames):
+            path = Path(directory) / name
+            relative = path.relative_to(root)
+            if _challenge_tree_excluded(relative) or path.is_symlink():
+                continue
+            files.append(path)
+    for path in sorted(files):
+        relative = path.relative_to(root).as_posix().encode("utf-8")
+        try:
+            content = path.read_bytes()
+        except OSError as exc:
+            content = f"<unreadable:{exc}>".encode("utf-8", "replace")
+        digest.update(relative + b"\0" + hashlib.sha256(content).digest() + b"\0")
+    return digest.hexdigest()
+
+
+def _challenge_cwd(root: Path, definition: dict) -> Path:
+    raw = str(definition.get("cwd") or ".")
+    candidate = (root / raw).resolve()
+    try:
+        candidate.relative_to(root.resolve())
+    except ValueError as exc:
+        raise CliError(f"challenge cwd escapes project root: {raw!r}") from exc
+    if not candidate.is_dir():
+        raise CliError(f"challenge cwd does not exist: {candidate}")
+    return candidate
+
+
+def _json_path_value(value: Any, path: str) -> Tuple[bool, Any]:
+    current = value
+    for component in path.split(".") if path else []:
+        if isinstance(current, dict) and component in current:
+            current = current[component]
+        else:
+            return False, None
+    return True, current
+
+
+def _json_field_assertions(value: Any) -> List[Tuple[str, Any]]:
+    if isinstance(value, dict) and "path" in value:
+        return [(str(value.get("path") or ""), value.get("equals", value.get("value")))]
+    if isinstance(value, dict):
+        return [(str(path), expected) for path, expected in value.items()]
+    if isinstance(value, list):
+        assertions: List[Tuple[str, Any]] = []
+        for item in value:
+            if isinstance(item, dict) and "path" in item:
+                assertions.append((str(item.get("path") or ""), item.get("equals", item.get("value"))))
+        return assertions
+    return []
+
+
+def _challenge_result(
+    definition: dict,
+    *,
+    surface_id: Optional[str] = None,
+    exit_code: Optional[int],
+    stdout: str,
+    stderr: str,
+    timed_out: bool,
+    execution_error: str,
+    root: Optional[Path] = None,
+) -> Tuple[str, List[str]]:
+    """Evaluate committed assertions against verifier-captured subprocess output."""
+    success = definition.get("success") or {"exit_zero": True}
+    reasons: List[str] = []
+    if timed_out:
+        reasons.append("challenge timed out")
+    if execution_error:
+        reasons.append(execution_error)
+    expected_zero = success.get("exit_zero", True)
+    if expected_zero and exit_code != 0:
+        reasons.append(f"exit code was {exit_code!r}, expected zero")
+    if not expected_zero and exit_code == 0:
+        reasons.append("exit code was zero, expected a non-zero result")
+    contract = CHALLENGE_SEMANTIC_CONTRACTS.get(str(surface_id or definition.get("surface_id") or ""), {})
+    combined = stdout + ("\n" if stdout and stderr else "") + stderr
+    minimum_tokens = int(contract.get("minimum_output_tokens", 0) or 0)
+    output_tokens = re.findall(r"[A-Za-z0-9][A-Za-z0-9_.:/+\-]*", combined)
+    if len(output_tokens) < minimum_tokens:
+        reasons.append(
+            f"captured output has {len(output_tokens)} semantic tokens; minimum is {minimum_tokens}"
+        )
+    output_kind = definition.get("output_kind", "text")
+    parsed: Any = None
+    if output_kind == "json" or success.get("json_field") is not None:
+        try:
+            parsed = strict_json_loads(stdout)
+        except (ValueError, UnicodeError) as exc:
+            reasons.append(f"stdout was not valid JSON: {exc}")
+    for path, expected in _json_field_assertions(success.get("json_field")):
+        found, actual = _json_path_value(parsed, path)
+        if not found or actual != expected:
+            reasons.append(f"JSON field {path!r} did not equal the configured expected value")
+    for pattern in _challenge_patterns(success.get("regex_match")):
+        if not re.search(pattern, combined):
+            reasons.append(f"captured output did not match required regex {pattern!r}")
+    patterns = success.get("regex_not_match", [])
+    if isinstance(patterns, str):
+        patterns = [patterns]
+    for pattern in patterns or []:
+        if re.search(pattern, combined):
+            reasons.append(f"captured output matched forbidden regex {pattern!r}")
+    if contract.get("requires_test_count") and not TEST_COUNT_RE.search(combined):
+        reasons.append("captured output did not include a test pass-count result")
+    artifact_paths = _challenge_artifact_paths(success.get("artifact"))
+    if artifact_paths:
+        if root is None:
+            reasons.append("artifact assertion cannot be verified without a project root")
+        else:
+            root = root.resolve()
+            for artifact_path in artifact_paths:
+                candidate = root / artifact_path
+                try:
+                    candidate.relative_to(root)
+                except ValueError:
+                    reasons.append(f"artifact path escapes the project root: {artifact_path!r}")
+                    continue
+                if candidate.is_symlink() or not candidate.is_file():
+                    reasons.append(f"required artifact was not produced: {artifact_path}")
+                else:
+                    try:
+                        if candidate.stat().st_size <= 0:
+                            reasons.append(f"required artifact is empty: {artifact_path}")
+                    except OSError as exc:
+                        reasons.append(f"required artifact could not be inspected: {artifact_path}: {exc}")
+    return ("PASS" if not reasons else "FAIL"), reasons
+
+
+def _local_integrity_binding_path(root: Path) -> Path:
+    return root.resolve() / DEFAULT_LOCAL_INTEGRITY_BINDING_PATH
+
+
+def _load_local_integrity_binding_key(root: Path, *, create: bool) -> bytes:
+    """Load the local integrity binding key, creating it with mode 0600 once.
+
+    The key makes project-local receipt edits detectable. It does not prove
+    independent issuance or operator identity because it lives in the project
+    being inspected.
+    """
+    path = _local_integrity_binding_path(root)
+    parent = path.parent
+    if parent.is_symlink():
+        raise CliError(f"local integrity binding key directory must not be a symlink: {parent}")
+    if create:
+        parent.mkdir(parents=True, exist_ok=True)
+        if parent.is_symlink():
+            raise CliError(f"local integrity binding key directory must not be a symlink: {parent}")
+        if not path.exists():
+            try:
+                fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            except FileExistsError:
+                pass
+            else:
+                try:
+                    with os.fdopen(fd, "wb") as handle:
+                        handle.write(secrets.token_bytes(LOCAL_INTEGRITY_KEY_BYTES))
+                except Exception:
+                    try:
+                        path.unlink()
+                    except OSError:
+                        pass
+                    raise
+    if path.is_symlink() or not path.is_file():
+        raise CliError(f"local integrity binding key is missing or not a regular file: {path}")
+    try:
+        mode = stat.S_IMODE(path.stat().st_mode)
+    except OSError as exc:
+        raise CliError(f"local integrity binding key could not be inspected: {exc}") from exc
+    if mode != 0o600:
+        raise CliError(f"local integrity binding key must have mode 0600: {path}")
+    try:
+        key = path.read_bytes()
+    except OSError as exc:
+        raise CliError(f"local integrity binding key could not be read: {exc}") from exc
+    if len(key) != LOCAL_INTEGRITY_KEY_BYTES:
+        raise CliError(f"local integrity binding key must contain {LOCAL_INTEGRITY_KEY_BYTES} bytes: {path}")
+    return key
+
+
+def _executed_receipt_binding_bytes(receipt: dict) -> bytes:
+    # Receipts minted before semantic re-execution existed have no semantic
+    # field and must retain their original binding so they can be re-derived.
+    fields = (
+        EXECUTED_RECEIPT_BINDING_FIELDS
+        if "semantic_output_digest" in receipt
+        else LEGACY_EXECUTED_RECEIPT_BINDING_FIELDS
+    )
+    binding = {field: receipt.get(field) for field in fields}
+    return json.dumps(
+        binding,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+
+
+def _executed_receipt_binding_digest(receipt: dict) -> str:
+    return hashlib.sha256(_executed_receipt_binding_bytes(receipt)).hexdigest()
+
+
+def _executed_receipt_hmac(receipt: dict, binding_key: bytes) -> str:
+    run_id = str(receipt.get("run_id") or "")
+    run_key = hmac.new(
+        binding_key,
+        (RECEIPT_ISSUER + ":" + run_id).encode("utf-8"),
+        hashlib.sha256,
+    ).digest()
+    return hmac.new(run_key, _executed_receipt_binding_bytes(receipt), hashlib.sha256).hexdigest()
+
+
+def _captured_output_payload(stdout: str, stderr: str) -> str:
+    return json.dumps({"stdout": stdout, "stderr": stderr}, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+
+
+def _normalize_output_text(value: str, *, root: Optional[Path] = None) -> str:
+    """Normalize only re-execution noise from one captured output stream.
+
+    The contract is deliberately deterministic: remove carriage returns, replace
+    durations, ISO-8601 timestamps, and absolute project/temp paths, then strip
+    trailing whitespace from each line. All other content remains significant.
+    """
+    text = value.replace("\r", "")
+    if root is not None:
+        try:
+            project_path = str(root.resolve())
+        except (OSError, RuntimeError):
+            project_path = str(root)
+        if project_path:
+            project_pattern = re.compile(
+                re.escape(project_path) + r"(?:[/\\][^\s\"'<>]+)*"
+            )
+            text = project_pattern.sub("<path>", text)
+    text = _TEMP_PATH_RE.sub("<path>", text)
+    text = _ISO_TIMESTAMP_RE.sub("<timestamp>", text)
+    text = _DURATION_RE.sub("in <duration>", text)
+    text = _CLOCK_DURATION_RE.sub("<duration>", text)
+    return "\n".join(line.rstrip() for line in text.split("\n"))
+
+
+def normalize_captured_output(
+    stdout: str,
+    stderr: str,
+    *,
+    root: Optional[Path] = None,
+) -> dict:
+    """Return the canonical semantic form of captured stdout and stderr."""
+    return {
+        "stdout": _normalize_output_text(stdout, root=root),
+        "stderr": _normalize_output_text(stderr, root=root),
+    }
+
+
+def semantic_output_digest(
+    exit_code: Optional[int],
+    stdout: str,
+    stderr: str,
+    command: Sequence[str],
+    *,
+    root: Optional[Path] = None,
+) -> str:
+    """Hash exit code, normalized output, and argv using canonical JSON."""
+    binding = {
+        "command": list(command),
+        "exit_code": exit_code,
+        "normalized_output": normalize_captured_output(stdout, stderr, root=root),
+    }
+    encoded = json.dumps(
+        binding,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _run_challenge(
+    root: Path,
+    definition: dict,
+    *,
+    initial_error: str = "",
+    surface_id: Optional[str] = None,
+) -> dict:
+    stdout = ""
+    stderr = ""
+    exit_code: Optional[int] = None
+    timed_out = False
+    execution_error = initial_error
+    status = "FAIL"
+    reasons: List[str] = []
+    command = definition.get("command") if isinstance(definition, dict) else None
+    if not execution_error and isinstance(command, list) and command:
+        try:
+            cwd = _challenge_cwd(root, definition)
+            completed = subprocess.run(
+                command,
+                cwd=str(cwd),
+                shell=False,
+                capture_output=True,
+                text=True,
+                timeout=float(definition.get("timeout_s", 60)),
+                check=False,
+            )
+            stdout = completed.stdout or ""
+            stderr = completed.stderr or ""
+            exit_code = completed.returncode
+            status, reasons = _challenge_result(
+                definition,
+                surface_id=surface_id,
+                exit_code=exit_code,
+                stdout=stdout,
+                stderr=stderr,
+                timed_out=False,
+                execution_error="",
+                root=root,
+            )
+        except subprocess.TimeoutExpired as exc:
+            timed_out = True
+            stdout = exc.stdout or ""
+            stderr = exc.stderr or ""
+            if isinstance(stdout, bytes):
+                stdout = stdout.decode("utf-8", "replace")
+            if isinstance(stderr, bytes):
+                stderr = stderr.decode("utf-8", "replace")
+            status, reasons = _challenge_result(
+                definition,
+                surface_id=surface_id,
+                exit_code=None,
+                stdout=stdout,
+                stderr=stderr,
+                timed_out=True,
+                execution_error="",
+                root=root,
+            )
+        except (OSError, ValueError, CliError) as exc:
+            execution_error = str(exc)
+            status, reasons = _challenge_result(
+                definition,
+                surface_id=surface_id,
+                exit_code=None,
+                stdout=stdout,
+                stderr=stderr,
+                timed_out=False,
+                execution_error=execution_error,
+                root=root,
+            )
+    else:
+        if not execution_error:
+            execution_error = "challenge requires an explicit committed command; no command was configured"
+        reasons = [execution_error]
+    return {
+        "stdout": stdout,
+        "stderr": stderr,
+        "exit_code": exit_code,
+        "timed_out": timed_out,
+        "execution_error": execution_error,
+        "status": status,
+        "reasons": reasons,
+    }
+
+
+def _make_challenge_receipt(
+    root: Path,
+    surface_id: str,
+    definition: dict,
+    output_path: Path,
+    *,
+    exit_code: Optional[int],
+    status: str,
+    timed_out: bool,
+    execution_error: str,
+    source_revision: str,
+    run_id: Optional[str] = None,
+    signing_key: Optional[bytes] = None,
+) -> dict:
+    command = definition.get("command")
+    argv = list(command) if isinstance(command, list) else []
+    capture = strict_json_loads(output_path.read_text(encoding="utf-8"))
+    semantic_digest = semantic_output_digest(
+        exit_code,
+        capture.get("stdout", ""),
+        capture.get("stderr", ""),
+        argv,
+        root=root,
+    )
+    receipt = {
+        "receipt_type": "EXECUTED",
+        "surface_id": surface_id,
+        "command": argv,
+        "cwd": str(definition.get("cwd") or "."),
+        "exit_code": exit_code,
+        "captured_output": output_path.relative_to(root).as_posix(),
+        "captured_output_digest": hashlib.sha256(output_path.read_bytes()).hexdigest(),
+        "semantic_output_digest": semantic_digest,
+        "source_revision": source_revision,
+        "timestamp": now_iso(),
+        "timed_out": timed_out,
+        "status": status,
+        "execution_error": execution_error,
+        "challenge_config_digest": _challenge_config_digest(definition),
+        "run_id": run_id or "",
+    }
+    receipt["receipt_sha256"] = _executed_receipt_binding_digest(receipt)
+    if signing_key is not None and run_id:
+        receipt[LOCAL_INTEGRITY_HMAC_FIELD] = _executed_receipt_hmac(receipt, signing_key)
+    return receipt
+
+
+def _challenge_finding(surface_id: str, reason: str, evidence: str) -> dict:
+    category = next((category for sid, _surface, category in COVERAGE_SURFACES if sid == surface_id), "C5")
+    if category not in SCORE_CATEGORIES:
+        category = "C5"
+    return {
+        "id": f"CY-CHALLENGE-{surface_id}",
+        "severity": "P1",
+        "category": category,
+        "finding": f"Executed challenge failed for {surface_id}",
+        "plain_english_risk": reason,
+        "evidence": [evidence],
+        "recommended_fix": "Fix the challenged surface or update its committed command/assertions, then rerun the challenge.",
+        "status": "open",
+    }
+
+
+def challenge_from_root(root: Path, surface_id: Optional[str] = None, output_dir: Optional[Path] = None) -> dict:
+    root = root.resolve()
+    if not root.is_dir():
+        raise CliError(f"project root not found: {root}")
+    definitions, config_error = load_challenge_config(root)
+    selected = [surface_id] if surface_id else [sid for sid, _surface, _category in COVERAGE_SURFACES]
+    canonical_ids = {sid for sid, _surface, _category in COVERAGE_SURFACES}
+    unknown = sorted(set(selected) - canonical_ids)
+    if unknown:
+        raise CliError(f"challenge surface must be canonical: {', '.join(unknown)}")
+    destination = (output_dir or (root / DEFAULT_CHALLENGE_OUTPUT_DIR)).resolve()
+    try:
+        destination.relative_to(root)
+    except ValueError as exc:
+        raise CliError("challenge output directory must stay inside the project root") from exc
+    destination.mkdir(parents=True, exist_ok=True)
+    try:
+        signing_key = _load_local_integrity_binding_key(root, create=True)
+        key_error = ""
+    except CliError as exc:
+        signing_key = None
+        key_error = str(exc)
+    run_id = secrets.token_hex(16)
+    source_revision = current_tree_hash(root)
+    receipts: List[dict] = []
+    findings: List[dict] = []
+    surface_results: List[dict] = []
+    for sid in selected:
+        definition = definitions.get(sid, {})
+        execution = _run_challenge(
+            root,
+            definition if isinstance(definition, dict) else {},
+            initial_error=config_error or key_error,
+            surface_id=sid,
+        )
+        stdout = execution["stdout"]
+        stderr = execution["stderr"]
+        exit_code = execution["exit_code"]
+        timed_out = execution["timed_out"]
+        execution_error = execution["execution_error"]
+        status = execution["status"]
+        reasons = execution["reasons"]
+        output_path = destination / f"{sid}.capture.json"
+        safe_write_text(output_path, _captured_output_payload(stdout, stderr))
+        receipt = _make_challenge_receipt(
+            root,
+            sid,
+            definition if isinstance(definition, dict) else {},
+            output_path,
+            exit_code=exit_code,
+            status=status,
+            timed_out=timed_out,
+            execution_error=execution_error,
+            source_revision=source_revision,
+            run_id=run_id,
+            signing_key=signing_key,
+        )
+        receipt_path = destination / f"{sid}.receipt.json"
+        safe_write_text(receipt_path, json.dumps(receipt, indent=2, sort_keys=True, allow_nan=False) + "\n")
+        receipt["receipt_path"] = receipt_path.relative_to(root).as_posix()
+        receipt["captured_output"] = output_path.relative_to(root).as_posix()
+        receipts.append(receipt)
+        if status != "PASS":
+            findings.append(_challenge_finding(sid, "; ".join(reasons), receipt["captured_output"]))
+        surface_results.append({
+            "surface_id": sid,
+            "status": status,
+            "reasons": reasons,
+            "receipt": receipt,
+        })
+    result = {
+        "tool": TOOL_NAME,
+        "schema": CHALLENGE_RESULT_SCHEMA_ID,
+        "generated_at": now_iso(),
+        "project": str(root),
+        "source_revision": source_revision,
+        "complete": not findings and not config_error,
+        "surfaces": surface_results,
+        "receipts": receipts,
+        "findings": findings,
+    }
+    return result
 
 
 def evidence_path(evidence: str) -> str:
@@ -431,7 +1570,32 @@ def suppression_matches(finding: dict, suppression: dict) -> bool:
 def apply_suppressions(findings: List[dict], suppressions: List[dict]) -> List[dict]:
     for finding in findings:
         for suppression in suppressions:
-            if suppression_matches(finding, suppression):
+            sid = str(suppression.get("id") or "").strip()
+            files = suppression.get("files") or suppression.get("paths") or []
+            if isinstance(files, str):
+                files = [files]
+            if sid and sid not in {str(finding.get("id")), str(finding.get("finding")), str(finding.get("title"))}:
+                continue
+            evidence = [str(item) for item in finding.get("evidence") or []]
+            if files:
+                matched = [
+                    item for item in evidence
+                    if any(fnmatch.fnmatch(evidence_path(item), pattern) or evidence_path(item) == pattern for pattern in files)
+                ]
+                if not matched:
+                    continue
+                finding["evidence"] = [item for item in evidence if item not in matched]
+                finding.setdefault("suppressed_evidence", []).extend({
+                    "evidence": item,
+                    "reason": str(suppression.get("reason") or "reviewed suppression"),
+                    "reviewed_by": str(suppression.get("reviewed_by") or ""),
+                    "reviewed_at": str(suppression.get("reviewed_at") or ""),
+                } for item in matched)
+                if finding["evidence"]:
+                    continue
+            elif not suppression_matches(finding, suppression):
+                continue
+            if not files or not finding.get("evidence"):
                 finding["status"] = "suppressed"
                 finding["suppression"] = {
                     "reason": str(suppression.get("reason") or "reviewed suppression"),
@@ -462,34 +1626,73 @@ def iter_files(root: Path, limit: int = DEFAULT_MAX_FILES) -> Tuple[List[Path], 
         "truncated": False,
         "files_beyond_limit": 0,
         "symlinks_skipped": 0,
+        "symlink_dirs_skipped": 0,
+        "files_oversized": 0,
         "files_unreadable": 0,
+        "content_truncated": 0,
+        "skipped_files": [],
+        "oversized_files": [],
+        "unreadable_files": [],
+        "truncated_files": [],
+        "incomplete": False,
     }
     for dirpath, dirnames, filenames in os.walk(root):
         parent = Path(dirpath)
         # Sorting dirnames keeps walk order deterministic across filesystems.
-        dirnames[:] = sorted(d for d in dirnames if keep_dir(parent, d))
+        kept_dirnames = []
+        for dirname in sorted(dirnames):
+            if dirname in IGNORED_DIRS or (dirname.startswith(".") and dirname != ".github"):
+                continue
+            if (parent / dirname).is_symlink():
+                stats["symlink_dirs_skipped"] += 1
+                stats["skipped_files"].append(rel(root, parent / dirname))
+                continue
+            kept_dirnames.append(dirname)
+        dirnames[:] = kept_dirnames
         for name in sorted(filenames):
             p = parent / name
             if p.is_symlink():
                 stats["symlinks_skipped"] += 1
+                stats["skipped_files"].append(rel(root, p))
                 continue
             try:
                 real = p.resolve(strict=True)
                 real.relative_to(root)
                 if real.stat().st_size > 2_000_000:
+                    stats["files_oversized"] += 1
+                    stats["oversized_files"].append(rel(root, p))
                     continue
             except ValueError:
                 # Resolves outside the scanned tree (e.g. via a parent link).
                 stats["symlinks_skipped"] += 1
+                stats["skipped_files"].append(rel(root, p))
+                continue
+            except RuntimeError:
+                # Symlink loops can make Path.resolve fail without an OSError.
+                stats["symlinks_skipped"] += 1
+                stats["skipped_files"].append(rel(root, p))
                 continue
             except OSError:
                 stats["files_unreadable"] += 1
+                stats["unreadable_files"].append(rel(root, p))
                 continue
             if len(files) >= limit:
                 stats["truncated"] = True
                 stats["files_beyond_limit"] += 1
+                stats["truncated_files"].append(rel(root, p))
                 continue
             files.append(p)
+    stats["skipped_files"] = sorted(set(stats["skipped_files"]))
+    stats["oversized_files"] = sorted(set(stats["oversized_files"]))
+    stats["unreadable_files"] = sorted(set(stats["unreadable_files"]))
+    stats["truncated_files"] = sorted(set(stats["truncated_files"]))
+    stats["incomplete"] = bool(
+        stats["truncated"]
+        or stats["symlinks_skipped"]
+        or stats["symlink_dirs_skipped"]
+        or stats["files_oversized"]
+        or stats["files_unreadable"]
+    )
     return files, stats
 
 
@@ -506,6 +1709,9 @@ def detect_stack(root: Path) -> Tuple[List[str], Dict[str, str], Dict[str, List[
     if package_json.exists():
         try:
             data = json.loads(read_text(package_json))
+            if not isinstance(data, dict):
+                signals.append("package.json exists but must contain a JSON object")
+                data = {}
             if isinstance(data.get("scripts"), dict):
                 scripts = {
                     str(k): redact_sensitive_text(str(v))
@@ -518,7 +1724,7 @@ def detect_stack(root: Path) -> Tuple[List[str], Dict[str, str], Dict[str, List[
             for dep, label in DEPENDENCY_HINTS.items():
                 if dep in deps:
                     deps_found.setdefault(label, []).append(dep)
-        except json.JSONDecodeError:
+        except (ValueError, UnicodeError):
             signals.append("package.json exists but could not be parsed")
 
     py_manifests = ["pyproject.toml", "requirements.txt", "Pipfile"]
@@ -530,16 +1736,72 @@ def detect_stack(root: Path) -> Tuple[List[str], Dict[str, str], Dict[str, List[
     return sorted(signals), scripts, deps_found
 
 
-def gitignore_entries(root: Path) -> str:
+def parse_gitignore_patterns(text: str) -> List[str]:
+    patterns: List[str] = []
+    for raw_line in text.splitlines():
+        line = raw_line.rstrip(" \t")
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if line.startswith(r"\#"):
+            line = line[1:]
+        patterns.append(line)
+    return patterns
+
+
+def gitignore_entries(root: Path) -> List[str]:
     gi = root / ".gitignore"
-    return read_text(gi).lower() if gi.exists() else ""
+    return parse_gitignore_patterns(read_text(gi)) if gi.exists() else []
+
+
+def _gitignore_pattern_matches(pattern: str, path: str) -> bool:
+    rule = pattern[1:] if pattern.startswith("!") else pattern
+    if rule.startswith(r"\!"):
+        rule = rule[1:]
+    directory_only = rule.endswith("/")
+    anchored = rule.startswith("/")
+    rule = rule.strip("/")
+    candidate = path.replace(os.sep, "/")
+    if candidate.startswith("./"):
+        candidate = candidate[2:]
+    candidate = candidate.lstrip("/")
+    if not rule or not candidate:
+        return False
+    if "/" not in rule:
+        segments = candidate.split("/")
+        if directory_only:
+            segments = segments[:-1]
+        if anchored:
+            return bool(segments) and fnmatch.fnmatchcase("/".join(segments), rule)
+        return any(fnmatch.fnmatchcase(segment, rule) for segment in segments)
+    parts = candidate.split("/")
+    candidates = ["/".join(parts[:index]) for index in range(1, len(parts))]
+    if not directory_only:
+        candidates.append(candidate)
+    if not anchored:
+        candidates.extend(
+            "/".join(value.split("/")[index:])
+            for value in list(candidates)
+            for index in range(1, len(value.split("/")))
+        )
+    return any(fnmatch.fnmatchcase(value, rule) for value in candidates)
+
+
+def gitignore_ignores_path(patterns: List[str], path: str) -> bool:
+    ignored = False
+    for pattern in patterns:
+        if _gitignore_pattern_matches(pattern, path):
+            ignored = not pattern.startswith("!")
+    return ignored
 
 
 def is_env_example_name(name: str) -> bool:
     lower = name.lower()
     return lower in ENV_EXAMPLE_NAMES or (
-        lower.startswith(".env")
+        lower.startswith((".env.", "env."))
         and lower.endswith((".example", ".sample", ".template"))
+    ) or (
+        lower.endswith(".env")
+        and any(token in lower for token in ("example", "sample", "template"))
     )
 
 
@@ -547,8 +1809,6 @@ def classify_env_file(name: str) -> Optional[str]:
     """Classify a file name as an 'example' env file, a 'real' one, or neither."""
     lower = name.lower()
     if is_env_example_name(lower):
-        return "example"
-    if lower.endswith(".env") and any(t in lower for t in ("example", "sample", "template")):
         return "example"
     if lower == ".env" or lower.startswith(".env.") or lower.endswith(".env"):
         return "real"
@@ -572,19 +1832,55 @@ def is_placeholder_secret_value(value: str) -> bool:
     return any(token in lower for token in placeholder_tokens)
 
 
+def context_path_reason(path: str) -> Optional[str]:
+    """Return a review-context reason for low-confidence heuristic matches."""
+    for segment in (part.lower() for part in Path(path).parts):
+        segment_tokens = set(re.split(r"[._-]+", segment))
+        if any(
+            segment == marker
+            or marker in segment_tokens
+            or segment.startswith((marker + ".", marker + "-", marker + "_"))
+            for marker in CONTEXT_ONLY_PATH_MARKERS
+        ):
+            return "documentation, test, fixture, example, audit, or snapshot path; heuristic match is review context"
+    return None
+
+
+def detector_or_guard_context_reason(lines: Sequence[str], index: int) -> Optional[str]:
+    """Suppress quoted detector patterns and explicitly guarded eval calls only."""
+    line = lines[index]
+    lower = line.lower()
+    window = "\n".join(lines[max(0, index - 14): index + 1]).lower()
+    if re.search(r"\b(?:pattern|patterns|regex|regexp|risky_patterns?|re\.compile|new\s+regexp)\b", lower):
+        return "detector source string, not an executable sink"
+    if any(marker in lower for marker in ("never use eval", "no eval", "dangerous eval() detected")):
+        return "quoted detector or guard guidance, not an executable sink"
+    if "eval" not in lower:
+        return None
+    if (
+        "blockedpatterns" in window
+        and re.search(r"if\s*\([^\n)]*blockedpatterns[^\n)]*(?:length|includes)", window)
+        and re.search(r"eval\s*\(\s*(?:wrapped|compiled|safe|validated|isolated|sandbox)", lower)
+    ):
+        return "intentional guarded eval follows a nearby blocked-pattern check"
+    if "page!.evaluate" in window and "sourcesfnsource" in window:
+        return "intentional eval rebuilds a function inside an isolated page.evaluate callback"
+    return None
+
+
 SOURCEMAP_CONFIG_NAMES = {
     "next.config.js", "next.config.mjs", "next.config.ts",
     "webpack.config.js", "webpack.config.ts",
 }
 
 
-def scan_file_contents(root: Path, files: List[Path]) -> Dict[str, List[str]]:
+def scan_file_contents(root: Path, files: List[Path], scan_limits: Optional[dict] = None) -> Dict[str, Any]:
     """Single content pass over every scannable file, feeding all detectors.
 
-    Secrets are scanned everywhere, including tests and docs, because real
-    credentials get committed in both. The heuristic detectors (debug flags,
-    CORS, sinks, default credentials) skip test/doc/fixture paths to keep the
-    false-positive rate low.
+    High-confidence secrets are scanned everywhere, including tests and docs,
+    because real credentials get committed in both. Low-confidence secret
+    assignments and heuristic sink matches record context suppression reasons
+    for docs/tests/audits and detector or explicitly guarded eval text.
     """
     results: Dict[str, List[str]] = {
         "env_files": [],
@@ -596,7 +1892,19 @@ def scan_file_contents(root: Path, files: List[Path]) -> Dict[str, List[str]]:
         "dangerous_sinks": [],
         "default_credentials": [],
         "sourcemap_configs": [],
+        "context_suppressions": [],
+        "context_suppression_count": 0,
     }
+
+    def suppress_context(rp: str, line_no: int, detector: str, reason: str) -> None:
+        results["context_suppression_count"] += 1
+        results["context_suppressions"].append({
+            "path": rp,
+            "line": line_no,
+            "detector": detector,
+            "reason": reason,
+        })
+
     for p in files:
         rp = rel(root, p)
         name = p.name.lower()
@@ -609,24 +1917,31 @@ def scan_file_contents(root: Path, files: List[Path]) -> Dict[str, List[str]]:
         elif kind == "example":
             results["env_files"].append(rp)
 
-        if suffix not in TEXT_EXTENSIONS and not name.startswith(".env") and kind is None:
+        is_known_config = name in EXTENSIONLESS_CONFIG_NAMES
+        if suffix not in TEXT_EXTENSIONS and not name.startswith(".env") and kind is None and not is_known_config:
             continue
-        text = read_text(p, max_chars=60_000)
+        text, was_truncated, unreadable = read_text_with_status(p, max_chars=2_000_000)
+        if scan_limits is not None:
+            if was_truncated:
+                scan_limits["content_truncated"] += 1
+                scan_limits["truncated_files"].append(rp)
+            if unreadable:
+                scan_limits["files_unreadable"] += 1
+                scan_limits["unreadable_files"].append(rp)
+        if unreadable:
+            continue
         if not text or looks_binary(text):
             continue
 
         # Match markers against whole path segments (and segment stems like
         # `app.test.ts`) so `docker-compose.yml` is not mistaken for a doc path.
-        path_segments = [s.lower() for s in Path(rp).parts]
-        in_test_path = any(
-            seg == marker or seg.startswith(marker + ".") or marker == seg.split(".")[-1]
-            for seg in path_segments
-            for marker in TEST_PATH_MARKERS
-        )
+        path_reason = context_path_reason(rp)
+        in_test_path = path_reason is not None
         is_code = suffix in CODE_EXTENSIONS
-        is_config = suffix in CONFIG_EXTENSIONS or kind is not None
+        is_config = suffix in CONFIG_EXTENSIONS or kind is not None or is_known_config
 
-        for line_no, line in enumerate(text.splitlines(), start=1):
+        lines = text.splitlines()
+        for line_no, line in enumerate(lines, start=1):
             stripped = line.strip()
             if any(r.search(line) for r in SECRET_SHAPE_RES):
                 results["suspicious_high"].append(secret_evidence(
@@ -641,12 +1956,18 @@ def scan_file_contents(root: Path, files: List[Path]) -> Dict[str, List[str]]:
                     and not stripped.startswith(("#", "//", "*"))
                     and not is_placeholder_secret_value(value_match.group(2))
                 ):
-                    results["suspicious_low"].append(secret_evidence(
-                        rp, line_no, "possible secret-like assignment",
-                        "secret_name_and_assignment", "low", line,
-                    ))
+                    if path_reason:
+                        suppress_context(rp, line_no, "secret_name_and_assignment", path_reason)
+                    else:
+                        results["suspicious_low"].append(secret_evidence(
+                            rp, line_no, "possible secret-like assignment",
+                            "secret_name_and_assignment", "low", line,
+                        ))
 
             if in_test_path:
+                for sink_re, label in DANGEROUS_SINK_RES:
+                    if sink_re.search(line):
+                        suppress_context(rp, line_no, label, path_reason or "heuristic detector skipped in review context")
                 continue
             if (is_config or suffix == ".py") and any(r.search(line) for r in DEBUG_FLAG_RES):
                 results["debug_flags"].append(f"{rp}:{line_no} ({compact_context(line)})")
@@ -658,22 +1979,51 @@ def scan_file_contents(root: Path, files: List[Path]) -> Dict[str, List[str]]:
             if is_code:
                 for sink_re, label in DANGEROUS_SINK_RES:
                     if sink_re.search(line):
-                        results["dangerous_sinks"].append(f"{rp}:{line_no} ({label}; {compact_context(line)})")
+                        reason = detector_or_guard_context_reason(lines, line_no - 1)
+                        if reason:
+                            suppress_context(rp, line_no, label, reason)
+                        else:
+                            results["dangerous_sinks"].append(f"{rp}:{line_no} ({label}; {compact_context(line)})")
                         break
             if name in SOURCEMAP_CONFIG_NAMES and any(r.search(line) for r in SOURCEMAP_RES):
                 results["sourcemap_configs"].append(f"{rp}:{line_no} ({compact_context(line)})")
 
-    return {key: sorted(set(values))[:50] for key, values in results.items()}
+    output: Dict[str, Any] = {}
+    for key, values in results.items():
+        if key == "context_suppression_count":
+            output[key] = values
+            continue
+        if key == "context_suppressions":
+            unique = {json.dumps(value, sort_keys=True): value for value in values}
+            output[key] = [unique[item] for item in sorted(unique)[:100]]
+        else:
+            output[key] = sorted(set(values))[:50]
+    return output
 
 
 def find_tests(root: Path, files: List[Path]) -> List[str]:
+    test_dirs = {"test", "tests", "spec", "specs", "__tests__", "playwright", "cypress", "e2e"}
+    test_extensions = {".js", ".jsx", ".ts", ".tsx", ".py", ".go", ".java", ".rb", ".rs"}
     tests: List[str] = []
     for p in files:
         rp = rel(root, p)
         lower = rp.lower()
-        if any(x in lower for x in ("test", "spec", "__tests__", "playwright", "cypress")):
-            if p.suffix.lower() in {".js", ".jsx", ".ts", ".tsx", ".py", ".go", ".java", ".rb", ".rs"}:
-                tests.append(rp)
+        suffix = p.suffix.lower()
+        if suffix not in test_extensions:
+            continue
+        parts = [part.lower() for part in Path(lower).parts]
+        stem = p.stem.lower()
+        in_test_dir = any(part in test_dirs for part in parts[:-1])
+        conventional_name = (
+            stem in {"test", "spec"}
+            or stem.startswith("test_")
+            or stem.endswith("_test")
+            or stem.endswith(".test")
+            or stem.endswith(".spec")
+            or (suffix == ".java" and stem.startswith("test"))
+        )
+        if in_test_dir or conventional_name:
+            tests.append(rp)
     return sorted(set(tests))[:100]
 
 
@@ -688,7 +2038,7 @@ def find_ci(root: Path) -> List[str]:
     return sorted(set(ci))
 
 
-def run_deep_checks(root: Path, ci: List[str], gitignore: str) -> List[Finding]:
+def run_deep_checks(root: Path, ci: List[str], gitignore: List[str]) -> List[Finding]:
     findings: List[Finding] = []
     mutable_actions: List[str] = []
     npm_install_in_ci: List[str] = []
@@ -746,7 +2096,11 @@ def run_deep_checks(root: Path, ci: List[str], gitignore: str) -> List[Finding]:
             recommended_fix="Use `npm ci` (or the pnpm/yarn frozen-lockfile equivalent) in CI.",
         ))
 
-    missing_gitignore = [pattern for pattern in (".env", "*.pem", "*.key") if pattern.lower() not in gitignore]
+    gitignore_targets = {".env": ".env", "*.pem": "secret.pem", "*.key": "secret.key"}
+    missing_gitignore = [
+        pattern for pattern, target in gitignore_targets.items()
+        if not gitignore_ignores_path(gitignore, target)
+    ]
     if missing_gitignore:
         findings.append(Finding(
             "CY-SECRET-003",
@@ -808,10 +2162,11 @@ def build_findings(
     content: Dict[str, List[str]],
     tests: List[str],
     ci: List[str],
-    gitignore: str,
+    gitignore: List[str],
     deps_found: Dict[str, List[str]],
     missing_lockfile: bool = False,
     deep_findings: Optional[List[Finding]] = None,
+    config_error: Optional[str] = None,
 ) -> List[Finding]:
     """Build scan findings with stable, semantic rule IDs.
 
@@ -821,6 +2176,16 @@ def build_findings(
     findings: List[Finding] = []
     real_env_files = content["real_env_files"]
     env_files = content["env_files"]
+
+    if config_error:
+        findings.append(Finding(
+            "CY-CONFIG-003", "P2", "Invalid CheckYourself suppression configuration",
+            "The optional suppression configuration could not be validated, so no suppressions were applied. "
+            "Fix the configuration before relying on a clean scan.",
+            [config_error],
+            category="C3",
+            recommended_fix="Correct the suppression file shape and rerun the scan; invalid configuration must never hide findings.",
+        ))
 
     if content["suspicious_high"]:
         findings.append(Finding(
@@ -842,13 +2207,15 @@ def build_findings(
             recommended_fix="Verify whether the value is a credential. If it is benign, add a reviewed `.checkyourself.yml` suppression; if real, move it to environment variables.",
         ))
 
-    env_ignored = ".env" in gitignore
-    if real_env_files and not env_ignored:
+    unignored_env_files = [
+        path for path in real_env_files if not gitignore_ignores_path(gitignore, path)
+    ]
+    if unignored_env_files:
         findings.append(Finding(
             "CY-ENV-001", "P0", "A real .env file may be committed",
             "A non-example .env file exists and `.env` is not in .gitignore. "
             "If this is tracked by git, secrets are in your history. Gitignore it and rotate.",
-            real_env_files,
+            unignored_env_files,
             category="C3",
             recommended_fix="Add `.env` patterns to `.gitignore`, remove tracked env files, and rotate exposed values.",
         ))
@@ -861,7 +2228,7 @@ def build_findings(
             recommended_fix="Run git history/secret checks and keep only redacted `.env.example` files in the repo.",
         ))
 
-    has_example = any(Path(e).name.lower() in ENV_EXAMPLE_NAMES for e in env_files)
+    has_example = any(is_env_example_name(Path(e).name) for e in env_files)
     if real_env_files and not has_example:
         findings.append(Finding(
             "CY-ENV-003", "P1", "No .env.example for required configuration",
@@ -980,12 +2347,23 @@ def scan(root: Path, deep: bool = False, max_files: int = DEFAULT_MAX_FILES) -> 
     root = root.resolve()
     files, scan_limits = iter_files(root, limit=max_files)
     stack_signals, scripts, deps_found = detect_stack(root)
-    content = scan_file_contents(root, files)
+    content = scan_file_contents(root, files, scan_limits)
+    scan_limits["truncated_files"] = sorted(set(scan_limits["truncated_files"]))
+    scan_limits["unreadable_files"] = sorted(set(scan_limits["unreadable_files"]))
+    scan_limits["incomplete"] = bool(
+        scan_limits["truncated"]
+        or scan_limits["symlinks_skipped"]
+        or scan_limits["symlink_dirs_skipped"]
+        or scan_limits["files_oversized"]
+        or scan_limits["files_unreadable"]
+        or scan_limits["content_truncated"]
+    )
     tests = find_tests(root, files)
     ci = find_ci(root)
     hints = path_hints(root, files)
     gitignore = gitignore_entries(root)
     deep_results = run_deep_checks(root, ci, gitignore) if deep else []
+    config = load_checkyourself_config(root)
     missing_lockfile = (root / "package.json").exists() and not any(
         (root / name).exists() for name in LOCKFILE_NAMES
     )
@@ -997,8 +2375,8 @@ def scan(root: Path, deep: bool = False, max_files: int = DEFAULT_MAX_FILES) -> 
         deps_found,
         missing_lockfile=missing_lockfile,
         deep_findings=deep_results,
+        config_error=config.get("config_error"),
     )
-    config = load_checkyourself_config(root)
     finding_dicts = apply_suppressions([f.to_dict() for f in findings], config.get("suppress") or [])
 
     counts = {sev: 0 for sev in ("P0", "P1", "P2", "P3")}
@@ -1025,8 +2403,11 @@ def scan(root: Path, deep: bool = False, max_files: int = DEFAULT_MAX_FILES) -> 
         "ci": ci,
         "risk_surfaces": hints,
         "findings": finding_dicts,
+        "context_suppressions": content["context_suppressions"],
+        "context_suppression_count": content["context_suppression_count"],
         "counts": counts,
         "suppression_count": suppression_count,
+        "config_error": config.get("config_error"),
         "tree": tree_sample(root),
         "public_repo_scope_guardrails": PUBLIC_REPO_SCOPE_GUARDRAILS,
     }
@@ -1044,6 +2425,8 @@ def render_markdown(root: Path, data: dict) -> str:
     add(f"- Project root: `{data['project']}`")
     add(f"- Files scanned: {data['files_scanned']}")
     limits = data.get("scan_limits") or {}
+    if limits.get("incomplete"):
+        add("- WARNING: scan incomplete; skipped, unreadable, oversized, or truncated inputs may hide findings.")
     if limits.get("truncated"):
         add(f"- WARNING: scan truncated at {limits.get('max_files')} files; "
             f"{limits.get('files_beyond_limit')} files were not scanned. "
@@ -1130,7 +2513,7 @@ def render_markdown(root: Path, data: dict) -> str:
     add("Use this generated context with the CheckYourself diagnostic. Treat the deterministic")
     add("findings above as confirmed evidence, then sweep the whole production surface: infer the")
     add("stack, list unknowns, score production readiness 0-100 with caps, rank P0/P1/P2/P3 risks,")
-    add("produce the complete remediation backlog and the safest first approval batch, and generate")
+    add("produce the complete remediation backlog and the highest-severity approval batch, and generate")
     add("a bespoke learning plan from the gaps.")
     add("```")
     return "\n".join(lines) + "\n"
@@ -1149,27 +2532,717 @@ def coverage_emit(project: str = "") -> dict:
                 "category": category,
                 "status": None,
                 "evidence_reviewed": [],
+                "evidence_receipts": [],
                 "missing_evidence": [],
                 "not_applicable_reason": "",
+                "delegation_receipts": [],
+                "claim_bound_evidence": [],
+                "claim": "",
+                "finding_ids": [],
             }
             for sid, surface, category in COVERAGE_SURFACES
         ],
     }
 
 
-def coverage_check(data: dict) -> dict:
+def _evidence_reference(value: Any) -> Optional[str]:
+    """Extract a conservative relative file reference from an assertion."""
+    if not isinstance(value, str):
+        return None
+    matches = list(EVIDENCE_PATH_RE.finditer(value))
+    if not matches:
+        return None
+    return matches[-1].group("path").replace("\\", "/")
+
+
+def _evidence_root(root: Optional[Path]) -> Path:
+    return (root or Path.cwd()).resolve()
+
+
+def _resolve_evidence_reference(reference: Any, root: Optional[Path]) -> Tuple[Optional[Path], str]:
+    extracted = _evidence_reference(reference)
+    if not extracted:
+        return None, "reference does not contain a file path"
+    base = _evidence_root(root)
+    candidate = Path(extracted)
+    if not candidate.is_absolute():
+        candidate = base / candidate
+    try:
+        resolved = candidate.resolve()
+        resolved.relative_to(base)
+    except (OSError, RuntimeError, ValueError):
+        return None, f"reference is outside evidence root {base}"
+    if not resolved.is_file():
+        return None, "referenced artifact does not exist"
+    try:
+        content = resolved.read_bytes()
+    except (OSError, UnicodeError) as exc:
+        return None, f"referenced artifact could not be read: {exc}"
+    if not content:
+        return None, "referenced artifact is empty"
+    return resolved, ""
+
+
+def _verification_registry_for_root(
+    root: Optional[Path], explicit_registry: Optional[dict] = None
+) -> Tuple[dict, Optional[str]]:
+    if explicit_registry is not None:
+        return validate_verification_registry_config(
+            {"verification_artifact_registry": explicit_registry},
+            "explicit registry",
+        )
+    config = load_checkyourself_config(_evidence_root(root))
+    registry = config.get("verification_artifact_registry")
+    if not isinstance(registry, dict):
+        registry = _copy_verification_registry(DEFAULT_VERIFICATION_ARTIFACT_REGISTRY)
+    return registry, config.get("verification_registry_error")
+
+
+def _verification_artifact_error(
+    artifact: Path,
+    root: Optional[Path],
+    surface_id: str,
+    explicit_registry: Optional[dict] = None,
+) -> Optional[str]:
+    registry, registry_error = _verification_registry_for_root(root, explicit_registry)
+    if registry_error:
+        return f"verification artifact registry is invalid: {registry_error}"
+    contract = registry.get(surface_id)
+    if not isinstance(contract, dict):
+        return f"surface {surface_id} has no registered verification artifact contract"
+    base = _evidence_root(root)
+    try:
+        relative = artifact.relative_to(base).as_posix()
+    except ValueError:
+        return f"artifact is outside evidence root {base}"
+
+    path_match = False
+    for root_pattern in contract.get("path_roots", []):
+        clean_root = str(root_pattern).strip().strip("/")
+        if not clean_root:
+            continue
+        prefix = clean_root + "/"
+        if relative.startswith(prefix):
+            within_root = relative[len(prefix):]
+            if within_root and any(
+                fnmatch.fnmatch(within_root, pattern)
+                or fnmatch.fnmatch(Path(within_root).name, pattern)
+                for pattern in contract.get("path_patterns", [])
+            ):
+                path_match = True
+                break
+    if not path_match:
+        roots = ", ".join(str(item) for item in contract.get("path_roots", []))
+        patterns = ", ".join(str(item) for item in contract.get("path_patterns", []))
+        return f"artifact path {relative!r} is not registered for {surface_id} (roots: {roots}; patterns: {patterns})"
+
+    try:
+        record = strict_json_loads(artifact.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError) as exc:
+        return f"artifact {relative!r} is not a valid JSON verification record: {exc}"
+    if not isinstance(record, dict):
+        return f"artifact {relative!r} must contain a JSON object verification record"
+    expected_kind = contract.get("expected_kind")
+    if record.get("kind") != expected_kind:
+        return f"artifact {relative!r} has kind {record.get('kind')!r}; expected {expected_kind!r}"
+    for field in contract.get("required_fields", []):
+        value = record.get(field)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return f"artifact {relative!r} is missing required verification field {field!r}"
+    for field, expected in (contract.get("required_values") or {}).items():
+        if record.get(field) != expected:
+            return f"artifact {relative!r} field {field!r} must equal {expected!r}"
+    return None
+
+
+def _receipt_binding_digest(receipt: dict) -> str:
+    """Hash the complete verifier-issued receipt binding, excluding its hash."""
+    binding = {field: receipt.get(field) for field in RECEIPT_BINDING_FIELDS}
+    encoded = json.dumps(
+        binding,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _resolve_captured_output(reference: Any, root: Optional[Path]) -> Tuple[Optional[Path], str]:
+    extracted = _evidence_reference(reference)
+    if not extracted:
+        return None, "captured output reference does not contain a file path"
+    base = _evidence_root(root)
+    candidate = Path(extracted)
+    if not candidate.is_absolute():
+        candidate = base / candidate
+    try:
+        resolved = candidate.resolve()
+        resolved.relative_to(base)
+    except (OSError, RuntimeError, ValueError):
+        return None, f"captured output is outside evidence root {base}"
+    if not resolved.is_file() or resolved.is_symlink():
+        return None, "captured output file does not exist as a regular file"
+    return resolved, ""
+
+
+def _verify_executed_receipt(
+    receipt: dict,
+    root: Optional[Path],
+    *,
+    expected_surface_id: Optional[str],
+) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """Verify an executed receipt by re-running its committed challenge."""
+    prefix = "executed receipt"
+    if expected_surface_id is None or receipt.get("surface_id") != expected_surface_id:
+        return None, None, f"{prefix}: surface binding does not match the coverage surface"
+    receipt_id = receipt.get("receipt_sha256")
+    if not isinstance(receipt_id, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", receipt_id):
+        return None, None, f"{prefix}: receipt_sha256 must be a 64-character hexadecimal binding hash"
+    if receipt_id.lower() != _executed_receipt_binding_digest(receipt).lower():
+        return None, None, f"{prefix}: receipt_sha256 does not cover executed fields"
+    run_id = receipt.get("run_id")
+    if not isinstance(run_id, str) or not re.fullmatch(r"[0-9a-fA-F]{32}", run_id):
+        return None, None, f"{prefix}: run_id is missing or invalid"
+    binding_hmac = receipt.get(LOCAL_INTEGRITY_HMAC_FIELD)
+    if not isinstance(binding_hmac, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", binding_hmac):
+        return None, None, f"{prefix}: local integrity binding HMAC is missing or invalid"
+    try:
+        binding_key = _load_local_integrity_binding_key(_evidence_root(root), create=False)
+    except CliError as exc:
+        return None, None, f"{prefix}: local integrity binding key unavailable: {exc}"
+    if not hmac.compare_digest(binding_hmac.lower(), _executed_receipt_hmac(receipt, binding_key).lower()):
+        return None, None, f"{prefix}: local integrity binding HMAC does not cover executed fields"
+    if receipt.get("status") not in {"PASS", "FAIL"}:
+        return None, None, f"{prefix}: status must be PASS or FAIL"
+    if not isinstance(receipt.get("command"), list) or not all(isinstance(part, str) for part in receipt["command"]):
+        return None, None, f"{prefix}: command must be an argv list"
+    if not isinstance(receipt.get("source_revision"), str) or not receipt["source_revision"].strip():
+        return None, None, f"{prefix}: source_revision is missing"
+    if not isinstance(receipt.get("timed_out"), bool):
+        return None, None, f"{prefix}: timed_out must be boolean"
+    output_path, reason = _resolve_captured_output(receipt.get("captured_output"), root)
+    if output_path is None:
+        return None, None, f"{prefix}: {reason}"
+    try:
+        raw_capture = output_path.read_bytes()
+    except OSError as exc:
+        return None, None, f"{prefix}: could not read captured output: {exc}"
+    expected_digest = receipt.get("captured_output_digest")
+    if not isinstance(expected_digest, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", expected_digest):
+        return None, None, f"{prefix}: captured_output_digest must be a 64-character hexadecimal hash"
+    actual_digest = hashlib.sha256(raw_capture).hexdigest()
+    if actual_digest.lower() != expected_digest.lower():
+        return None, None, f"{prefix}: captured output digest does not match the stored file"
+    try:
+        capture = strict_json_loads(raw_capture.decode("utf-8"))
+    except (UnicodeError, ValueError) as exc:
+        return None, None, f"{prefix}: captured output is not a valid capture record: {exc}"
+    if not isinstance(capture, dict) or not isinstance(capture.get("stdout"), str) or not isinstance(capture.get("stderr"), str):
+        return None, None, f"{prefix}: captured output record must contain stdout and stderr strings"
+
+    base = _evidence_root(root)
+    stored_semantic_digest = receipt.get("semantic_output_digest")
+    if stored_semantic_digest is not None and (
+        not isinstance(stored_semantic_digest, str)
+        or not re.fullmatch(r"[0-9a-fA-F]{64}", stored_semantic_digest)
+    ):
+        return None, None, f"{prefix}: semantic_output_digest must be a 64-character hexadecimal hash"
+    derived_stored_semantic_digest = semantic_output_digest(
+        receipt.get("exit_code"),
+        capture["stdout"],
+        capture["stderr"],
+        receipt["command"],
+        root=base,
+    )
+    if stored_semantic_digest is not None and (
+        stored_semantic_digest.lower() != derived_stored_semantic_digest.lower()
+    ):
+        return None, None, f"{prefix}: semantic output digest does not match the stored capture"
+    stored_semantic_digest = stored_semantic_digest or derived_stored_semantic_digest
+
+    definitions, config_error = load_challenge_config(base)
+    if config_error:
+        return None, None, f"{prefix}: current challenge configuration is invalid: {config_error}"
+    definition = definitions.get(expected_surface_id)
+    if not isinstance(definition, dict):
+        return None, None, f"{prefix}: current challenge definition is missing"
+    if receipt.get("challenge_config_digest") != _challenge_config_digest(definition):
+        return None, None, f"{prefix}: challenge definition changed since execution"
+    if receipt.get("command") != list(definition.get("command") or []):
+        return None, None, f"{prefix}: command does not match the committed challenge definition"
+    if receipt.get("cwd") != str(definition.get("cwd") or "."):
+        return None, None, f"{prefix}: cwd does not match the committed challenge definition"
+    current_revision = current_tree_hash(base)
+    if receipt.get("source_revision") != current_revision:
+        return None, None, f"{prefix}: source revision no longer matches the current project tree"
+    fresh = _run_challenge(base, definition, surface_id=expected_surface_id)
+    if fresh["exit_code"] != receipt.get("exit_code"):
+        return None, None, f"{prefix}: re-executed exit code does not match the receipt"
+    if fresh["timed_out"] != receipt.get("timed_out"):
+        return None, None, f"{prefix}: re-executed timeout state does not match the receipt"
+    if fresh["execution_error"] != str(receipt.get("execution_error") or ""):
+        return None, None, f"{prefix}: re-executed error state does not match the receipt"
+    fresh_status, fresh_reasons = _challenge_result(
+        definition,
+        surface_id=expected_surface_id,
+        exit_code=fresh["exit_code"],
+        stdout=fresh["stdout"],
+        stderr=fresh["stderr"],
+        timed_out=fresh["timed_out"],
+        execution_error=fresh["execution_error"],
+        root=base,
+    )
+    if receipt.get("status") == "PASS" and fresh_status != "PASS":
+        return None, None, f"{prefix}: re-executed challenge assertions failed: {'; '.join(fresh_reasons)}"
+    if fresh["status"] != receipt.get("status"):
+        return None, None, f"{prefix}: re-executed challenge status does not match the receipt"
+    fresh_semantic_digest = semantic_output_digest(
+        fresh["exit_code"],
+        fresh["stdout"],
+        fresh["stderr"],
+        definition.get("command") or [],
+        root=base,
+    )
+    if fresh_semantic_digest.lower() != stored_semantic_digest.lower():
+        return None, None, f"{prefix}: re-executed output digest does not match the receipt (semantic digest mismatch)"
+    if current_tree_hash(base) != current_revision:
+        return None, None, f"{prefix}: re-execution changed the current project tree"
+    derived_status, reasons = _challenge_result(
+        definition,
+        surface_id=expected_surface_id,
+        exit_code=receipt.get("exit_code"),
+        stdout=capture["stdout"],
+        stderr=capture["stderr"],
+        timed_out=receipt.get("timed_out", False),
+        execution_error=str(receipt.get("execution_error") or ""),
+        root=base,
+    )
+    if derived_status != receipt.get("status"):
+        return None, None, f"{prefix}: stored status does not match captured output and assertions"
+    try:
+        relative = output_path.relative_to(base).as_posix()
+    except ValueError:
+        relative = str(output_path)
+    if derived_status == "FAIL":
+        return relative, "; ".join(reasons) or "executed challenge failed", None
+    return relative, None, None
+
+
+def _receipt_text_fields(receipt: dict) -> List[str]:
+    return [
+        field
+        for field in (
+            "reference",
+            "subject_digest",
+            "surface_id",
+            "source_revision",
+            "command",
+            "claim",
+            "origin",
+            "source_state",
+            "result",
+            "issuer",
+            "issued_at",
+        )
+        if not isinstance(receipt.get(field), str) or not receipt.get(field, "").strip()
+    ]
+
+
+def issue_receipt(
+    reference: str,
+    root: Optional[Path],
+    *,
+    surface_id: str,
+    source_revision: str,
+    command: str,
+    claim: str,
+    result: str,
+    source_state: str,
+    subject_digest: Optional[str] = None,
+    registry: Optional[dict] = None,
+) -> dict:
+    """Issue one receipt bound to a registered verification artifact."""
+    canonical_surfaces = {sid for sid, _surface, _category in COVERAGE_SURFACES}
+    if surface_id not in canonical_surfaces:
+        raise CliError(f"receipt surface_id must be one canonical coverage surface: {surface_id!r}")
+    resolved, reason = _resolve_evidence_reference(reference, root)
+    if resolved is None:
+        raise CliError(f"receipt reference is invalid: {reason}")
+    contract_error = _verification_artifact_error(resolved, root, surface_id, registry)
+    if contract_error:
+        raise CliError(f"receipt reference is not a registered verification artifact: {contract_error}")
+    artifact_digest = hashlib.sha256(resolved.read_bytes()).hexdigest()
+    if subject_digest is not None:
+        if not isinstance(subject_digest, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", subject_digest):
+            raise CliError("receipt subject_digest must be a 64-character hexadecimal content hash")
+        if subject_digest.lower() != artifact_digest.lower():
+            raise CliError("receipt subject_digest must match the registered verification artifact")
+    subject_digest = artifact_digest
+    missing = {
+        "source_revision": source_revision,
+        "command": command,
+        "claim": claim,
+        "result": result,
+        "source_state": source_state,
+    }
+    missing_fields = [field for field, value in missing.items() if not str(value or "").strip()]
+    if missing_fields:
+        raise CliError("receipt fields must not be empty: " + ", ".join(missing_fields))
+    try:
+        relative = resolved.relative_to(_evidence_root(root)).as_posix()
+    except ValueError:
+        relative = str(resolved)
+    receipt = {
+        "receipt_class": "UNVERIFIED",
+        "reference": relative,
+        "sha256": artifact_digest,
+        "subject_digest": subject_digest,
+        "surface_id": surface_id,
+        "source_revision": str(source_revision).strip(),
+        "command": str(command).strip(),
+        "claim": str(claim).strip(),
+        "origin": "checkyourself verifier receipt command",
+        "source_state": str(source_state).strip(),
+        "result": str(result).strip(),
+        "issuer": RECEIPT_ISSUER,
+        "issued_at": now_iso(),
+    }
+    receipt["receipt_sha256"] = _receipt_binding_digest(receipt)
+    return receipt
+
+
+def _verify_receipts(
+    receipts: Any,
+    root: Optional[Path],
+    *,
+    require_provenance: bool = True,
+    expected_surface_id: Optional[str] = None,
+    expected_claim: Optional[str] = None,
+    used_receipt_ids: Optional[set[str]] = None,
+    registry: Optional[dict] = None,
+    failed_receipts: Optional[List[dict]] = None,
+) -> Tuple[List[str], List[str]]:
+    """Verify verifier-issued, surface-bound receipts without trusting prose."""
+    if not isinstance(receipts, list) or not receipts:
+        return [], ["no verifier-captured receipts supplied"]
+    verified: List[str] = []
     errors: List[str] = []
-    warnings: List[str] = []
-    surfaces = data.get("surfaces") or data.get("coverage") or []
+    seen_receipt_ids = used_receipt_ids if used_receipt_ids is not None else set()
+    for index, receipt in enumerate(receipts):
+        prefix = f"receipt {index}"
+        if not isinstance(receipt, dict):
+            errors.append(f"{prefix} is not an object")
+            continue
+        if receipt.get("receipt_type") == "EXECUTED":
+            receipt_id = receipt.get("receipt_sha256")
+            if isinstance(receipt_id, str) and receipt_id.lower() in seen_receipt_ids:
+                errors.append(f"{prefix}: receipt reuse is not allowed across surfaces or claims")
+                continue
+            relative, failure, executed_error = _verify_executed_receipt(
+                receipt,
+                root,
+                expected_surface_id=expected_surface_id,
+            )
+            if executed_error:
+                errors.append(f"{prefix}: {executed_error}")
+                continue
+            if relative is None:
+                errors.append(f"{prefix}: executed receipt did not identify captured output")
+                continue
+            if receipt_id is not None:
+                seen_receipt_ids.add(receipt_id.lower())
+            if failure:
+                if failed_receipts is not None:
+                    failed_receipts.append({
+                        "surface_id": receipt.get("surface_id"),
+                        "reference": relative,
+                        "reason": failure,
+                    })
+                errors.append(f"{prefix}: FAIL — {failure}")
+                continue
+            verified.append(relative)
+            continue
+        # Keep the compatibility receipt command, but make its trust boundary
+        # explicit. Its fields still originate with the caller and cannot prove
+        # that the verifier executed anything.
+        errors.append(f"{prefix}: UNVERIFIED caller-issued receipt; run challenge to mint executed evidence")
+        continue
+        missing_fields = _receipt_text_fields(receipt)
+        if missing_fields:
+            errors.append(f"{prefix}: missing verifier binding fields: {', '.join(missing_fields)}")
+            continue
+        if receipt.get("issuer") != RECEIPT_ISSUER:
+            errors.append(f"{prefix}: receipt was not issued by {RECEIPT_ISSUER}")
+            continue
+        receipt_id = receipt.get("receipt_sha256")
+        if not isinstance(receipt_id, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", receipt_id):
+            errors.append(f"{prefix}: receipt_sha256 must be a 64-character hexadecimal binding hash")
+            continue
+        if receipt_id.lower() in seen_receipt_ids:
+            errors.append(f"{prefix}: receipt reuse is not allowed across surfaces or claims")
+            continue
+        if expected_surface_id is None:
+            errors.append(f"{prefix}: verifier expected a canonical surface binding")
+            continue
+        if receipt.get("surface_id") != expected_surface_id:
+            errors.append(
+                f"{prefix}: surface binding {receipt.get('surface_id')!r} does not match {expected_surface_id}"
+            )
+            continue
+        if expected_claim is not None and receipt.get("claim") != expected_claim:
+            errors.append(f"{prefix}: claim binding does not match the coverage claim")
+            continue
+        if receipt_id.lower() != _receipt_binding_digest(receipt).lower():
+            errors.append(f"{prefix}: receipt_sha256 does not cover its bound fields")
+            continue
+        reference = receipt.get("reference")
+        resolved, reason = _resolve_evidence_reference(reference, root)
+        if resolved is None:
+            errors.append(f"{prefix}: {reason}")
+            continue
+        contract_error = _verification_artifact_error(resolved, root, expected_surface_id, registry)
+        if contract_error:
+            errors.append(f"{prefix}: {contract_error}")
+            continue
+        expected_hash = receipt.get("sha256")
+        if not isinstance(expected_hash, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", expected_hash):
+            errors.append(f"{prefix}: sha256 must be a 64-character hexadecimal content hash")
+            continue
+        subject_digest = receipt.get("subject_digest")
+        if not isinstance(subject_digest, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", subject_digest):
+            errors.append(f"{prefix}: subject_digest must be a 64-character hexadecimal content hash")
+            continue
+        if subject_digest.lower() != expected_hash.lower():
+            errors.append(f"{prefix}: subject_digest does not match the registered verification artifact")
+            continue
+        try:
+            actual_hash = hashlib.sha256(resolved.read_bytes()).hexdigest()
+        except OSError as exc:
+            errors.append(f"{prefix}: could not hash referenced artifact: {exc}")
+            continue
+        if actual_hash.lower() != expected_hash.lower():
+            errors.append(f"{prefix}: content hash does not match referenced artifact")
+            continue
+        subject_key = f"subject:{subject_digest.lower()}"
+        reference_key = f"artifact:{receipt.get('reference')}:{subject_digest.lower()}"
+        if subject_key in seen_receipt_ids or reference_key in seen_receipt_ids:
+            errors.append(f"{prefix}: receipt subject reuse is not allowed across surfaces or claims")
+            continue
+        if require_provenance:
+            missing = [field for field in ("origin", "source_state", "result") if not str(receipt.get(field) or "").strip()]
+            if missing:
+                errors.append(f"{prefix}: missing provenance fields: {', '.join(missing)}")
+                continue
+        try:
+            relative = resolved.relative_to(_evidence_root(root)).as_posix()
+        except ValueError:
+            relative = str(resolved)
+        verified.append(relative)
+        seen_receipt_ids.add(receipt_id.lower())
+        seen_receipt_ids.add(subject_key)
+        seen_receipt_ids.add(reference_key)
+    return sorted(set(verified)), errors
+
+
+def _coverage_surface_id(item: dict) -> Optional[str]:
+    by_name = {surface: sid for sid, surface, _category in COVERAGE_SURFACES}
+    raw_id = item.get("id")
+    if isinstance(raw_id, str) and raw_id in {sid for sid, _surface, _category in COVERAGE_SURFACES}:
+        return raw_id
+    raw_surface = item.get("surface")
+    return by_name.get(raw_surface) if isinstance(raw_surface, str) else None
+
+
+def _coverage_evidence_state(
+    item: dict,
+    evidence_root: Optional[Path],
+    *,
+    used_receipt_ids: Optional[set[str]] = None,
+) -> dict:
+    status = item.get("status")
+    result = {
+        "status": status,
+        "verified_evidence": [],
+        "verified_delegation": [],
+        "failed_receipts": [],
+        "warnings": [],
+    }
+    surface_id = _coverage_surface_id(item)
+    claim_value = item.get("claim") if isinstance(item.get("claim"), str) else ""
+    claim = claim_value.strip() or None
+    if status == "Pass":
+        if not item.get("evidence_reviewed"):
+            result["warnings"].append("Pass requires reviewer assertions in evidence_reviewed")
+        verified, errors = _verify_receipts(
+            item.get("evidence_receipts"),
+            evidence_root,
+            expected_surface_id=surface_id,
+            expected_claim=claim,
+            used_receipt_ids=used_receipt_ids,
+            failed_receipts=result["failed_receipts"],
+        )
+        asserted: List[str] = []
+        for assertion in item.get("evidence_reviewed") or []:
+            resolved, _reason = _resolve_evidence_reference(assertion, evidence_root)
+            if resolved is not None:
+                try:
+                    asserted.append(resolved.relative_to(_evidence_root(evidence_root)).as_posix())
+                except ValueError:
+                    asserted.append(str(resolved))
+        result["verified_evidence"] = sorted(set(verified).intersection(asserted))
+        result["warnings"].extend(f"evidence receipt: {error}" for error in errors)
+        if verified and not result["verified_evidence"]:
+            result["warnings"].append("verifier receipt is not bound to an evidence_reviewed artifact reference")
+        if not result["verified_evidence"]:
+            result["status"] = "Unknown"
+    elif status == "NotApplicable":
+        if not str(item.get("not_applicable_reason") or "").strip():
+            result["warnings"].append("NotApplicable requires a concrete reason")
+        verified, errors = _verify_receipts(
+            item.get("delegation_receipts"),
+            evidence_root,
+            expected_surface_id=surface_id,
+            expected_claim=claim,
+            used_receipt_ids=used_receipt_ids,
+            failed_receipts=result["failed_receipts"],
+        )
+        result["verified_delegation"] = verified
+        result["warnings"].extend(f"delegation receipt: {error}" for error in errors)
+        if not verified:
+            result["status"] = "Unknown"
+    return result
+
+
+def _coverage_surfaces(data: Any) -> Tuple[List[Any], List[str]]:
+    """Return coverage rows and structural errors without trusting input shape."""
+    if not isinstance(data, dict):
+        return [], ["coverage artifact must be an object"]
+    if "schema" in data and data.get("schema") != COVERAGE_SCHEMA_ID:
+        return [], [f"coverage artifact has unsupported schema: {data.get('schema')!r}"]
+    if "surfaces" in data:
+        surfaces = data["surfaces"]
+    elif "coverage" in data:
+        surfaces = data["coverage"]
+    else:
+        return [], ["coverage artifact must contain a surfaces array"]
     if not isinstance(surfaces, list):
-        raise CliError("coverage artifact must contain a surfaces array")
+        return [], ["coverage artifact must contain a surfaces array"]
+    return surfaces, []
+
+
+def _coverage_validation_errors(data: Any) -> List[str]:
+    """Validate rows that can influence a coverage-backed score.
+
+    Missing canonical rows remain valid incomplete evidence and are handled by
+    ``category_coverage``. Any supplied row, however, must identify one
+    canonical surface and must not contradict its category or status contract.
+    """
+    surfaces, errors = _coverage_surfaces(data)
+    if errors:
+        return errors
+
+    by_id = {sid: (surface, category) for sid, surface, category in COVERAGE_SURFACES}
+    by_name = {surface: sid for sid, surface, _category in COVERAGE_SURFACES}
+    seen_ids: set[str] = set()
+
+    for index, item in enumerate(surfaces):
+        prefix = f"coverage row {index}"
+        if not isinstance(item, dict):
+            errors.append(f"{prefix} must be an object")
+            continue
+
+        raw_id = item.get("id")
+        raw_surface = item.get("surface")
+        raw_category = item.get("category")
+        if "id" not in item:
+            errors.append(f"{prefix} is missing id")
+        elif not isinstance(raw_id, str) or not raw_id.strip():
+            errors.append(f"{prefix} has an invalid id: {raw_id!r}")
+            raw_id = None
+        if "surface" not in item:
+            errors.append(f"{prefix} is missing surface")
+        elif not isinstance(raw_surface, str) or not raw_surface.strip():
+            errors.append(f"{prefix} has an invalid surface: {raw_surface!r}")
+            raw_surface = None
+        if "category" not in item:
+            errors.append(f"{prefix} is missing category")
+        elif not isinstance(raw_category, str) or not raw_category.strip():
+            errors.append(f"{prefix} has an invalid category: {raw_category!r}")
+
+        if "id" in item:
+            sid = raw_id
+        elif isinstance(raw_surface, str):
+            sid = by_name.get(raw_surface)
+        else:
+            sid = None
+
+        if not sid:
+            errors.append(f"{prefix} must identify a canonical surface by id or surface")
+            continue
+        if sid not in by_id:
+            errors.append(f"{prefix} has unknown coverage id: {sid!r}")
+            continue
+        if sid in seen_ids:
+            errors.append(f"{prefix} duplicates coverage id: {sid}")
+        seen_ids.add(sid)
+
+        expected_surface, expected_category = by_id[sid]
+        if raw_surface is not None and raw_surface != expected_surface:
+            errors.append(
+                f"{prefix} surface {raw_surface!r} does not match {sid} ({expected_surface!r})"
+            )
+
+        if isinstance(raw_category, str) and raw_category.strip() and raw_category != expected_category:
+            errors.append(
+                f"{prefix} category {raw_category!r} does not match {sid} ({expected_category!r})"
+            )
+
+        if "status" not in item or item.get("status") is None:
+            errors.append(f"{prefix} has a null or missing status")
+        elif not isinstance(item.get("status"), str) or item.get("status") not in VALID_COVERAGE_STATUSES:
+            errors.append(f"{prefix} has invalid status: {item.get('status')!r}")
+
+        for field in ("evidence_reviewed", "missing_evidence", "claim_bound_evidence", "finding_ids"):
+            if field in item:
+                value = item.get(field)
+                if not isinstance(value, list) or not all(isinstance(entry, str) for entry in value):
+                    errors.append(f"{prefix} has an invalid {field} array")
+        if "not_applicable_reason" in item and not isinstance(item.get("not_applicable_reason"), str):
+            errors.append(f"{prefix} has an invalid not_applicable_reason")
+        for field in ("evidence_receipts", "delegation_receipts"):
+            if field in item and (
+                not isinstance(item.get(field), list)
+                or not all(isinstance(entry, dict) for entry in item.get(field))
+            ):
+                errors.append(f"{prefix} has an invalid {field} array")
+
+    return list(dict.fromkeys(errors))
+
+
+def coverage_check(data: Any, evidence_root: Optional[Path] = None) -> dict:
+    errors = _coverage_validation_errors(data)
+    warnings: List[str] = []
+    surfaces, shape_errors = _coverage_surfaces(data)
+    if shape_errors:
+        return {
+            "tool": TOOL_NAME,
+            "schema": "checkyourself-coverage-check/1",
+            "complete": False,
+            "surface_count": 0,
+            "required_surface_count": len(COVERAGE_SURFACES),
+            "errors": errors,
+            "warnings": warnings,
+        }
 
     by_id = {str(item.get("id")): item for item in surfaces if isinstance(item, dict) and item.get("id")}
     # Key strictly on the surface name: falling back to category collapsed
     # multiple surfaces onto one key and over-reported missing rows.
     by_name = {str(item.get("surface")): item for item in surfaces if isinstance(item, dict) and item.get("surface")}
-    valid_statuses = {"Pass", "Finding", "Unknown", "NotApplicable"}
+    valid_statuses = VALID_COVERAGE_STATUSES
     pathlike_re = re.compile(r"[\w./\\-]+\.\w+|:\d+")
+    verification_gap = False
+    used_receipt_ids: set[str] = set()
 
     for sid, surface, _category in COVERAGE_SURFACES:
         item = by_id.get(sid) or by_name.get(surface)
@@ -1186,15 +3259,25 @@ def coverage_check(data: dict) -> dict:
             errors.append(f"{sid} is Pass but has no evidence_reviewed")
         if status == "Pass" and evidence and not any(pathlike_re.search(str(e)) for e in evidence):
             warnings.append(f"{sid} Pass evidence has no file or file:line reference; prefer concrete receipts")
+        evidence_state = _coverage_evidence_state(
+            item,
+            evidence_root,
+            used_receipt_ids=used_receipt_ids,
+        )
+        for warning in evidence_state["warnings"]:
+            warnings.append(f"{sid} {warning}")
         if status == "Unknown" and not missing:
             warnings.append(f"{sid} is Unknown but missing_evidence is empty")
         if status == "NotApplicable" and not item.get("not_applicable_reason"):
             errors.append(f"{sid} is NotApplicable but has no not_applicable_reason")
+        if status in {"Pass", "NotApplicable"} and evidence_state["status"] == "Unknown":
+            verification_gap = True
+            warnings.append(f"{sid} is treated as Unknown until its verifier-captured evidence resolves")
 
     return {
         "tool": TOOL_NAME,
         "schema": "checkyourself-coverage-check/1",
-        "complete": not errors,
+        "complete": not errors and not verification_gap,
         "surface_count": len(surfaces),
         "required_surface_count": len(COVERAGE_SURFACES),
         "errors": errors,
@@ -1246,6 +3329,37 @@ def normalize_findings(data: Any) -> List[dict]:
     return normalized
 
 
+def findings_artifact_errors(data: Any) -> List[str]:
+    """Reject malformed findings receipts instead of treating them as empty."""
+    if isinstance(data, list):
+        findings = data
+    elif isinstance(data, dict):
+        if "findings" in data:
+            findings = data["findings"]
+            if not isinstance(findings, list):
+                return ["findings must be an array"]
+        elif "remediation_backlog" in data:
+            findings = data["remediation_backlog"]
+            if not isinstance(findings, list):
+                return ["remediation_backlog must be an array"]
+        else:
+            return ["artifact must contain a findings or remediation_backlog array"]
+    else:
+        return ["findings artifact must be an object or array"]
+
+    errors = []
+    for index, item in enumerate(findings):
+        if not isinstance(item, dict):
+            errors.append(f"finding {index} must be an object")
+    return errors
+
+
+def require_findings_artifact(data: Any) -> None:
+    errors = findings_artifact_errors(data)
+    if errors:
+        raise CliError("invalid findings artifact: " + "; ".join(errors))
+
+
 def infer_category(text: str) -> str:
     lower = text.lower()
     if any(w in lower for w in ("secret", ".env", "token", "credential", "runtime config", "api key")):
@@ -1281,20 +3395,28 @@ def default_fix_for(title: str, category: str) -> str:
     return f"Make the smallest reversible fix for: {title}"
 
 
-def category_coverage(coverage_data: Optional[dict]) -> Tuple[Dict[str, dict], bool]:
+def category_coverage(
+    coverage_data: Optional[dict], evidence_root: Optional[Path] = None
+) -> Tuple[Dict[str, dict], bool]:
     """Fold surface-level coverage into per-category scoring state.
 
     Anti-gaming rules: a surface omitted from the artifact counts as Unknown
     (never as full credit), Pass without evidence downgrades to Unknown, and
     NotApplicable without a reason downgrades to Unknown. Omitting or
     hand-waving a surface must never score better than honestly reporting it.
+    Evidence gaps are tracked independently from Finding rows so a Finding
+    cannot erase a critical Unknown.
     """
     category_state: Dict[str, dict] = {
         cid: {
             "status": "MissingCoverage",
             "evidence_reviewed": [],
+            "verified_evidence": [],
+            "claim_bound_evidence": [],
             "missing_evidence": ["coverage artifact was not supplied"],
             "surfaces": [],
+            "has_unknown": True,
+            "coverage_findings": [],
         }
         for cid in SCORE_CATEGORIES
     }
@@ -1310,11 +3432,23 @@ def category_coverage(coverage_data: Optional[dict]) -> Tuple[Dict[str, dict], b
     scored_surface_ids = {sid for sid, _surface, category in COVERAGE_SURFACES if category in SCORE_CATEGORIES}
 
     category_state = {
-        cid: {"status": None, "evidence_reviewed": [], "missing_evidence": [], "surfaces": []}
+        cid: {
+            "status": None,
+            "evidence_reviewed": [],
+            "verified_evidence": [],
+            "claim_bound_evidence": [],
+            "missing_evidence": [],
+            "surfaces": [],
+            "has_unknown": False,
+            "coverage_findings": [],
+        }
         for cid in SCORE_CATEGORIES
     }
     status_rank = {"Finding": 4, "Unknown": 3, "Pass": 2, "NotApplicable": 1}
     present_ids = set()
+    used_receipt_ids: set[str] = set()
+    unscored_verification_gaps: List[str] = []
+    verification_gap = False
 
     for item in surfaces:
         if not isinstance(item, dict):
@@ -1324,27 +3458,89 @@ def category_coverage(coverage_data: Optional[dict]) -> Tuple[Dict[str, dict], b
         if category not in SCORE_CATEGORIES:
             if sid:
                 present_ids.add(sid)
+            if item.get("status") in {"Pass", "NotApplicable"}:
+                evidence_state = _coverage_evidence_state(
+                    item,
+                    evidence_root,
+                    used_receipt_ids=used_receipt_ids,
+                )
+                if evidence_state["status"] == "Unknown":
+                    verification_gap = True
+                    unscored_verification_gaps.extend(
+                        f"{sid or 'surface'}: {warning}" for warning in evidence_state["warnings"]
+                    )
             continue
         if sid:
             present_ids.add(sid)
         state = category_state[category]
         status = item.get("status") or "Unknown"
         evidence = [str(x) for x in item.get("evidence_reviewed") or []]
+        evidence_state = _coverage_evidence_state(
+            item,
+            evidence_root,
+            used_receipt_ids=used_receipt_ids,
+        )
         if status == "Pass" and not evidence:
             status = "Unknown"
             state["missing_evidence"].append(f"{sid or 'surface'} marked Pass without evidence_reviewed")
         if status == "NotApplicable" and not str(item.get("not_applicable_reason") or "").strip():
             status = "Unknown"
             state["missing_evidence"].append(f"{sid or 'surface'} marked NotApplicable without a reason")
+        if evidence_state["status"] == "Unknown" and status in {"Pass", "NotApplicable"}:
+            verification_gap = True
+            status = "Unknown"
+            state["missing_evidence"].extend(
+                f"{sid or 'surface'}: {warning}" for warning in evidence_state["warnings"]
+            )
+        for failed in evidence_state.get("failed_receipts") or []:
+            failed_id = f"CY-CHALLENGE-{sid or category}"
+            state["coverage_findings"].append({
+                "id": failed_id,
+                "finding_id": failed_id,
+                "severity": "P1",
+                "category": category,
+                "finding": f"Executed challenge failed for {sid or category}",
+                "plain_english_risk": str(failed.get("reason") or "The verifier-owned challenge failed."),
+                "status": "open",
+                "linked_finding_ids": [],
+            })
+            state["has_unknown"] = True
+            state["missing_evidence"].append(
+                f"{sid or category}: executed challenge failed ({failed.get('reference') or 'capture'})"
+            )
+        if status == "Unknown":
+            state["has_unknown"] = True
+        if status == "Finding":
+            state["coverage_findings"].append({
+                "id": f"CY-COVERAGE-{sid or category}",
+                "finding_id": f"CY-COVERAGE-{sid or category}",
+                "severity": "P2",
+                "category": category,
+                "finding": f"Coverage finding requires review: {sid or category}",
+                "plain_english_risk": "The coverage reviewer recorded a gap on this production surface.",
+                "status": "open",
+                "linked_finding_ids": [str(x) for x in item.get("finding_ids") or []],
+            })
         if state["status"] is None or status_rank.get(status, 3) > status_rank.get(state["status"], 0):
             state["status"] = status
         state["surfaces"].append(sid or str(item.get("surface") or category))
         state["evidence_reviewed"].extend(evidence)
+        state["verified_evidence"].extend(evidence_state["verified_evidence"])
+        state["claim_bound_evidence"].extend(str(x) for x in item.get("claim_bound_evidence") or [])
         state["missing_evidence"].extend(str(x) for x in item.get("missing_evidence") or [])
+
+    if unscored_verification_gaps:
+        # Context and learning surfaces do not own score weight, but a broken
+        # verifier receipt anywhere in the canonical matrix must still prevent
+        # a launch-ready score from hiding that gap.
+        critical_state = category_state["C1"]
+        critical_state["has_unknown"] = True
+        critical_state["missing_evidence"].extend(unscored_verification_gaps)
 
     for sid in sorted(scored_surface_ids - present_ids):
         category = id_to_category[sid]
         state = category_state[category]
+        state["has_unknown"] = True
         state["missing_evidence"].append(f"surface {sid} missing from coverage artifact")
         if state["status"] is None or status_rank.get("Unknown", 3) > status_rank.get(state["status"], 0):
             state["status"] = "Unknown"
@@ -1352,12 +3548,15 @@ def category_coverage(coverage_data: Optional[dict]) -> Tuple[Dict[str, dict], b
     for state in category_state.values():
         if state["status"] is None:
             state["status"] = "MissingCoverage"
+            state["has_unknown"] = True
             state["missing_evidence"].append("no coverage entries supplied for this category")
         state["evidence_reviewed"] = sorted(set(state["evidence_reviewed"]))
+        state["verified_evidence"] = sorted(set(state["verified_evidence"]))
+        state["claim_bound_evidence"] = sorted(set(state["claim_bound_evidence"]))
         state["missing_evidence"] = sorted(set(state["missing_evidence"]))
 
     required_ids = {sid for sid, _surface, _category in COVERAGE_SURFACES}
-    complete = required_ids <= present_ids
+    complete = required_ids <= present_ids and not verification_gap
     return category_state, complete
 
 
@@ -1365,7 +3564,7 @@ def missing_manual_evidence(coverage_by_category: Dict[str, dict]) -> List[dict]
     needed: List[dict] = []
     for cid, (name, _weight) in SCORE_CATEGORIES.items():
         state = coverage_by_category[cid]
-        if state["status"] in {"MissingCoverage", "Unknown"}:
+        if state.get("has_unknown") or state["status"] == "MissingCoverage":
             needed.append({
                 "category": cid,
                 "surface": name,
@@ -1410,28 +3609,52 @@ def inferred_coverage_from_scan(scan_data: dict, findings: List[dict]) -> Dict[s
 
     tests = scan_data.get("tests") if isinstance(scan_data.get("tests"), list) else []
     if tests:
-        set_state("C5", "Pass", [f"detected test evidence: {item}" for item in tests[:10]], [], ["S11"])
+        set_state(
+            "C5",
+            "Unknown",
+            [f"detected test candidate: {item}" for item in tests[:10]],
+            ["focused test execution receipt still needed; file presence does not prove tests pass"],
+            ["S11"],
+        )
     else:
         set_state("C5", "Finding", [], ["no automated tests detected by scan"], ["S11"])
 
     ci = scan_data.get("ci") if isinstance(scan_data.get("ci"), list) else []
     if ci:
-        set_state("C6", "Pass", [f"detected CI evidence: {item}" for item in ci[:10]], [], ["S12"])
+        set_state(
+            "C6",
+            "Unknown",
+            [f"detected CI configuration candidate: {item}" for item in ci[:10]],
+            ["CI parse and successful-run receipt still needed; file presence does not prove the workflow is valid"],
+            ["S12"],
+        )
     else:
         set_state("C6", "Finding", [], ["no CI workflow detected by scan"], ["S12"])
 
     return category_state
 
 
-def score_from_inputs(findings_data: Any, coverage_data: Optional[dict] = None) -> dict:
+def score_from_inputs(
+    findings_data: Any,
+    coverage_data: Any = _NO_COVERAGE,
+    evidence_root: Optional[Path] = None,
+    claim: Optional[str] = None,
+) -> dict:
+    require_findings_artifact(findings_data)
     findings = normalize_findings(findings_data)
     counts = {sev: 0 for sev in ("P0", "P1", "P2", "P3")}
     unresolved = [f for f in findings if f.get("status") not in RESOLVED_STATUSES]
     for f in unresolved:
         counts[f["severity"]] = counts.get(f["severity"], 0) + 1
 
-    if coverage_data is not None:
-        coverage_by_category, coverage_complete = category_coverage(coverage_data)
+    if coverage_data is not _NO_COVERAGE:
+        coverage_errors = _coverage_validation_errors(coverage_data)
+        if coverage_errors:
+            raise CliError(
+                "invalid coverage artifact: " + "; ".join(coverage_errors)
+                + "; fill coverage.json with evidence, then re-run score"
+            )
+        coverage_by_category, coverage_complete = category_coverage(coverage_data, evidence_root)
         score_mode = "coverage-backed"
     elif isinstance(findings_data, dict) and findings_data.get("schema") == SCAN_SCHEMA_ID:
         coverage_by_category = inferred_coverage_from_scan(findings_data, findings)
@@ -1442,15 +3665,38 @@ def score_from_inputs(findings_data: Any, coverage_data: Optional[dict] = None) 
         score_mode = "finding-only-estimate"
     per_category: List[dict] = []
     raw_total = 0.0
+    coverage_findings_scored: List[str] = []
+    challenge_failure_ids: set[str] = set()
 
     for cid, (name, weight) in SCORE_CATEGORIES.items():
+        if (
+            isinstance(weight, bool)
+            or not isinstance(weight, (int, float))
+            or not math.isfinite(float(weight))
+            or float(weight) < 0
+        ):
+            raise CliError(f"invalid scoring weight for {cid}: {weight!r}")
         category_findings = [f for f in unresolved if f.get("category") == cid]
+        unresolved_ids = {f.get("id") for f in unresolved}
+        for coverage_finding in coverage_by_category[cid].get("coverage_findings", []):
+            linked = set(coverage_finding.get("linked_finding_ids") or [])
+            live_linked = linked.intersection(unresolved_ids)
+            if not live_linked:
+                category_findings.append(coverage_finding)
+                coverage_findings_scored.append(coverage_finding["id"])
+                if str(coverage_finding.get("id") or "").startswith("CY-CHALLENGE-"):
+                    challenge_failure_ids.add(str(coverage_finding["id"]))
+                coverage_state = coverage_by_category[cid]
+                coverage_state["has_unknown"] = True
+                coverage_state["missing_evidence"].append(
+                    f"{coverage_finding['id']} has no linked unresolved finding; coverage Finding remains independently blocked"
+                )
         coverage_state = coverage_by_category[cid]
         penalties: List[dict] = []
         awarded = float(weight)
 
         status = coverage_state["status"]
-        if status == "Unknown":
+        if coverage_state.get("has_unknown") or status == "Unknown":
             missing = coverage_state["missing_evidence"] or ["evidence missing for this category"]
             if cid in CRITICAL_CATEGORIES:
                 awarded = 0.0
@@ -1464,6 +3710,13 @@ def score_from_inputs(findings_data: Any, coverage_data: Optional[dict] = None) 
 
         for f in category_findings:
             fraction = SEVERITY_PENALTIES.get(f["severity"], 0.10)
+            if (
+                isinstance(fraction, bool)
+                or not isinstance(fraction, (int, float))
+                or not math.isfinite(float(fraction))
+                or float(fraction) < 0
+            ):
+                raise CliError(f"invalid severity penalty for {f['severity']}: {fraction!r}")
             points = weight * fraction
             awarded -= points
             penalties.append({
@@ -1481,6 +3734,8 @@ def score_from_inputs(findings_data: Any, coverage_data: Optional[dict] = None) 
             "weight": weight,
             "coverage_status": status,
             "evidence_reviewed": coverage_state["evidence_reviewed"],
+            "verified_evidence": coverage_state.get("verified_evidence", []),
+            "claim_bound_evidence": coverage_state.get("claim_bound_evidence", []),
             "missing_evidence": coverage_state["missing_evidence"],
             "penalties": penalties,
             "awarded": round(awarded, 2),
@@ -1495,15 +3750,20 @@ def score_from_inputs(findings_data: Any, coverage_data: Optional[dict] = None) 
     if counts["P1"]:
         cap_value = min(cap_value, 74)
         caps.append({"cap": 74, "reason": "unresolved P1 finding"})
+    if challenge_failure_ids:
+        counts["P1"] += len(challenge_failure_ids)
+        if cap_value > 74:
+            cap_value = 74
+            caps.append({"cap": 74, "reason": "failing executed challenge"})
 
     critical_gap = False
     high_score_gap = False
     # Evidence caps apply in every score mode: an estimate without coverage
     # evidence must never report a launch-ready number.
     for cid, state in coverage_by_category.items():
-        if state["status"] in {"Unknown", "MissingCoverage"} and cid in CRITICAL_CATEGORIES:
+        if (state.get("has_unknown") or state["status"] == "MissingCoverage") and cid in CRITICAL_CATEGORIES:
             critical_gap = True
-        if state["status"] in {"Unknown", "MissingCoverage"} and cid in HIGH_SCORE_GATE_CATEGORIES:
+        if (state.get("has_unknown") or state["status"] == "MissingCoverage") and cid in HIGH_SCORE_GATE_CATEGORIES:
             high_score_gap = True
     if critical_gap:
         cap_value = min(cap_value, 84)
@@ -1514,7 +3774,7 @@ def score_from_inputs(findings_data: Any, coverage_data: Optional[dict] = None) 
 
     score = min(raw_score, cap_value)
     any_gap = any(
-        state["status"] in {"Unknown", "MissingCoverage"}
+        state.get("has_unknown") or state["status"] in {"Unknown", "MissingCoverage"}
         for state in coverage_by_category.values()
     )
     if score_mode != "coverage-backed":
@@ -1526,7 +3786,7 @@ def score_from_inputs(findings_data: Any, coverage_data: Optional[dict] = None) 
     else:
         confidence = "low"
 
-    return {
+    result = {
         "tool": TOOL_NAME,
         "schema": SCORE_SCHEMA_ID,
         "generated_at": now_iso(),
@@ -1537,13 +3797,40 @@ def score_from_inputs(findings_data: Any, coverage_data: Optional[dict] = None) 
         "counts": counts,
         "caps_applied": caps,
         "per_category": per_category,
-        "findings_scored": [f["id"] for f in unresolved],
+        "findings_scored": sorted(set([f["id"] for f in unresolved] + coverage_findings_scored)),
         "coverage_complete": coverage_complete,
         "manual_evidence_needed": missing_manual_evidence(coverage_by_category),
+        "workflow_dispositions": [
+            {
+                "finding_id": finding["id"],
+                "status": finding["status"],
+                "residual_risk": "closed" if finding["status"] in RESOLVED_STATUSES else "open",
+            }
+            for finding in findings
+            if finding.get("status") in WORKFLOW_DISPOSITIONS
+        ],
     }
+    if claim is not None:
+        claim_text = str(claim).strip()
+        if not claim_text:
+            raise CliError("--claim must not be empty")
+        result["claim"] = claim_text
+        for category in result["per_category"]:
+            bound = set(category.get("claim_bound_evidence") or [])
+            all_evidence = sorted(set(category.get("evidence_reviewed") or []) | set(category.get("verified_evidence") or []))
+            category["claim_binding"] = [
+                {
+                    "evidence": evidence,
+                    "claim_bound": evidence in bound,
+                    "basis": "explicit coverage claim_bound_evidence entry" if evidence in bound else "no explicit claim binding; challenge runner not executed",
+                }
+                for evidence in all_evidence
+            ]
+    return result
 
 
 def backlog_from_findings(findings_data: Any) -> dict:
+    require_findings_artifact(findings_data)
     findings = normalize_findings(findings_data)
     backlog = []
     for f in findings:
@@ -1562,24 +3849,44 @@ def backlog_from_findings(findings_data: Any) -> dict:
         backlog.append(item)
     backlog.sort(key=lambda item: (SEVERITY_ORDER.get(item["severity"], 9), item["category"], item["finding_id"]))
     first = first_batch(backlog)
+    batch_ids = [item["finding_id"] for item in first]
     return {
         "tool": TOOL_NAME,
         "schema": "checkyourself-backlog/1",
         "generated_at": now_iso(),
         "remediation_backlog": backlog,
-        "first_approval_batch": [item["finding_id"] for item in first],
+        # This selection is deterministic, but it does not analyze safety,
+        # dependencies, coupling, or blast radius. Keep the old field as a
+        # compatibility alias while naming the contract honestly.
+        "highest_severity_batch": batch_ids,
+        "first_approval_batch": batch_ids,
+        "batch_basis": {
+            "name": "highest_severity_batch",
+            "selection": "up to three unresolved findings at the highest current severity",
+            "safety_analysis": "not performed",
+        },
     }
 
 
 def next_from_findings(findings_data: Any) -> dict:
+    require_findings_artifact(findings_data)
     backlog = backlog_from_findings(findings_data)["remediation_backlog"]
     batch = first_batch(backlog)
     return {
         "tool": TOOL_NAME,
         "schema": "checkyourself-next-batch/1",
         "generated_at": now_iso(),
+        # The legacy field remains for consumers of next-batch/1. This is a
+        # highest-severity slice, not a safety or dependency judgment.
+        "highest_severity_batch": batch,
         "next_approval_batch": batch,
+        "next_highest_severity_batch": batch,
         "finding_ids": [item["finding_id"] for item in batch],
+        "batch_basis": {
+            "name": "highest_severity_batch",
+            "selection": "up to three unresolved findings at the highest current severity",
+            "safety_analysis": "not performed",
+        },
     }
 
 
@@ -1589,11 +3896,85 @@ def diff_findings(old_data: Any, new_data: Any) -> dict:
     Stable rule IDs make this meaningful: the same risk keeps the same ID
     across runs, so added/resolved is a real delta, not ID-shuffle noise.
     """
+    require_findings_artifact(old_data)
+    require_findings_artifact(new_data)
     old_findings = {f["id"]: f for f in normalize_findings(old_data)}
     new_findings = {f["id"]: f for f in normalize_findings(new_data)}
     added_ids = sorted(set(new_findings) - set(old_findings))
-    resolved_ids = sorted(set(old_findings) - set(new_findings))
+    removed_ids = sorted(set(old_findings) - set(new_findings))
     persisting_ids = sorted(set(old_findings) & set(new_findings))
+
+    def is_open(finding: dict) -> bool:
+        return finding.get("status") not in RESOLVED_STATUSES
+
+    status_changes: List[dict] = []
+    severity_changes: List[dict] = []
+    resolved_status_ids: List[str] = []
+    unchanged_ids: List[str] = []
+    for fid in persisting_ids:
+        old_finding = old_findings[fid]
+        new_finding = new_findings[fid]
+        old_status = old_finding.get("status", "open")
+        new_status = new_finding.get("status", "open")
+        old_severity = old_finding.get("severity", "P3")
+        new_severity = new_finding.get("severity", "P3")
+        if old_status != new_status:
+            status_changes.append({
+                "id": fid,
+                "old_status": old_status,
+                "new_status": new_status,
+            })
+        if old_severity != new_severity:
+            severity_changes.append({
+                "id": fid,
+                "old_severity": old_severity,
+                "new_severity": new_severity,
+            })
+        if old_status == new_status and old_severity == new_severity:
+            unchanged_ids.append(fid)
+        if is_open(old_finding) and not is_open(new_finding):
+            resolved_status_ids.append(fid)
+
+    # A finding can resolve without disappearing from the artifact. Include
+    # those transitions in the existing resolved collection so consumers do
+    # not have to infer closure from counts or status_changes.
+    resolved_ids = sorted(set(removed_ids) | set(resolved_status_ids))
+
+    regression_events: List[dict] = []
+
+    def add_regression(event: dict) -> None:
+        key = (event["id"], event["type"])
+        if not any((existing["id"], existing["type"]) == key for existing in regression_events):
+            regression_events.append(event)
+
+    for fid in added_ids:
+        finding = new_findings[fid]
+        if is_open(finding) and finding["severity"] in {"P0", "P1"}:
+            add_regression({
+                "id": fid,
+                "type": "newly_open",
+                "severity": finding["severity"],
+            })
+    for fid in persisting_ids:
+        old_finding = old_findings[fid]
+        new_finding = new_findings[fid]
+        if not is_open(old_finding) and is_open(new_finding) and new_finding["severity"] in {"P0", "P1"}:
+            add_regression({
+                "id": fid,
+                "type": "reopened",
+                "severity": new_finding["severity"],
+            })
+        if (
+            is_open(new_finding)
+            and new_finding["severity"] in {"P0", "P1"}
+            and SEVERITY_ORDER.get(new_finding["severity"], 9) < SEVERITY_ORDER.get(old_finding["severity"], 9)
+        ):
+            add_regression({
+                "id": fid,
+                "type": "severity_escalated",
+                "old_severity": old_finding["severity"],
+                "new_severity": new_finding["severity"],
+            })
 
     evidence_changes: List[dict] = []
     for fid in persisting_ids:
@@ -1615,17 +3996,22 @@ def diff_findings(old_data: Any, new_data: Any) -> dict:
 
     old_counts = open_counts(old_findings)
     new_counts = open_counts(new_findings)
+    count_regression = any(new_counts[sev] > old_counts[sev] for sev in ("P0", "P1"))
     return {
         "tool": TOOL_NAME,
         "schema": "checkyourself-diff/1",
         "generated_at": now_iso(),
         "added": [new_findings[fid] for fid in added_ids],
-        "resolved": [old_findings[fid] for fid in resolved_ids],
-        "unchanged": persisting_ids,
+        "resolved": [new_findings[fid] if fid in resolved_status_ids else old_findings[fid] for fid in resolved_ids],
+        "unchanged": unchanged_ids,
+        "status_changes": status_changes,
+        "severity_changes": severity_changes,
         "evidence_changes": evidence_changes,
         "old_counts": old_counts,
         "new_counts": new_counts,
-        "regression": any(new_counts[sev] > old_counts[sev] for sev in ("P0", "P1")),
+        "count_regression": count_regression,
+        "regressions": regression_events,
+        "regression": count_regression or bool(regression_events),
     }
 
 
@@ -1684,10 +4070,12 @@ def describe_capabilities() -> dict:
         ("diagnostic", "Alias for scan; use it when docs or agents ask to run a diagnostic.", {"project": "path", "deep": "optional boolean"}, SCAN_SCHEMA_ID),
         ("coverage --emit", "Write the 20-surface coverage skeleton by default, or print JSON with --format json.", {"project": "optional string"}, COVERAGE_SCHEMA_ID),
         ("coverage --check", "Validate coverage completeness.", {"file": "coverage json path"}, "checkyourself-coverage-check/1"),
-        ("score", "Compute a deterministic Production Reality Score from findings and optional coverage, with score history.", {"findings": "json path", "coverage": "optional json path", "history": "optional path"}, SCORE_SCHEMA_ID),
-        ("backlog", "Rank remediation backlog and first approval batch.", {"findings": "json path"}, "checkyourself-backlog/1"),
-        ("next", "Return the next safest unresolved approval batch.", {"findings": "json path"}, "checkyourself-next-batch/1"),
-        ("diff", "Compare two findings artifacts and report added, resolved, and regressed findings.", {"old": "json path", "new": "json path"}, "checkyourself-diff/1"),
+        ("challenge", "Execute committed per-surface commands and mint executed receipts from verifier-captured output.", {"project": "optional path", "surface": "optional canonical surface ID"}, CHALLENGE_RESULT_SCHEMA_ID),
+        ("receipt", "Issue one verifier-hashed receipt only for a registered, surface-specific verification artifact.", {"reference": "registered artifact path", "surface_id": "canonical surface ID", "source_revision": "revision", "command": "command recorded at issuance", "claim": "claim", "result": "observed result", "source_state": "source/environment state", "subject_digest": "optional content hash assertion"}, RECEIPT_SCHEMA_ID),
+        ("score", "Compute a deterministic Production Reality Score from findings and optional verifier-checked coverage; optionally record a completion claim without executing a challenge runner.", {"findings": "json path", "coverage": "optional json path", "claim": "optional accepted completion claim", "history": "optional path"}, SCORE_SCHEMA_ID),
+        ("backlog", "Rank remediation backlog and return a highest-severity batch; safety analysis is not performed.", {"findings": "json path"}, "checkyourself-backlog/1"),
+        ("next", "Return the next highest-severity unresolved approval batch; safety analysis is not performed.", {"findings": "json path"}, "checkyourself-next-batch/1"),
+        ("diff", "Compare two findings artifacts, report identity-aware transitions, and gate newly open, reopened, or escalated P0/P1 findings.", {"old": "json path", "new": "json path"}, "checkyourself-diff/1"),
         ("validate", "Validate an artifact against a bundled JSON schema subset.", {"kind": "schema kind", "file": "json path"}, "checkyourself-validation/1"),
         ("schema", "Print a bundled schema by name.", {"name": "schema name"}, "json-schema"),
         ("init", "Create starter generated coverage/context files without overwriting by default.", {"project": "path"}, "checkyourself-init/1"),
@@ -1707,6 +4095,7 @@ def describe_capabilities() -> dict:
             {"id": sid, "surface": surface, "category": category}
             for sid, surface, category in COVERAGE_SURFACES
         ],
+        "verification_artifact_registry": VERIFICATION_ARTIFACT_REGISTRY,
         "scoring": {
             "categories": [
                 {"id": cid, "category": name, "weight": weight}
@@ -1739,7 +4128,7 @@ def describe_capabilities() -> dict:
 def read_manifest_version() -> str:
     manifest = ROOT / "checkyourself.manifest.json"
     try:
-        data = json.loads(manifest.read_text(encoding="utf-8"))
+        data = strict_json_loads(manifest.read_text(encoding="utf-8"))
         return str(data.get("version") or "unknown")
     except Exception:
         return "unknown"
@@ -1753,6 +4142,9 @@ def schema_registry() -> Dict[str, str]:
         "learning-plan": "learning-plan.schema.json",
         "scan": "scan.schema.json",
         "coverage": "coverage.schema.json",
+        "challenges": "challenges.schema.json",
+        "challenge": "challenge-result.schema.json",
+        "receipt": "receipt.schema.json",
         "score": "score-result.schema.json",
         "backlog": "backlog.schema.json",
         "next": "next-batch.schema.json",
@@ -1768,7 +4160,36 @@ def load_schema(name: str) -> dict:
     path = SCHEMA_DIR / registry[name]
     if not path.exists():
         raise CliError(f"schema file missing: {path}")
-    return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        return strict_json_loads(path.read_text(encoding="utf-8"))
+    except (ValueError, OSError, UnicodeError) as exc:
+        raise CliError(f"schema file could not be parsed: {path}: {exc}") from exc
+
+
+def _ensure_finite_json(value: Any) -> None:
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ValueError("non-finite number is not valid JSON")
+    if isinstance(value, dict):
+        for item in value.values():
+            _ensure_finite_json(item)
+    elif isinstance(value, list):
+        for item in value:
+            _ensure_finite_json(item)
+
+
+def strict_json_loads(body: str) -> Any:
+    """Parse standard JSON only; Python otherwise accepts NaN and Infinity."""
+    def reject_constant(token: str) -> None:
+        raise ValueError(f"non-finite number {token} is not valid JSON")
+
+    # A UTF-8 BOM is metadata about the byte stream, not part of the JSON
+    # document. Accept it at the boundary so receipts from BOM-aware editors
+    # remain usable; a BOM anywhere else is still invalid JSON.
+    if body.startswith("\ufeff"):
+        body = body[1:]
+    value = json.loads(body, parse_constant=reject_constant)
+    _ensure_finite_json(value)
+    return value
 
 
 def load_json_arg(path: str) -> Any:
@@ -1778,10 +4199,13 @@ def load_json_arg(path: str) -> Any:
         p = Path(path)
         if not p.exists():
             raise CliError(f"JSON file not found: {path}")
-        body = p.read_text(encoding="utf-8")
+        try:
+            body = p.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as exc:
+            raise CliError(f"could not read JSON in {path}: {exc}") from exc
     try:
-        return json.loads(body)
-    except json.JSONDecodeError as exc:
+        return strict_json_loads(body)
+    except (ValueError, UnicodeError) as exc:
         raise CliError(f"invalid JSON in {path}: {exc}") from exc
 
 
@@ -1810,45 +4234,318 @@ def type_matches(value: Any, expected: Any) -> bool:
     return actual == expected or (expected == "number" and actual == "integer")
 
 
-def validate_json_schema(data: Any, schema: dict, path: str = "$") -> List[str]:
-    errors: List[str] = []
+_SCHEMA_ANNOTATION_KEYWORDS = {
+    "$schema", "$id", "$comment", "title", "description", "default",
+    "examples", "deprecated", "readOnly", "writeOnly",
+}
+_SCHEMA_VALIDATION_KEYWORDS = {
+    "type", "enum", "const", "oneOf", "anyOf", "allOf", "not", "required",
+    "properties", "additionalProperties", "items", "minimum", "maximum",
+    "exclusiveMinimum", "exclusiveMaximum", "minItems", "maxItems",
+    "uniqueItems", "minLength", "maxLength", "pattern",
+}
+
+
+def _schema_definition_errors(schema: Any, path: str = "$") -> List[str]:
+    """Find unsupported keywords anywhere in a schema before validating data."""
+    if schema is True or schema is False:
+        return []
     if not isinstance(schema, dict):
+        return [f"{path}: schema must be an object or boolean"]
+    errors: List[str] = []
+    unsupported = sorted(
+        set(schema) - _SCHEMA_ANNOTATION_KEYWORDS - _SCHEMA_VALIDATION_KEYWORDS
+    )
+    if unsupported:
+        errors.append(f"{path}: unsupported schema keyword(s): {', '.join(unsupported)}")
+    for keyword in ("oneOf", "anyOf", "allOf"):
+        branches = schema.get(keyword)
+        if branches is not None and isinstance(branches, list):
+            for index, branch in enumerate(branches):
+                errors.extend(_schema_definition_errors(branch, f"{path}.{keyword}[{index}]"))
+    if "not" in schema:
+        errors.extend(_schema_definition_errors(schema["not"], f"{path}.not"))
+    props = schema.get("properties")
+    if isinstance(props, dict):
+        for key, subschema in props.items():
+            errors.extend(_schema_definition_errors(subschema, f"{path}.properties.{key}"))
+    for keyword in ("additionalProperties", "items"):
+        subschema = schema.get(keyword)
+        if isinstance(subschema, dict):
+            errors.extend(_schema_definition_errors(subschema, f"{path}.{keyword}"))
+    return errors
+
+
+def validate_json_schema(
+    data: Any, schema: Any, path: str = "$", _check_schema: bool = True
+) -> List[str]:
+    """Validate the bundled schema subset without silently ignoring keywords.
+
+    The CLI intentionally stays standard-library-only.  Every validation keyword
+    supported here has executable semantics; an unknown keyword is an error so a
+    schema cannot claim a constraint that this validator quietly skips.
+    """
+    errors: List[str] = []
+    if _check_schema:
+        errors.extend(_schema_definition_errors(schema, path))
+    if isinstance(data, float) and not math.isfinite(data):
+        return errors + [f"{path}: non-finite number is not valid JSON"]
+    if schema is True:
         return errors
+    if schema is False:
+        return [f"{path}: schema is false"]
+    if not isinstance(schema, dict):
+        return [f"{path}: schema must be an object or boolean"]
+
+    for keyword, relation in (("oneOf", "exactly one"), ("anyOf", "at least one")):
+        if keyword not in schema:
+            continue
+        branches = schema[keyword]
+        if not isinstance(branches, list) or not branches:
+            errors.append(f"{path}: {keyword} must be a non-empty array")
+            continue
+        branch_errors = [validate_json_schema(data, branch, path, False) for branch in branches]
+        matches = sum(not branch_error for branch_error in branch_errors)
+        valid = matches == 1 if keyword == "oneOf" else matches >= 1
+        if not valid:
+            errors.append(f"{path}: {keyword} must match {relation} schema (matched {matches})")
+
+    if "allOf" in schema:
+        branches = schema["allOf"]
+        if not isinstance(branches, list):
+            errors.append(f"{path}: allOf must be an array")
+        else:
+            for branch in branches:
+                errors.extend(validate_json_schema(data, branch, path, False))
+
+    if "not" in schema and not validate_json_schema(data, schema["not"], path, False):
+        errors.append(f"{path}: value must not match the not schema")
+
     if "type" in schema and not type_matches(data, schema["type"]):
         errors.append(f"{path}: expected {schema['type']}, got {json_type_name(data)}")
         return errors
     if "enum" in schema and data not in schema["enum"]:
         errors.append(f"{path}: value {data!r} not in enum {schema['enum']!r}")
+    if "const" in schema and data != schema["const"]:
+        errors.append(f"{path}: value {data!r} does not equal const {schema['const']!r}")
+
     if isinstance(data, dict):
-        for key in schema.get("required", []):
+        required = schema.get("required", [])
+        if not isinstance(required, list) or not all(isinstance(key, str) for key in required):
+            errors.append(f"{path}: required must be an array of strings")
+            required = []
+        for key in required:
             if key not in data:
                 errors.append(f"{path}: missing required key {key!r}")
         props = schema.get("properties", {})
-        if isinstance(props, dict):
-            for key, subschema in props.items():
-                if key in data:
-                    errors.extend(validate_json_schema(data[key], subschema, f"{path}.{key}"))
-    if isinstance(data, list) and isinstance(schema.get("items"), dict):
-        for i, item in enumerate(data):
-            errors.extend(validate_json_schema(item, schema["items"], f"{path}[{i}]"))
+        if not isinstance(props, dict):
+            errors.append(f"{path}: properties must be an object")
+            props = {}
+        for key, subschema in props.items():
+            if key in data:
+                errors.extend(validate_json_schema(data[key], subschema, f"{path}.{key}", False))
+        additional = schema.get("additionalProperties", True)
+        if additional not in (True, False) and not isinstance(additional, dict):
+            errors.append(f"{path}: additionalProperties must be boolean or an object")
+            additional = False
+        for key, value in data.items():
+            if key in props or additional is True:
+                continue
+            if additional is False:
+                errors.append(f"{path}: unexpected key {key!r}")
+            else:
+                errors.extend(validate_json_schema(value, additional, f"{path}.{key}", False))
+
+    if isinstance(data, list):
+        items = schema.get("items")
+        if items is not None and not isinstance(items, (dict, bool)):
+            errors.append(f"{path}: items must be an object or boolean")
+        elif isinstance(items, (dict, bool)):
+            for i, item in enumerate(data):
+                errors.extend(validate_json_schema(item, items, f"{path}[{i}]", False))
+        if "minItems" in schema and len(data) < schema["minItems"]:
+            errors.append(f"{path}: array has {len(data)} items, below minimum {schema['minItems']}")
+        if "maxItems" in schema and len(data) > schema["maxItems"]:
+            errors.append(f"{path}: array has {len(data)} items, above maximum {schema['maxItems']}")
+        if schema.get("uniqueItems"):
+            try:
+                unique = len({json.dumps(item, sort_keys=True) for item in data}) == len(data)
+            except (TypeError, ValueError):
+                unique = False
+            if not unique:
+                errors.append(f"{path}: array items must be unique")
+
+    if isinstance(data, str):
+        if "minLength" in schema and len(data) < schema["minLength"]:
+            errors.append(f"{path}: string length is below minimum {schema['minLength']}")
+        if "maxLength" in schema and len(data) > schema["maxLength"]:
+            errors.append(f"{path}: string length is above maximum {schema['maxLength']}")
+        if "pattern" in schema:
+            try:
+                matches = re.search(schema["pattern"], data) is not None
+            except (re.error, TypeError):
+                errors.append(f"{path}: invalid schema pattern")
+                matches = True
+            if not matches:
+                errors.append(f"{path}: value does not match pattern {schema['pattern']!r}")
+
     if isinstance(data, (int, float)) and not isinstance(data, bool):
         if "minimum" in schema and data < schema["minimum"]:
             errors.append(f"{path}: {data} is below minimum {schema['minimum']}")
         if "maximum" in schema and data > schema["maximum"]:
             errors.append(f"{path}: {data} is above maximum {schema['maximum']}")
+        if "exclusiveMinimum" in schema and data <= schema["exclusiveMinimum"]:
+            errors.append(f"{path}: {data} is not above exclusive minimum {schema['exclusiveMinimum']}")
+        if "exclusiveMaximum" in schema and data >= schema["exclusiveMaximum"]:
+            errors.append(f"{path}: {data} is not below exclusive maximum {schema['exclusiveMaximum']}")
+    return errors
+
+
+def semantic_receipt_errors(receipt: Any) -> List[str]:
+    """Validate receipt integrity that JSON shape alone cannot establish."""
+    if not isinstance(receipt, dict):
+        return ["receipt must be an object"]
+    errors: List[str] = []
+    missing = _receipt_text_fields(receipt)
+    if missing:
+        errors.append("receipt is missing verifier binding fields: " + ", ".join(missing))
+    if receipt.get("issuer") != RECEIPT_ISSUER:
+        errors.append(f"receipt issuer must be {RECEIPT_ISSUER}")
+    receipt_hash = receipt.get("receipt_sha256")
+    if isinstance(receipt_hash, str) and re.fullmatch(r"[0-9a-fA-F]{64}", receipt_hash):
+        if receipt_hash.lower() != _receipt_binding_digest(receipt).lower():
+            errors.append("receipt_sha256 does not cover the bound fields")
+    sha256 = receipt.get("sha256")
+    subject_digest = receipt.get("subject_digest")
+    if (
+        isinstance(sha256, str)
+        and re.fullmatch(r"[0-9a-fA-F]{64}", sha256)
+        and isinstance(subject_digest, str)
+        and re.fullmatch(r"[0-9a-fA-F]{64}", subject_digest)
+        and sha256.lower() != subject_digest.lower()
+    ):
+        errors.append("subject_digest must match the registered verification artifact")
     return errors
 
 
 def validate_artifact(kind: str, data: Any) -> dict:
     schema = load_schema(kind)
-    errors = validate_json_schema(data, schema)
+    schema_errors = validate_json_schema(data, schema)
+    semantic_errors: List[str] = []
+    if kind == "report" and not schema_errors:
+        semantic_errors = semantic_report_errors(data)
+    elif kind == "receipt" and not schema_errors:
+        semantic_errors = semantic_receipt_errors(data)
+    elif kind == "challenges" and not schema_errors:
+        semantic_errors = semantic_challenge_errors(data)
+    errors = schema_errors + semantic_errors
     return {
         "tool": TOOL_NAME,
         "schema": "checkyourself-validation/1",
         "kind": kind,
+        "schema_valid": not schema_errors,
+        "semantic_valid": not semantic_errors,
         "valid": not errors,
         "errors": errors,
+        "semantic_errors": semantic_errors,
     }
+
+
+def _report_cap_values(caps: Any) -> set[int]:
+    values: set[int] = set()
+    if not isinstance(caps, list):
+        return values
+    for cap in caps:
+        if isinstance(cap, dict) and isinstance(cap.get("cap"), (int, float)) and not isinstance(cap.get("cap"), bool):
+            values.add(int(cap["cap"]))
+        elif isinstance(cap, str):
+            for value in re.findall(r"\b(49|74|84|90)\b", cap):
+                values.add(int(value))
+    return values
+
+
+def semantic_report_errors(report: dict) -> List[str]:
+    """Check report conclusions against their own findings and evidence state."""
+    errors: List[str] = []
+    findings = normalize_findings({"findings": report.get("findings", [])})
+    unresolved = [finding for finding in findings if finding.get("status") not in RESOLVED_STATUSES]
+    score = report.get("score")
+    caps = _report_cap_values(report.get("score_caps"))
+    if isinstance(score, int) and not isinstance(score, bool):
+        if any(finding.get("severity") == "P0" for finding in unresolved) and score > 49:
+            errors.append("report score exceeds the unresolved P0 cap of 49")
+        if any(finding.get("severity") == "P1" for finding in unresolved) and score > 74:
+            errors.append("report score exceeds the unresolved P1 cap of 74")
+    if any(finding.get("severity") == "P0" for finding in unresolved) and 49 not in caps:
+        errors.append("report score_caps does not retain the unresolved P0 cap")
+    if any(finding.get("severity") == "P1" for finding in unresolved) and 74 not in caps:
+        errors.append("report score_caps does not retain the unresolved P1 cap")
+
+    coverage = report.get("coverage") if isinstance(report.get("coverage"), list) else []
+    coverage_unknown = False
+    for index, row in enumerate(coverage):
+        if not isinstance(row, dict):
+            continue
+        missing = row.get("missing_evidence") or []
+        if row.get("checked") is False or missing:
+            coverage_unknown = True
+        if row.get("checked") is True and not row.get("evidence_reviewed"):
+            coverage_unknown = True
+    if report.get("confidence") == "high" and (coverage_unknown or len(coverage) < len(SCORE_CATEGORIES)):
+        errors.append("high confidence requires complete, checked report coverage with no missing evidence")
+
+    breakdown = report.get("score_breakdown")
+    if isinstance(breakdown, list) and breakdown and all(
+        isinstance(item, dict) and isinstance(item.get("awarded"), (int, float))
+        for item in breakdown
+    ):
+        ids = {str(item.get("id")) for item in breakdown if item.get("id")}
+        if ids >= set(SCORE_CATEGORIES):
+            recomputed = round(sum(float(item["awarded"]) for item in breakdown))
+            cap = min(caps) if caps else 100
+            expected = min(recomputed, cap)
+            if isinstance(score, int) and score != expected:
+                errors.append(f"report score {score} does not match score_breakdown/caps recomputation {expected}")
+
+    backlog = report.get("remediation_backlog") if isinstance(report.get("remediation_backlog"), list) else []
+    backlog_ids = {str(item.get("finding_id")) for item in backlog if isinstance(item, dict) and item.get("finding_id")}
+    missing_backlog = sorted(str(finding["id"]) for finding in findings if finding["id"] not in backlog_ids)
+    if missing_backlog:
+        errors.append("report backlog is missing findings: " + ", ".join(missing_backlog))
+    return errors
+
+
+def parse_report(body: str) -> dict:
+    """Parse and validate one complete Production Reality Report."""
+    try:
+        report = strict_json_loads(body)
+    except (ValueError, UnicodeError) as exc:
+        raise CliError(f"invalid report JSON: {exc}") from exc
+    if not isinstance(report, dict):
+        raise CliError("invalid report artifact: report must be a JSON object")
+    errors = validate_json_schema(report, load_schema("report"))
+    if errors:
+        raise CliError("invalid report artifact: " + "; ".join(errors))
+    semantic_errors = semantic_report_errors(report)
+    if semantic_errors:
+        raise CliError("invalid report semantics: " + "; ".join(semantic_errors))
+    return report
+
+
+def regenerate_report(report: dict) -> str:
+    """Validate and render a report in canonical, byte-stable JSON form."""
+    if not isinstance(report, dict):
+        raise CliError("invalid report artifact: report must be a JSON object")
+    errors = validate_json_schema(report, load_schema("report"))
+    if errors:
+        raise CliError("invalid report artifact: " + "; ".join(errors))
+    semantic_errors = semantic_report_errors(report)
+    if semantic_errors:
+        raise CliError("invalid report semantics: " + "; ".join(semantic_errors))
+    try:
+        return json.dumps(report, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
+    except (TypeError, ValueError) as exc:
+        raise CliError(f"could not regenerate report: {exc}") from exc
 
 
 def init_project(project: Path, force: bool = False) -> dict:
@@ -1884,13 +4581,41 @@ def safe_write_text(path: Path, body: str) -> None:
     Generated files land inside scanned (potentially untrusted) directories;
     a pre-planted symlink at the expected name could redirect the write.
     """
-    if path.is_symlink():
-        raise CliError(f"refusing to write through symlink: {path}")
-    path.write_text(body, encoding="utf-8")
+    candidate = path
+    while True:
+        # macOS exposes temporary directories through root-level aliases such
+        # as /var and /tmp. They are outside the caller's writable subtree;
+        # reject symlinks introduced below those OS-managed aliases.
+        if candidate.is_symlink() and candidate.parent != Path(candidate.anchor):
+            raise CliError(f"refusing to write through symlink: {path}")
+        parent = candidate.parent
+        if parent == candidate:
+            break
+        candidate = parent
+    temp_fd: Optional[int] = None
+    temp_path: Optional[Path] = None
+    try:
+        temp_fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent))
+        temp_path = Path(temp_name)
+        with os.fdopen(temp_fd, "w", encoding="utf-8", newline="") as handle:
+            temp_fd = None
+            handle.write(body)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, path)
+        temp_path = None
+    finally:
+        if temp_fd is not None:
+            os.close(temp_fd)
+        if temp_path is not None:
+            try:
+                temp_path.unlink()
+            except FileNotFoundError:
+                pass
 
 
 def write_json(data: Any) -> None:
-    print(json.dumps(data, indent=2, sort_keys=False))
+    print(json.dumps(data, indent=2, sort_keys=False, allow_nan=False))
 
 
 def write_text_result(data: dict) -> None:
@@ -1899,6 +4624,8 @@ def write_text_result(data: dict) -> None:
         c = data["counts"]
         print(f"Scanned {data['files_scanned']} files. Findings — P0: {c['P0']}, P1: {c['P1']}, P2: {c['P2']}, P3: {c['P3']}")
         limits = data.get("scan_limits") or {}
+        if limits.get("incomplete"):
+            print("  WARNING: scan incomplete; skipped, unreadable, oversized, or truncated inputs may hide findings.")
         if limits.get("truncated"):
             print(f"  WARNING: scan truncated at {limits.get('max_files')} files; "
                   f"{limits.get('files_beyond_limit')} files were not scanned. Rerun with --max-files.")
@@ -1910,7 +4637,10 @@ def write_text_result(data: dict) -> None:
         for cap in data["caps_applied"]:
             print(f"  cap {cap['cap']}: {cap['reason']}")
     elif schema in {"checkyourself-backlog/1", "checkyourself-next-batch/1"}:
-        ids = data.get("first_approval_batch") or data.get("finding_ids") or []
+        if schema == "checkyourself-next-batch/1":
+            ids = data.get("finding_ids") or []
+        else:
+            ids = data.get("highest_severity_batch") or data.get("first_approval_batch") or []
         print("Next batch: " + (", ".join(ids) if ids else "none"))
     else:
         write_json(data)
@@ -1919,13 +4649,15 @@ def write_text_result(data: dict) -> None:
 def resolve_history_path(findings_path: str, requested: Optional[str]) -> Optional[Path]:
     if requested == "none":
         return None
+    if requested == "":
+        if findings_path == "-":
+            return Path.cwd() / DEFAULT_SCORE_HISTORY_PATH
+        return Path(findings_path).resolve().parent / DEFAULT_SCORE_HISTORY_PATH
     if requested:
         return Path(requested)
-    if findings_path == "-":
-        # Piped findings should not silently litter the CWD with a history
-        # file; stdin scoring writes history only when --history is explicit.
-        return None
-    return Path(findings_path).resolve().parent / DEFAULT_SCORE_HISTORY_PATH
+    # Scoring is read-only by default. Persist a score history only when the
+    # caller explicitly supplies --history.
+    return None
 
 
 def append_score_history(path: Optional[Path], result: dict, note: str = "") -> None:
@@ -1944,10 +4676,11 @@ def append_score_history(path: Optional[Path], result: dict, note: str = "") -> 
     history: List[dict] = []
     if path.exists():
         try:
-            parsed = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(parsed, list):
-                history = [item for item in parsed if isinstance(item, dict)]
-        except json.JSONDecodeError:
+            parsed = strict_json_loads(path.read_text(encoding="utf-8"))
+            if not isinstance(parsed, list) or not all(isinstance(item, dict) for item in parsed):
+                raise ValueError("score history must be a JSON array of objects")
+            history = parsed
+        except (ValueError, UnicodeError):
             # Never silently destroy the audit trail: preserve the corrupt
             # file and warn before starting a fresh history.
             backup = path.with_name(path.name + ".corrupt.bak")
@@ -1958,7 +4691,7 @@ def append_score_history(path: Optional[Path], result: dict, note: str = "") -> 
                 print("warning: score history was corrupt and could not be backed up", file=sys.stderr)
             history = []
     history.append(entry)
-    safe_write_text(path, json.dumps(history, indent=2) + "\n")
+    safe_write_text(path, json.dumps(history, indent=2, allow_nan=False) + "\n")
 
 
 def command_scan(args: argparse.Namespace) -> int:
@@ -1968,20 +4701,21 @@ def command_scan(args: argparse.Namespace) -> int:
     data = scan(root, deep=getattr(args, "deep", False), max_files=getattr(args, "max_files", DEFAULT_MAX_FILES))
     json_stdout = args.format == "json" or args.json == "-" or (args.no_write and args.json is not None)
 
-    if not args.no_write:
+    if not args.no_write and args.out is not None:
         out = Path(args.out)
         if not out.is_absolute():
             out = Path.cwd() / out
         safe_write_text(out, render_markdown(root, data))
         if not args.quiet and not json_stdout:
             print(f"Wrote context: {out}")
-        if args.json is not None and args.json != "-":
-            jout = Path(args.json)
-            if not jout.is_absolute():
-                jout = Path.cwd() / jout
-            safe_write_text(jout, json.dumps(data, indent=2) + "\n")
-            if not args.quiet and not json_stdout:
-                print(f"Wrote JSON:    {jout}")
+
+    if not args.no_write and args.json is not None and args.json != "-":
+        jout = Path(args.json)
+        if not jout.is_absolute():
+            jout = Path.cwd() / jout
+        safe_write_text(jout, json.dumps(data, indent=2, allow_nan=False) + "\n")
+        if not args.quiet and not json_stdout:
+            print(f"Wrote JSON:    {jout}")
 
     if json_stdout:
         write_json(data)
@@ -2012,7 +4746,8 @@ def command_schema(args: argparse.Namespace) -> int:
 def command_coverage(args: argparse.Namespace) -> int:
     if args.check:
         data = load_json_arg(args.check)
-        result = coverage_check(data)
+        evidence_root = Path.cwd() if args.check == "-" else Path(args.check).resolve().parent
+        result = coverage_check(data, evidence_root)
         if args.format == "json":
             write_json(result)
         else:
@@ -2027,19 +4762,83 @@ def command_coverage(args: argparse.Namespace) -> int:
     if not out_path and args.format == "text":
         out_path = DEFAULT_COVERAGE_PATH
     if out_path:
-        safe_write_text(Path(out_path), json.dumps(data, indent=2) + "\n")
+        safe_write_text(Path(out_path), json.dumps(data, indent=2, allow_nan=False) + "\n")
     if args.format == "json":
         write_json(data)
     else:
         print(f"Wrote coverage skeleton: {out_path}")
+        print("Fill coverage.json with evidence, then re-run score.")
+    return 0
+
+
+def command_challenge(args: argparse.Namespace) -> int:
+    root = Path(args.root or args.project).resolve()
+    output_dir = None
+    if args.output_dir:
+        output_dir = Path(args.output_dir)
+        if not output_dir.is_absolute():
+            output_dir = root / output_dir
+    result = challenge_from_root(root, args.surface, output_dir)
+    if args.out:
+        out = Path(args.out)
+        if not out.is_absolute():
+            out = Path.cwd() / out
+        safe_write_text(out, json.dumps(result, indent=2, sort_keys=True, allow_nan=False) + "\n")
+    if args.format == "json":
+        write_json(result)
+    else:
+        print("Challenges passed" if result["complete"] else "Challenges incomplete")
+        for item in result["surfaces"]:
+            print(f"- {item['surface_id']}: {item['status']}")
+            for reason in item.get("reasons") or []:
+                print(f"  {reason}")
+        print(f"Receipts: {len(result['receipts'])}")
+    return 0 if result["complete"] else 1
+
+
+def command_receipt(args: argparse.Namespace) -> int:
+    root = Path(args.root).resolve()
+    if not root.is_dir():
+        raise CliError(f"receipt evidence root not found: {root}")
+    receipt = issue_receipt(
+        args.reference,
+        root,
+        surface_id=args.surface_id,
+        source_revision=args.source_revision,
+        command=args.command,
+        claim=args.claim,
+        result=args.result,
+        source_state=args.source_state,
+        subject_digest=args.subject_digest,
+    )
+    if args.out:
+        out = Path(args.out)
+        if not out.is_absolute():
+            out = Path.cwd() / out
+        safe_write_text(out, json.dumps(receipt, indent=2, allow_nan=False) + "\n")
+    if args.format == "json":
+        write_json(receipt)
+    else:
+        if args.out:
+            print(f"Wrote verifier receipt: {args.out}")
+        else:
+            print(json.dumps(receipt, indent=2, allow_nan=False))
     return 0
 
 
 def command_score(args: argparse.Namespace) -> int:
     findings_data = load_json_arg(args.findings)
-    coverage_data = load_json_arg(args.coverage) if args.coverage else None
-    result = score_from_inputs(findings_data, coverage_data)
-    history_path = resolve_history_path(args.findings, None if not args.history else args.history)
+    if args.coverage is not None:
+        coverage_root = Path.cwd() if args.coverage == "-" else Path(args.coverage).resolve().parent
+        result = score_from_inputs(
+            findings_data,
+            load_json_arg(args.coverage),
+            evidence_root=coverage_root,
+            claim=args.claim,
+        )
+    else:
+        result = score_from_inputs(findings_data, claim=args.claim)
+    history_path = resolve_history_path(args.findings, args.history)
     append_score_history(history_path, result, args.note)
     if args.format == "json":
         write_json(result)
@@ -2082,8 +4881,10 @@ def command_diff(args: argparse.Namespace) -> int:
             print(f"  + [{f['severity']}] {f['id']} {f['finding']}")
         for f in resolved:
             print(f"  - [{f['severity']}] {f['id']} {f['finding']}")
-        if result["regression"]:
-            print("REGRESSION: open P0/P1 count increased against the baseline.")
+        for event in result["regressions"]:
+            print(f"  ! [{event['type']}] {event['id']}")
+        if result["count_regression"]:
+            print("  ! [count_increased] open P0/P1 count increased against the baseline.")
     if args.ci and result["regression"]:
         return 1
     return 0
@@ -2183,7 +4984,8 @@ def mcp_tools() -> List[dict]:
                 },
                 "max_files": {
                     "type": "integer",
-                    "description": "Maximum files to scan before truncating (default 6000). The result reports truncation in scan_limits.",
+                    "minimum": 1,
+                    "description": "Maximum files to scan before truncating (default 6000). The result reports skipped inputs and incompleteness in scan_limits.",
                 },
             }),
             "annotations": read_only_annotations("Scan Project"),
@@ -2222,6 +5024,26 @@ def mcp_tools() -> List[dict]:
             "outputSchema": {"type": "object", "description": "Coverage completeness result using schema checkyourself-coverage-check/1."},
         },
         {
+            "name": "receipt_issue",
+            "title": "Issue Verifier Receipt",
+            "description": description(
+                "Issue one verifier-hashed receipt only for an existing, registered surface-specific verification artifact under the configured MCP scan root. "
+                "The result is returned inline and is not written to disk."
+            ),
+            "inputSchema": object_schema({
+                "reference": {"type": "string", "description": "In-root registered verification artifact path to hash."},
+                "surface_id": {"type": "string", "description": "Canonical coverage surface ID."},
+                "source_revision": {"type": "string", "description": "Source revision examined."},
+                "source_state": {"type": "string", "description": "Source/environment state examined."},
+                "command": {"type": "string", "description": "Command recorded at issuance."},
+                "claim": {"type": "string", "description": "One claim proved by the receipt."},
+                "result": {"type": "string", "description": "Observed result recorded at issuance."},
+                "subject_digest": {"type": "string", "description": "Optional content hash assertion for the registered verification artifact."},
+            }, ["reference", "surface_id", "source_revision", "source_state", "command", "claim", "result"]),
+            "annotations": read_only_annotations("Issue Verifier Receipt"),
+            "outputSchema": {"type": "object", "description": "Verifier receipt using schema checkyourself-receipt/1."},
+        },
+        {
             "name": "score",
             "title": "Score Findings",
             "description": description(
@@ -2232,8 +5054,12 @@ def mcp_tools() -> List[dict]:
             "inputSchema": object_schema({
                 "findings": findings_schema("normalize and score"),
                 "coverage": {
-                    "type": "object",
+                    "type": ["object", "null"],
                     "description": "Optional filled coverage object. Provide this for coverage-backed scoring; omit for scan-derived or finding-only estimates.",
+                },
+                "claim": {
+                    "type": "string",
+                    "description": "Optional accepted completion claim. This records the claim but does not execute an independent challenge runner.",
                 },
             }, ["findings"]),
             "annotations": read_only_annotations("Score Findings"),
@@ -2244,6 +5070,7 @@ def mcp_tools() -> List[dict]:
             "title": "Rank Backlog",
             "description": description(
                 "Normalize inline findings and return the complete remediation backlog sorted by severity, category, and finding ID. "
+                "The highest_severity_batch is a deterministic severity slice; safety and dependency analysis are not performed. "
                 "Each item includes fix summary, order rationale, verification, rollback idea, learning value, and status. "
                 "This recommends work only; it does not modify files or mark findings resolved."
             ),
@@ -2257,8 +5084,8 @@ def mcp_tools() -> List[dict]:
             "name": "next",
             "title": "Next Approval Batch",
             "description": description(
-                "Return the next safest unresolved approval batch from inline findings by reusing the backlog ranking rules. "
-                "The batch contains at most the first three unresolved findings at the highest current severity. "
+                "Return the next highest-severity unresolved approval batch from inline findings by reusing the backlog ranking rules. "
+                "The batch contains at most the first three unresolved findings at the highest current severity; safety and dependency analysis are not performed. "
                 "This is a planning tool only and does not perform fixes."
             ),
             "inputSchema": object_schema({
@@ -2272,8 +5099,9 @@ def mcp_tools() -> List[dict]:
             "title": "Diff Findings",
             "description": description(
                 "Compare two inline findings artifacts (scan results, reports, or finding lists) and return added, "
-                "resolved, and unchanged findings, evidence-level changes, severity count deltas, and a regression flag "
-                "that is true when open P0/P1 counts increased. Use this to gate changes against a baseline."
+                "resolved, unchanged, status and severity transitions, evidence-level changes, severity count deltas, and "
+                "a regression flag that is true for newly open, reopened, or escalated P0/P1 findings or increased counts. "
+                "Use this to gate changes against a baseline."
             ),
             "inputSchema": object_schema({
                 "old": findings_schema("treat as the baseline"),
@@ -2362,9 +5190,29 @@ def call_mcp_tool(name: str, arguments: dict) -> dict:
     if name == "coverage_emit":
         return coverage_emit(str(arguments.get("project") or ""))
     if name == "coverage_check":
-        return coverage_check(arguments.get("coverage") or {})
+        return coverage_check(arguments.get("coverage") or {}, mcp_scan_root())
+    if name == "receipt_issue":
+        return issue_receipt(
+            str(arguments.get("reference") or ""),
+            mcp_scan_root(),
+            surface_id=str(arguments.get("surface_id") or ""),
+            source_revision=str(arguments.get("source_revision") or ""),
+            source_state=str(arguments.get("source_state") or ""),
+            command=str(arguments.get("command") or ""),
+            claim=str(arguments.get("claim") or ""),
+            result=str(arguments.get("result") or ""),
+            subject_digest=arguments.get("subject_digest"),
+        )
     if name == "score":
-        return score_from_inputs(arguments.get("findings") or {}, arguments.get("coverage"))
+        findings = arguments.get("findings") or {}
+        if "coverage" in arguments:
+            return score_from_inputs(
+                findings,
+                arguments["coverage"],
+                evidence_root=mcp_scan_root(),
+                claim=arguments.get("claim"),
+            )
+        return score_from_inputs(findings, claim=arguments.get("claim"))
     if name == "backlog":
         return backlog_from_findings(arguments.get("findings") or {})
     if name == "next":
@@ -2390,7 +5238,7 @@ def mcp_error(request_id: Any, code: int, message: str, data: Optional[dict] = N
 
 
 def mcp_tool_result(data: dict, is_error: bool = False) -> dict:
-    text = json.dumps(data, indent=2)
+    text = json.dumps(data, indent=2, allow_nan=False)
     return {
         "content": [{"type": "text", "text": text}],
         "structuredContent": data,
@@ -2450,6 +5298,12 @@ def handle_mcp_message(message: dict) -> Optional[dict]:
         missing = sorted(set(input_schema.get("required") or []) - set(arguments))
         if missing:
             return mcp_error(request_id, -32602, f"missing required argument(s) for {name}: {', '.join(missing)}")
+        type_errors = validate_json_schema(arguments, input_schema)
+        if type_errors:
+            return mcp_error(
+                request_id, -32602,
+                f"invalid argument value(s) for {name}: {'; '.join(type_errors)}",
+            )
         try:
             data = call_mcp_tool(name, arguments)
             return mcp_success(request_id, mcp_tool_result(data))
@@ -2468,13 +5322,13 @@ def run_mcp_server() -> int:
         if not raw:
             continue
         try:
-            message = json.loads(raw)
-        except json.JSONDecodeError as exc:
+            message = strict_json_loads(raw)
+        except (ValueError, UnicodeError) as exc:
             response = mcp_error(None, -32700, f"parse error: {exc}")
         else:
             if not isinstance(message, dict):
                 # JSON-RPC batch arrays would otherwise crash on .get().
-                sys.stdout.write(json.dumps(mcp_error(None, -32600, "batch requests are not supported; send one JSON-RPC object per line"), separators=(",", ":")) + "\n")
+                sys.stdout.write(json.dumps(mcp_error(None, -32600, "batch requests are not supported; send one JSON-RPC object per line"), separators=(",", ":"), allow_nan=False) + "\n")
                 sys.stdout.flush()
                 continue
             try:
@@ -2483,15 +5337,15 @@ def run_mcp_server() -> int:
                 traceback.print_exc(file=sys.stderr)
                 response = mcp_error(message.get("id"), -32603, str(exc))
         if response is not None:
-            sys.stdout.write(json.dumps(response, separators=(",", ":")) + "\n")
+            sys.stdout.write(json.dumps(response, separators=(",", ":"), allow_nan=False) + "\n")
             sys.stdout.flush()
     return 0
 
 
 def add_scan_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("project", nargs="?", default=".", help="Project root to scan (default: .)")
-    parser.add_argument("--out", default="CHECKYOURSELF_PROJECT_CONTEXT.generated.md",
-                        help="Markdown context output path (default: CHECKYOURSELF_PROJECT_CONTEXT.generated.md)")
+    parser.add_argument("--out",
+                        help="Write Markdown context to this path (scans are stdout-only by default)")
     parser.add_argument("--json", nargs="?", const="CHECKYOURSELF_SCAN.generated.json", default=None,
                         help="Also write a JSON summary (default path: CHECKYOURSELF_SCAN.generated.json). Use - for stdout.")
     parser.add_argument("--format", choices=("text", "json"), default="text",
@@ -2538,14 +5392,38 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--format", choices=("text", "json"), default="text")
     p.set_defaults(func=command_coverage)
 
+    p = sub.add_parser("challenge", help="Execute committed per-surface challenges and mint verifier-owned receipts.")
+    p.add_argument("project", nargs="?", default=".", help="Project root to challenge (default: current directory).")
+    p.add_argument("--root", help="Alias for the project root; useful when composing commands.")
+    p.add_argument("--surface", choices=[sid for sid, _surface, _category in COVERAGE_SURFACES], help="Run one canonical surface instead of all configured surfaces.")
+    p.add_argument("--output-dir", help="Directory under the project root for captured output and receipts.")
+    p.add_argument("--out", help="Write the challenge result JSON to this path.")
+    p.add_argument("--format", choices=("text", "json"), default="text")
+    p.set_defaults(func=command_challenge)
+
+    p = sub.add_parser("receipt", help="Issue one verifier-hashed receipt for a registered surface artifact.")
+    p.add_argument("--reference", required=True, help="In-root registered verification artifact path to hash.")
+    p.add_argument("--surface-id", required=True, choices=[sid for sid, _surface, _category in COVERAGE_SURFACES], help="Canonical coverage surface this receipt proves.")
+    p.add_argument("--source-revision", required=True, help="Source revision examined when the receipt was issued.")
+    p.add_argument("--source-state", required=True, help="Source/environment state examined when the receipt was issued.")
+    p.add_argument("--command", required=True, help="Command recorded at issuance.")
+    p.add_argument("--claim", required=True, help="One claim proved by this receipt.")
+    p.add_argument("--result", required=True, help="Observed result recorded at issuance.")
+    p.add_argument("--subject-digest", help="Optional content hash assertion for the registered verification artifact.")
+    p.add_argument("--root", default=".", help="Evidence root containing the referenced artifact (default: current directory).")
+    p.add_argument("--out", help="Write the receipt JSON to this path.")
+    p.add_argument("--format", choices=("text", "json"), default="text")
+    p.set_defaults(func=command_receipt)
+
     p = sub.add_parser("score", help="Compute deterministic Production Reality Score.")
     p.add_argument("--findings", required=True, help="JSON file containing findings, scan output, or report.")
     p.add_argument("--coverage", help="Optional coverage JSON file.")
-    p.add_argument("--history", nargs="?", const=DEFAULT_SCORE_HISTORY_PATH,
-                   help="Write score history to this path. Defaults to .checkyourself-score-history.json beside the findings file.")
+    p.add_argument("--history", nargs="?", const="",
+                   help="Write score history to this path (or beside findings when supplied without a path; disabled by default).")
     p.add_argument("--no-history", dest="history", action="store_const", const="none",
                    help="Do not append score history.")
     p.add_argument("--note", default="", help="Optional note stored with the score history entry.")
+    p.add_argument("--claim", help="Optional accepted completion claim to record; evidence remains unbound unless coverage marks it explicitly.")
     p.add_argument("--format", choices=("text", "json"), default="text")
     p.set_defaults(func=command_score)
 
@@ -2554,7 +5432,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--format", choices=("text", "json"), default="text")
     p.set_defaults(func=command_backlog)
 
-    p = sub.add_parser("next", help="Return the next safest unresolved approval batch.")
+    p = sub.add_parser("next", help="Return the next highest-severity unresolved approval batch; safety analysis is not performed.")
     p.add_argument("--findings", required=True, help="JSON file containing findings, scan output, or report.")
     p.add_argument("--format", choices=("text", "json"), default="text")
     p.set_defaults(func=command_next)
@@ -2562,7 +5440,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("diff", help="Compare two findings artifacts and report added/resolved/regressed findings.")
     p.add_argument("--old", required=True, help="Baseline findings JSON path, or - for stdin.")
     p.add_argument("--new", required=True, help="Current findings JSON path, or - for stdin.")
-    p.add_argument("--ci", action="store_true", help="Exit non-zero when open P0/P1 counts increased.")
+    p.add_argument("--ci", action="store_true", help="Exit non-zero for a new/reopened/escalated open P0/P1 finding or an increased open P0/P1 count.")
     p.add_argument("--format", choices=("text", "json"), default="text")
     p.set_defaults(func=command_diff)
 
@@ -2595,8 +5473,11 @@ def legacy_scan_main(argv: Sequence[str]) -> int:
 
 def main(argv: Optional[List[str]] = None) -> int:
     raw = list(sys.argv[1:] if argv is None else argv)
-    commands = {"describe", "scan", "diagnostic", "schema", "coverage", "score", "backlog", "next", "diff", "validate", "init", "mcp"}
+    commands = {"describe", "scan", "diagnostic", "schema", "coverage", "challenge", "receipt", "score", "backlog", "next", "diff", "validate", "init", "mcp"}
     try:
+        if raw and raw[0] in {"-h", "--help"}:
+            build_parser().print_help()
+            return 0
         if raw and raw[0] not in commands and not raw[0].startswith("-") and not Path(raw[0]).exists():
             # A misspelled command would otherwise be treated as a project
             # path, silently scanning nothing useful.
@@ -2610,6 +5491,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         args = parser.parse_args(raw)
         return args.func(args)
     except CliError as exc:
+        json_requested = any(
+            token == "--format=json"
+            or (token == "--format" and index + 1 < len(raw) and raw[index + 1] == "json")
+            for index, token in enumerate(raw)
+        )
+        if json_requested:
+            # A shell creates `> output.json` before this process starts. Keep
+            # that file parseable when a JSON-mode command fails validation.
+            write_json({"error": str(exc), "code": exc.code})
         print(f"error: {exc}", file=sys.stderr)
         return exc.code
 

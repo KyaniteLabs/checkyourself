@@ -1,17 +1,19 @@
-# CheckYourself — AI Production-Readiness Diagnostic for Apps Built With AI
+# CheckYourself
 
-**TL;DR:** CheckYourself — AI production-readiness diagnostic for apps built with AI. Best for founders and engineers shipping AI-generated apps.
+For AI app builders, CheckYourself runs local challenges to test claimed work, record evidence, and expose risks. Score is not a guarantee.
 
 > **Check yourself before you wreck yourself — for the apps you ship.** Before you launch it, CheckYourself.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Model-agnostic](https://img.shields.io/badge/AI-model--agnostic-blue.svg)](#works-with-every-ai-coding-tool)
 [![Production-hardening engine](https://img.shields.io/badge/engine-19%20capabilities-blueviolet.svg)](90_ADVANCED/)
 [![Read-only by default](https://img.shields.io/badge/safety-read--only%20first-brightgreen.svg)](#is-it-safe-to-run-on-my-codebase)
 
-**CheckYourself is a free, open-source, model-agnostic production-readiness system for apps built with AI coding assistants.** It turns any AI assistant — Cursor, Claude, ChatGPT, Gemini, Copilot, Windsurf, Replit, Lovable, Bolt, Codex, or a local agent — into a pre-launch auditor that inspects your app, infers the stack, finds production gaps, explains every risk in plain English, proposes fixes for your approval, verifies them, and then writes a learning plan built from the exact gaps your own project had.
+**CheckYourself is a free, open-source, model-agnostic completion-evidence workflow for apps built with AI coding assistants.** It turns any AI assistant — Cursor, Claude, ChatGPT, Gemini, Copilot, Windsurf, Replit, Lovable, Bolt, Codex, or a local agent — into a pre-launch reviewer that inspects your app, records observed and untested behavior, runs verifier-owned challenges, surfaces production gaps, proposes fixes for your approval, verifies local receipts, and writes a learning plan built from the exact gaps your own project had.
 
-Under the hood it is a complete, staged engineering system, not a single canned prompt: an ICM-style context workspace that routes the agent through each stage, an evidence-based 0–100 scoring method with severity caps, a 19-capability production-hardening engine spanning auth, data, secrets, CI/CD, observability, privacy, and AI governance, JSON output schemas, report and risk templates, and a public validation suite. You install it as your AI assistant's operating context — no SaaS, no account, no lock-in to any one model.
+Under the hood it is a staged engineering system, not a single canned prompt: an ICM-style context workspace that routes the agent through each stage, an evidence-based 0–100 scoring method with severity caps, verifier-owned challenges across 20 canonical surfaces and 10 scored categories, a 19-capability production-hardening engine spanning auth, data, secrets, CI/CD, observability, privacy, and AI governance, JSON output schemas, report and risk templates, and a public validation suite. You install it as your AI assistant's operating context — no SaaS, no account, no lock-in to any one model.
+
+The 2026-09-05 retrofit checkpoint is backed by **150 tests and 88 subtests**, and `python3 tools/validate_public.py .` passes. These are repository checks, not a production-safety certification.
 
 ---
 
@@ -21,6 +23,7 @@ Under the hood it is a complete, staged engineering system, not a single canned 
 - [Why it exists](#why-it-exists)
 - [Get started](#get-started)
 - [What it produces](#what-it-produces)
+- [Verifier-owned challenge runner](#verifier-owned-challenge-runner)
 - [What it checks](#what-it-checks)
 - [Works with every AI coding tool](#works-with-every-ai-coding-tool)
 - [Who it is for](#who-it-is-for)
@@ -36,11 +39,11 @@ Under the hood it is a complete, staged engineering system, not a single canned 
 
 ## What is CheckYourself?
 
-CheckYourself is an open-source **production-readiness audit system** — a structured, staged engineering framework of context files, scoring logic, output schemas, templates, and a deep production-hardening capability stack that you load as an AI coding assistant's operating context, so it can grade an AI-built app the way real production would: honestly, completely, and before launch.
+CheckYourself is an open-source **reviewable completion-evidence system** — a structured, staged engineering framework of context files, scoring logic, output schemas, templates, and production-hardening guidance. It records what was observed, what was inferred, what remains untested, and which risks still block launch; its verifier executes committed local challenges, rechecks stored executed receipts at score time, and validates report verdict consistency. It does not certify production safety or provide independent external custody of the evidence.
 
 It answers one question that matters to every "vibe coder," indie hacker, and AI-assisted builder: **"Is this app actually ready to ship, and if not, what exactly is wrong and how do I fix it?"**
 
-Unlike a "top three issues" linter, CheckYourself builds a **complete findings register** and a **complete remediation backlog**, scores production readiness from 0–100, and walks you through fixes one safe, reversible batch at a time. When the audit is done, it generates a **bespoke learning plan** so you actually learn from what your project was missing.
+Unlike a "top three issues" linter, CheckYourself builds a **complete findings register** and a **complete remediation backlog**, produces a bounded 0–100 evidence score, and walks you through fixes one safe, reversible batch at a time. When the audit is done, it generates a **bespoke learning plan** so you actually learn from what your project was missing. The score remains scoped evidence, not a production-safety guarantee.
 
 It is also organized as an ICM-style context workspace: [`CONTEXT.md`](CONTEXT.md) routes the agent to staged folders, each major stage has its own `CONTEXT.md`, and durable handoff artifacts belong in stage `output/` folders. CheckYourself is not affiliated with the RinDig ICM project; it uses the same file-first idea so agents know what to read, do, and produce at each step.
 
@@ -62,10 +65,10 @@ CheckYourself gives you reality **before production does the grading** — a cal
 4. Run a read-only diagnostic and review the **Production Reality Report**.
 5. Approve fixes one at a time or in safe, reversible batches.
 6. Recheck and rescore after each batch.
-7. Continue until every finding is fixed, deferred with a reason, accepted as risk, blocked by missing context, or proven not applicable.
+7. Continue until every finding is fixed or proven not applicable; keep deferred, accepted-risk, and suppressed items visible as residual risk with owner and trigger context.
 8. Get a custom learning plan based on the actual gaps.
 
-> **No model lock-in. No required cloud account. No command line.**
+> **No model lock-in. No required cloud account. No required command line.**
 
 ### Direct your assistant
 
@@ -75,7 +78,7 @@ Once the folder is in place, tell your AI assistant how to operate within it:
 Use the checkyourself folder as your operating context.
 Start with a read-only diagnostic.
 Do not make code changes until I approve a specific fix.
-Generate the dashboard only if I say dashboard yes.
+Generate the dashboard only if I say `dashboard yes` or `dashboard inline`.
 After the diagnostic, create a learning plan based on the gaps you found.
 ```
 
@@ -102,14 +105,24 @@ Default outputs (see a real example in [`samples/sample-production-reality-repor
 - **Production Reality Score** — a 0–100 score with caps and reasoning ([how the score works](docs/checkyourself-score-explained.md)).
 - **Coverage Sweep** — every relevant production surface marked Pass, Finding, Unknown, or Not applicable.
 - **Complete Findings Register** — every discovered risk, not just the obvious ones.
-- **Complete Remediation Backlog** — every finding and blocking unknown ranked by severity, safety, and dependency order.
-- **Safest First Approval Batch** — the first reversible batch to approve, not the whole scope.
+- **Complete Remediation Backlog** — every finding and blocking unknown in a deterministic severity, category, and finding-ID order.
+- **Highest-Severity Approval Batch** — a small unresolved slice for review, not the whole scope. The local CLI does not infer safety, dependencies, coupling, or blast radius; the diagnostic and human approval gate still do.
 - **Guided Fix Loop** — approve, fix, verify, rescore, repeat.
 - **Bespoke Learning Plan** — what to learn next based on what your own app was missing.
 
 Optional output:
 
-- **Human Audit Dashboard** — one self-contained HTML/CSS dashboard that visualizes the score, risks, backlog, coverage, status, and learning plan. It is optional because dashboards use extra tokens. Ask for it with `dashboard yes`. If you do not want HTML, use the compact inline Markdown dashboard instead.
+- **Human Audit Dashboard** — one self-contained HTML/CSS dashboard that visualizes the score, risks, backlog, coverage, status, and learning plan. It is optional because dashboards use extra tokens. Ask for it with `dashboard yes`, or use `dashboard inline` for the compact Markdown fallback.
+
+## Verifier-owned challenge runner
+
+The `challenge` verb executes the committed `.checkyourself/challenges.json` definitions against the project under review. The runner accepts argv-only commands, applies bounded timeouts, and treats a failed or timed-out challenge as a fail-closed finding. The verifier owns the execution receipt: a successful `EXECUTED` receipt is the only class eligible for full credit; caller-issued receipts remain explicitly `UNVERIFIED` and are capped.
+
+At score time, stored executed receipts survive only a fresh verifier run that agrees on the exit state, success assertions, source and challenge bindings, and a semantic output digest. The digest normalizes volatile durations, timestamps, and paths while the raw capture hash still detects edits. Verifier-owned per-surface minimum contracts reject or cap semantic vacuity such as `true`, `false`, echo-only or print-only commands, hollow test-runner output, and trivial regexes.
+
+The local integrity HMAC is project-local tamper evidence. It is **not** proof of independent issuance, operator identity, or external custody; externally controlled custody is future work. `--claim` records the accepted completion claim and labels evidence rows as claim-bound or unbound. Report validation labels schema validity separately from semantic verdict consistency and recomputes the verdict rather than trusting the supplied score.
+
+The ASTRA adversarial review found eight findings and the retrofit closed them; the evidence trail is [`ASTRA-REVIEW.md`](_retrofit-2026-09-04/ASTRA-REVIEW.md) and [`ASTRA-FIX-REPORT.md`](_retrofit-2026-09-04/ASTRA-FIX-REPORT.md).
 
 ---
 
@@ -185,9 +198,9 @@ For a zero-token head start, CheckYourself ships a small **optional** scan & sca
 python3 tools/checkyourself.py /path/to/your/project
 ```
 
-It detects your stack, flags obvious deterministic risks (possible hardcoded secrets, a committed `.env`, missing `.env.example`, absent tests or CI) ranked P0–P3, and writes a pre-filled context file your AI can build on. Add `--json` for a machine-readable summary, `--format json --no-write` for JSON stdout, or `--ci` to use it as a lightweight pipeline gate (non-zero exit on a P0). The CLI is a scaffold, not a substitute — the AI still runs the full diagnostic. See [`docs/cli.md`](docs/cli.md).
+It detects your stack, flags obvious deterministic risks (possible hardcoded secrets, a committed `.env`, missing `.env.example`, absent tests or CI) ranked P0–P3, and writes a pre-filled context file your AI can build on. Add `--json` for a machine-readable summary, `--format json --no-write` for JSON stdout, or `--ci` to use it as a lightweight pipeline gate (non-zero exit on a P0). The `challenge` verb executes committed challenge definitions; `score` re-executes stored executed receipts; `validate --kind report` separates schema validity from semantic verdict consistency. The CLI is a scaffold for discovery, not a production-safety certification. See [`docs/cli.md`](docs/cli.md).
 
-The agent-access roadmap is CLI-first: no hosted API for the current open-source product, with MCP planned later as a thin native-agent wrapper. See [`docs/agent-access-cli-plan.md`](docs/agent-access-cli-plan.md).
+The CLI is the canonical local engine, and CheckYourself also ships a thin local stdio MCP wrapper for native-agent clients. There is no hosted API for the current open-source product. See [`docs/cli.md`](docs/cli.md), [`docs/mcp.md`](docs/mcp.md), and [`docs/agent-access-cli-plan.md`](docs/agent-access-cli-plan.md).
 
 ---
 
@@ -197,9 +210,9 @@ The Markdown report is the default output because it is cheaper, faster, and eas
 
 This repository includes a real dogfood dashboard screenshot from CheckYourself auditing itself:
 
-![CheckYourself dogfood dashboard showing the self-audit score, launch status, risk counts, and coverage sweep](10_DASHBOARD/output/checkyourself-dogfood-dashboard-screenshot.png)
+![CheckYourself dogfood dashboard showing the self-audit score, launch status, risk counts, and coverage sweep](10_DASHBOARD/output/checkyourself-dogfood-dashboard-live-20260612.png)
 
-After the report exists, say:
+After the report exists, say either:
 
 ```text
 dashboard yes
@@ -211,7 +224,14 @@ The AI creates one self-contained HTML/CSS dashboard from the report — it shou
 dashboard inline
 ```
 
-and the AI returns the compact Markdown dashboard shape instead of creating a file.
+or:
+
+```text
+dashboard inline
+```
+
+The first creates one self-contained HTML/CSS file. The second returns the
+compact Markdown dashboard shape instead of creating a file.
 
 Dashboard files:
 
@@ -247,10 +267,10 @@ See [`docs/token-efficiency.md`](docs/token-efficiency.md).
 ## FAQ
 
 ### What is CheckYourself in one sentence?
-CheckYourself is a free, open-source, model-agnostic production-readiness system that turns any AI coding assistant into a pre-launch auditor for apps built with AI — a staged diagnostic workspace, an evidence-based score, a complete findings register and remediation backlog, approval-based guided fixes, and a 19-capability hardening engine that finds every gap, explains the risks, fixes them with your approval, and teaches you what you missed.
+CheckYourself is a free, open-source, model-agnostic review workflow that turns any AI coding assistant into a reviewer of completion evidence for AI-built apps — a staged diagnostic workspace, verifier-owned challenges, a bounded evidence-based score, a complete findings register and remediation backlog, approval-based guided fixes, and a 19-capability hardening engine that surfaces gaps, explains the risks, and teaches you what remains unproven.
 
 ### Do I need to install a toolchain or use the command line?
-No build step, no dependencies, no CLI, and no cloud account. You load CheckYourself as your AI assistant's operating context and it works through the stages with you. (It does ship a small optional Python validator for maintainers, but you never need it to run an audit.)
+No build step, no dependencies, and no required command line. You load CheckYourself as your AI assistant's operating context and it works through the stages with you. It also ships a small optional Python CLI and validator for maintainers and agent workflows, but you never need them to run an audit.
 
 ### Which AI tools does it work with?
 Any model-agnostic assistant that reads text or files, including Cursor, Windsurf, GitHub Copilot, Codex, ChatGPT, Claude, Gemini, Replit, Lovable, Bolt, and local agents.
@@ -262,10 +282,16 @@ Yes. CheckYourself starts **read-only** by default. It will not change code or c
 A linter flags style and a few obvious problems. CheckYourself builds a *complete* findings register and remediation backlog across the entire production surface — auth, data, secrets, CI/CD, deployment, observability, privacy, and more — then guides fixes and produces a learning plan.
 
 ### What does the Production Reality Score mean?
-It is a 0–100 production-readiness score with severity caps and explicit reasoning, explained in [`docs/checkyourself-score-explained.md`](docs/checkyourself-score-explained.md). A low score with clear findings is more useful than a falsely high one.
+It is a bounded 0–100 evidence score with severity caps and explicit reasoning, explained in [`docs/checkyourself-score-explained.md`](docs/checkyourself-score-explained.md). A low score with clear unknowns is more useful than a falsely high one; the score is not a production-safety guarantee.
+
+### How does the challenge runner establish evidence?
+The `challenge` verb executes committed argv-only definitions from `.checkyourself/challenges.json` with timeouts and fail-closed results. Only verifier-executed `EXECUTED` receipts can receive full credit. The scorer re-executes stored receipts and compares exit state, assertions, and a normalized semantic output digest; caller-issued receipts are `UNVERIFIED` and capped.
+
+### Does the local integrity HMAC prove independent issuance?
+No. It detects tampering with project-local challenge receipts. It does not prove independent issuance, operator identity, or external custody; externally controlled custody is future work.
 
 ### Is CheckYourself free and open source?
-Yes — it is released under the [MIT License](LICENSE) and is free to use, copy, and adapt.
+Yes — it is released under the [Apache License, Version 2.0](LICENSE) and is free to use, copy, and adapt under those terms.
 
 ### Who is it for?
 Vibe coders, indie hackers, beginners learning by doing, intermediate builders, experienced developers wanting a reusable audit, and founders, freelancers, agencies, and teams preparing real launches.
@@ -280,34 +306,34 @@ Issues and pull requests are welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md) a
 
 ## License
 
-MIT License — free and open source. See [`LICENSE`](LICENSE).
+Apache License, Version 2.0 — free and open source. See [`LICENSE`](LICENSE).
 
 <!-- s-plus-geo:start -->
 
 ## What is CheckYourself?
 
-**CheckYourself** is a **AI production-readiness diagnostic for apps built with AI** that helps **founders and engineers shipping AI-generated apps** **score production readiness with evidence-backed findings and a fix path**.
+**CheckYourself** is a **local-first completion-evidence review system for apps built with AI** that helps **founders and engineers shipping AI-generated apps** **test claimed work with verifier-owned challenges, record evidence, and surface unresolved risk**.
 
 | | |
 | --- | --- |
 | **Product** | CheckYourself |
-| **Category** | AI production-readiness diagnostic for apps built with AI |
+| **Category** | Local-first completion-evidence review for apps built with AI |
 | **Best for** | founders and engineers shipping AI-generated apps |
 | **Not** | a generic linter or code formatter |
 | **Source** | [GitHub](https://github.com/KyaniteLabs/checkyourself) · [Forgejo](https://git.kyanitelabs.tech/KyaniteLabs/checkyourself) |
-| **Keywords** | AI app production readiness, pre-launch audit, vibe-code diagnostic |
+| **Keywords** | AI app completion evidence, verifier-owned challenge, pre-launch review |
 
 ## Who it's for
 
 - Primary: founders and engineers shipping AI-generated apps
-- Use when you need to score production readiness with evidence-backed findings and a fix path
+- Use when you need to test claimed work with evidence-backed findings and a fix path
 - Skip if you need a generic linter or code formatter
 
 ## FAQ
 
 ### What is CheckYourself?
 
-CheckYourself is a AI production-readiness diagnostic for apps built with AI. It helps founders and engineers shipping AI-generated apps score production readiness with evidence-backed findings and a fix path.
+CheckYourself is a reviewable completion-evidence workflow for AI-built apps. It helps founders and engineers record observed behavior, unresolved assumptions, evidence-backed findings, and a bounded score with a fix path.
 
 ### Who should use CheckYourself?
 
@@ -315,7 +341,7 @@ founders and engineers shipping AI-generated apps.
 
 ### How is CheckYourself different?
 
-Unlike style linters, CheckYourself judges ship-readiness with evidence, not only style.
+Unlike style linters, CheckYourself records reviewable evidence and unresolved risk, not only style. It does not replace production tests, expert review, or independent external custody of the original completion claim.
 
 ### Is CheckYourself production software?
 

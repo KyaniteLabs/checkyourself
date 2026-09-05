@@ -5,8 +5,11 @@ deterministic engine an agent can drive.
 
 It uses only the Python standard library, sends nothing over the network, and
 never prints secret values. The AI still supplies judgment. The CLI supplies
-repeatable receipts: discovery, schemas, coverage checks, scoring, backlog
-ranking, validation, and the thin MCP wrapper.
+repeatable receipts: discovery, schemas, verifier-owned challenges, coverage
+checks, scoring, backlog ranking, validation, and the thin MCP wrapper.
+
+For native host setup, discovery, and write boundaries, see the canonical
+[`native CLI/MCP adapter`](../06_ADAPTERS/native-cli-mcp.md).
 
 ## Fast Start
 
@@ -37,9 +40,11 @@ python3 tools/checkyourself.py describe --format json
 | `scan --deep` | Adds slower validation checks for detected surfaces, including mutable GitHub Actions and dependency-update coverage. |
 | `coverage --emit` | Writes the 20-surface coverage skeleton for an agent to fill. Use `--format json` for stdout. |
 | `coverage --check FILE` | Checks a filled coverage artifact for completeness. |
-| `score --findings FILE [--coverage FILE]` | Computes the deterministic Production Reality Score or a low-confidence scan-derived estimate. |
-| `backlog --findings FILE` | Ranks the complete remediation backlog. |
-| `next --findings FILE` | Returns the next safest unresolved approval batch. |
+| `challenge [--surface S]` | Executes a committed per-surface command, captures all output, and mints an `EXECUTED` receipt. |
+| `receipt` | Issues one verifier-hashed receipt whose subject digest is bound to one coverage surface, source revision, command, claim, and observed result. |
+| `score --findings FILE [--coverage FILE] [--claim TEXT]` | Computes the bounded evidence score or a low-confidence estimate; optionally records an accepted completion claim. |
+| `backlog --findings FILE` | Ranks the complete remediation backlog and emits a `highest_severity_batch`; it does not analyze safety. |
+| `next --findings FILE` | Returns the next unresolved `highest_severity_batch`; it does not analyze safety. |
 | `diff --old FILE --new FILE` | Compares two findings artifacts and reports added, resolved, and regressed findings. |
 | `validate --kind KIND FILE` | Validates JSON against bundled schema contracts. |
 | `schema NAME` | Prints a bundled JSON schema. |
@@ -64,8 +69,14 @@ python3 tools/checkyourself.py backlog --findings CHECKYOURSELF_SCAN.generated.j
 python3 tools/checkyourself.py next --findings CHECKYOURSELF_SCAN.generated.json --format json
 ```
 
-That makes the score and first batch reproducible. Same evidence, same score.
-No vibes with a clipboard.
+The emitted skeleton intentionally has empty statuses, so it is not scoreable
+yet: fill coverage.json with evidence, then re-run score. Run `coverage --check`
+first to get a clear completeness result. If a JSON-mode score command fails,
+its stdout is still a valid JSON error object for redirected automation.
+
+That makes the score and highest-severity batch reproducible. Same evidence,
+same result. No vibes with a clipboard. Review dependencies, reversibility,
+coupling, and blast radius before approving a batch.
 
 See the field notes behind this remediation in
 [`docs/postmortems/checkyourself-field-postmortem-2026-05-29.md`](postmortems/checkyourself-field-postmortem-2026-05-29.md).
@@ -86,6 +97,14 @@ risk-surface path hints, and obvious deterministic risks. Each finding has a
 **stable, semantic rule ID** (for example `CY-SECRET-001`, `CY-CONFIG-001`)
 that stays the same across runs and releases, so you can suppress, diff, and
 cite findings reliably:
+
+### Canonical detector-rule registry
+
+The table below is the canonical detector-rule registry. `rules.md` defines the
+human review and safety workflow; it is not a second detector-ID registry.
+Manual reviewers reuse these IDs when the observed condition matches a shipped
+detector and use the manual fallback contract in `skills/checkyourself/SKILL.md`
+for conditions that the CLI does not detect.
 
 | Rule ID | Severity | What it catches |
 | --- | --- | --- |
@@ -144,6 +163,10 @@ suppress:
 
 Suppressed findings remain in JSON with `status: "suppressed"` and a
 `suppression` note, but they do not count toward severity totals or score caps.
+Context-only matches from documentation, tests, audits, detector definitions,
+and explicitly guarded eval code are omitted from findings and listed in
+`context_suppressions` with a reason. High-confidence credential shapes and
+unguarded application sinks remain findings.
 
 `scan --deep` is still intentionally conservative. It validates a few detected
 surfaces instead of pretending to be a full SAST platform: mutable GitHub Action
@@ -166,10 +189,65 @@ and reports which findings were **added**, **resolved**, and **unchanged**,
 plus evidence-level changes on findings that persisted. Because rule IDs are
 stable, the delta reflects real changes rather than ID-shuffle noise.
 
-The result includes a `regression` flag that is `true` when the open P0 or P1
-count increased against the baseline. With `--ci`, `diff` exits non-zero on a
-regression, so CI can gate on *new* risk instead of only absolute P0 count —
-the right control for a project that already has a known backlog.
+The result includes a `regression` flag. With `--ci`, `diff` exits non-zero for
+a newly opened or reopened P0/P1 finding, a severity escalation into open
+P0/P1, or an increase in the aggregate open P0/P1 count. Status-only
+open-to-resolved transitions appear in `resolved`; other status and severity
+transitions remain explicit in `regressions` or `count_regression`.
+
+## Verifier-run challenges
+
+`challenge` executes commands from the committed `.checkyourself/challenges.json`
+configuration with `shell=False`, a bounded timeout, and the configured output
+assertions. It captures stdout and stderr under `.checkyourself/challenge-runs/`,
+then writes one `EXECUTED` receipt per surface. The receipt records the argv
+list, exit code, raw capture digest, semantic output digest, source tree hash
+computed before capture write, run identifier, local integrity binding HMAC,
+and timestamp. The raw capture digest is tamper evidence for the stored capture;
+the semantic digest is SHA-256 over canonical JSON containing the exit code,
+normalized stdout/stderr, and argv. Normalization removes carriage returns,
+replaces `in <number>s|ms` and `H:MM:SS` durations with duration placeholders,
+replaces ISO-8601 timestamps and absolute project/temp paths with placeholders,
+and strips trailing whitespace per line. All other output content remains
+significant. The local
+integrity binding key is created with mode `0600` at
+`.checkyourself/local-integrity-binding.key` and is never stored beside
+captures. It makes edits to project-local receipts detectable; it does not
+prove independent issuance or operator identity because it lives inside the
+project being inspected. Full external custody is future work. A failed or
+timed-out command is a `FAIL` receipt and an open P1 finding; it is never
+silently ignored.
+
+```bash
+python3 tools/checkyourself.py challenge --surface S11 --format json
+python3 tools/checkyourself.py challenge --format json
+```
+
+The shipped configuration provides a working self-test challenge for S11. The
+other surfaces are explicitly marked as requiring a project-specific command;
+running one without that command fails closed. A command is always an argv
+list, never a shell string. Every canonical surface has a verifier-owned
+minimum semantic contract: a positive output assertion, at least three
+semantic output tokens, and no vacuous `true`, `false`, `echo`, `printf`, or
+print-only command. `regex_match` assertions are tested against empty and
+echo-only fixtures; patterns that match those fixtures are rejected. S11 must
+reference a recognized test runner and assert a numeric pass/fail/skip count.
+S12 through S14 must assert a non-empty artifact, preferably under an ignored
+build output directory such as `build/` or `dist/`. S19 must assert JSON
+`status` and `findings` fields. These contracts are enforced when definitions load and again
+when receipts are re-checked, so vacuous commands or thin output can never
+earn full credit. The compatibility `receipt` command remains available, but
+its caller-authored fields are labelled `UNVERIFIED` and cannot earn full
+credit or high confidence. On re-check, the verifier requires the
+`local_integrity_hmac` field and re-executes the committed argv with the same
+timeout discipline. Fresh output must satisfy the committed assertions, match
+the receipt's exit and timeout/error state, and produce the same semantic
+digest; raw-byte equality is intentionally not required. The verifier also
+re-hashes the stored capture, re-applies the committed assertions to it, and
+rejects a receipt whose project tree or challenge definition changed. Receipts
+from before semantic digests existed are re-derived from their stored capture
+using the legacy receipt binding. Missing or invalid local-integrity-binding
+material earns no executed credit.
 
 ## Coverage
 
@@ -178,6 +256,61 @@ python3 tools/checkyourself.py coverage --emit
 python3 tools/checkyourself.py coverage --emit --format json > CHECKYOURSELF_COVERAGE.generated.json
 python3 tools/checkyourself.py coverage --check CHECKYOURSELF_COVERAGE.generated.json
 ```
+
+Issue a receipt with the verifier command before adding it to one coverage row:
+
+```bash
+python3 tools/checkyourself.py receipt \
+  --root . --reference coverage/verification/S11/pytest.json --surface-id S11 \
+  --source-revision "<revision>" --source-state "<environment state>" \
+  --command "pytest tests/test_app.py -q" \
+  --claim "The focused quality gate passes" --result "1 passed" \
+  --out coverage/verification/S11/S11-receipt.json --format json
+```
+
+Before issuing the receipt, `coverage/verification/S11/pytest.json` must be a
+JSON object with this common record shape:
+
+```json
+{
+  "kind": "surface-verification-record",
+  "surface_id": "S11",
+  "source_revision": "<revision>",
+  "command": "pytest tests/test_app.py -q",
+  "result": "1 passed"
+}
+```
+
+The default per-surface verification-artifact registry requires JSON records
+under `coverage/verification/<surface-id>/`, with the record's `surface_id`
+matching the receipt. Issuance rejects an unregistered path, a path registered
+to another surface, or a record with the wrong kind or missing required fields.
+Receipt verification repeats the same registry check, so hand-built or
+tampered receipts become `Unknown` rather than earning score credit. The
+registry covers all 20 coverage-matrix surfaces, including the 10 scored
+categories, and the same contract applies to `delegation_receipts` for
+`NotApplicable` rows.
+
+Projects with a different verifier output location may override individual
+contracts explicitly in `.checkyourself.json`:
+
+```json
+{
+  "verification_artifact_registry": {
+    "S11": {
+      "path_roots": ["artifacts/checkyourself/S11"],
+      "path_patterns": ["pytest-*.json"],
+      "expected_kind": "surface-verification-record"
+    }
+  }
+}
+```
+
+Overrides are validated and merged with the shipped defaults. A malformed
+registry is fail-closed for receipt issuance and verification. A caller-authored
+`origin`, `source_state`, and `result` is not proof. The same receipt or subject
+artifact cannot be reused for another surface or claim, even if the receipt
+binding is recomputed.
 
 In text mode, `coverage --emit` writes
 `CHECKYOURSELF_COVERAGE.generated.json` in the current directory. Use
@@ -190,14 +323,23 @@ Coverage has 20 surfaces. Each surface must be marked:
 - `Unknown`;
 - `NotApplicable`.
 
-`Pass` needs evidence. `Unknown` needs missing evidence. `NotApplicable` needs a
-reason.
+`Pass` needs reviewer assertions plus `evidence_receipts` whose referenced
+artifacts exist, are non-empty, match their recorded SHA-256 and
+`subject_digest` hashes, and include
+verifier issuance, a canonical surface ID, source revision, command, claim,
+observed result, and a binding hash covering those fields. `Unknown` needs missing evidence.
+`NotApplicable` needs a reason plus `delegation_receipts` proving where the
+responsibility lives under the same receipt contract. A missing, unresolvable,
+mismatched, or reused receipt is treated as Unknown with a warning. A `Finding`
+row creates an independent coverage penalty and evidence block unless its
+`finding_ids` include an unresolved registered finding.
 
 ## Scoring
 
 ```bash
 python3 tools/checkyourself.py score --findings findings.json --coverage coverage.json --format json
 python3 tools/checkyourself.py score --findings CHECKYOURSELF_SCAN.generated.json --format json
+python3 tools/checkyourself.py score --findings findings.json --coverage coverage.json --claim "Export endpoint returns only the requesting user's records" --format json
 ```
 
 The score uses the weights and caps from
@@ -219,11 +361,18 @@ The result includes `per_category` penalties, caps applied, confidence, and the
 finding IDs scored.
 
 With `--coverage`, the result is `score_mode: "coverage-backed"`. A coverage
-entry marked `Pass` without `evidence_reviewed`, or `NotApplicable` without a
-reason, is downgraded to `Unknown`, and any surface omitted from the artifact
-counts as `Unknown` — so omitting or hand-waving a surface can never score
-better than honestly reporting it, and `confidence: "high"` requires all 20
-required surfaces present with real evidence.
+entry marked `Pass` without `evidence_reviewed` and a verifier-captured receipt,
+or `NotApplicable` without a reason and delegation receipt, is downgraded to
+`Unknown`. Any surface omitted from the artifact counts as `Unknown` — so
+omitting or hand-waving a surface can never score better than honestly
+reporting it, and `confidence: "high"` requires all 20 required surfaces with
+real receipts. `accepted-risk`, `deferred`, and `suppressed` remain residual
+risk until the finding is fixed or proven not applicable.
+
+`--claim` records the accepted completion claim and adds per-category
+claim-binding rows. Evidence is unbound unless the coverage row explicitly
+lists it in `claim_bound_evidence`; use the verifier-owned `challenge` command
+for execution evidence.
 
 Without `--coverage`, the CLI produces a `scan-derived-estimate` when the
 findings file is scan JSON, or a `finding-only-estimate` otherwise. Both keep
@@ -259,8 +408,12 @@ Supported schema kinds:
 - `dashboard-data`;
 - `learning-plan`.
 
-Validation uses a small standard-library JSON Schema subset: `required`, `type`,
-`enum`, `minimum`, `maximum`, `properties`, and `items`.
+Validation is standard-library-only and executes the supported contract
+keywords: `type`, `enum`, `const`, `oneOf`, `anyOf`, `allOf`, `not`, `required`,
+`properties`, `additionalProperties`, `items`, `minimum`, `maximum`,
+`exclusiveMinimum`, `exclusiveMaximum`, `minItems`, `maxItems`, `uniqueItems`,
+`minLength`, `maxLength`, and `pattern`. Unsupported schema keywords fail
+closed instead of being silently ignored.
 
 ## Exit Codes
 

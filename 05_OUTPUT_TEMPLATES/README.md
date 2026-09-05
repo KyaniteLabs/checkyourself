@@ -22,7 +22,11 @@ with evidence instead of vague reassurance.
 - `dashboard-output.md` — expected dashboard output description.
 - `dashboard-data.example.json` — sample data shape for the dashboard template.
 
-Do not generate the dashboard unless the user asks for it with `dashboard yes`.
+Do not generate the dashboard unless the user explicitly asks with one of these
+triggers:
+
+- `dashboard yes` — create the canonical HTML/CSS dashboard;
+- `dashboard inline` — return the compact Markdown dashboard fallback.
 
 Use the single canonical dashboard path in `10_DASHBOARD/dashboard-template.html`.
 If the user does not want HTML/CSS, use the inline Markdown fallback in

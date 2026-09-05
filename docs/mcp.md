@@ -10,6 +10,9 @@ It is intentionally thin. The MCP server does not implement separate audit
 logic. It calls the same functions as the CLI, returns the same schema-backed
 JSON, and keeps the product local-first.
 
+Use the canonical [`native CLI/MCP adapter`](../06_ADAPTERS/native-cli-mcp.md)
+for host discovery, scan-root setup, and write-boundary guidance.
+
 ## Why Local Stdio
 
 CheckYourself inspects local project folders. That makes local stdio the right
@@ -36,10 +39,11 @@ and [`Tools`](https://modelcontextprotocol.io/specification/2025-11-25/server/to
 | `scan` | `checkyourself scan PROJECT [--deep] --format json --no-write` |
 | `coverage_emit` | `checkyourself coverage --emit --format json` |
 | `coverage_check` | `checkyourself coverage --check FILE` logic, with an inline object |
+| `receipt_issue` | Issue one verifier-hashed receipt only for a registered surface-specific verification artifact under `CHECKYOURSELF_SCAN_ROOT`; returns it inline |
 | `score` | `checkyourself score --findings FILE [--coverage FILE]` logic, with inline objects and no history write |
-| `backlog` | `checkyourself backlog --findings FILE` logic |
-| `next` | `checkyourself next --findings FILE` logic |
-| `diff` | compare two findings objects (`old`, `new`); returns added/resolved/regressed findings and a `regression` boolean flag |
+| `backlog` | `checkyourself backlog --findings FILE` logic; emits a deterministic `highest_severity_batch`, not a safety judgment |
+| `next` | `checkyourself next --findings FILE` logic; emits the next deterministic `highest_severity_batch`, not a safety judgment |
+| `diff` | compare two findings objects (`old`, `new`); returns added/resolved/unchanged findings, evidence changes, identity-aware regressions, and count regressions |
 | `validate` | `checkyourself validate --kind KIND FILE` logic, with an inline object |
 | `schema` | `checkyourself schema NAME` |
 
@@ -71,7 +75,7 @@ Use this shape in MCP clients that accept a local stdio server command:
 6. Call `score`. Without coverage, treat the result as a low-confidence estimate and read `manual_evidence_needed`.
 7. Call `backlog`.
 8. Call `next`.
-9. Ask before making any fix.
+9. Review safety, dependencies, coupling, and blast radius; then ask before making any fix.
 
 ## Security Boundaries
 

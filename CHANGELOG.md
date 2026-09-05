@@ -1,5 +1,68 @@
 # Changelog
 
+## Unreleased
+
+The 2026-09-04/05 retrofit brought the local evidence contract through the
+gauntlet, an ASTRA adversarial review, verifier-owned challenges, hardening, and
+two independent final reviews. The documented boundary remains local evidence,
+not production-safety certification or independent external custody.
+
+### 2026-09-04 — Gauntlet waves 1–10
+
+- Waves 1–7 hardened score trust, schema enforcement, scanner completeness and
+  safe writes, backlog/diff semantics, malformed-input handling, proven versus
+  merely detected evidence, and public validation. See [`WAVE1-REPORT.md`](_retrofit-2026-09-04/WAVE1-REPORT.md)
+  through [`WAVE7-REPORT.md`](_retrofit-2026-09-04/WAVE7-REPORT.md).
+- Waves 8–10 aligned public truth, current dogfood proof, and Apache-2.0
+  license surfaces. See [`WAVE8-REPORT.md`](_retrofit-2026-09-04/WAVE8-REPORT.md),
+  [`WAVE9-REPORT.md`](_retrofit-2026-09-04/WAVE9-REPORT.md), and [`WAVE10-REPORT.md`](_retrofit-2026-09-04/WAVE10-REPORT.md).
+
+### 2026-09-04 — ASTRA adversarial review
+
+- ASTRA found eight findings, including fabricated evidence credit, blanket
+  non-applicability, residual-risk laundering, unknown/finding folding,
+  unsupported report verdicts, broad discovery claims, and missing claim
+  binding. The findings and executable repros are recorded in
+  [`ASTRA-REVIEW.md`](_retrofit-2026-09-04/ASTRA-REVIEW.md).
+
+### 2026-09-04 — ASTRA fixes and claim binding
+
+- Closed the eight ASTRA findings with verifier-captured evidence, delegation
+  receipts, residual-risk separation, independent unknown tracking, semantic
+  report validation, and `--claim` evidence binding. Schema validity is now
+  distinct from recomputed verdict consistency. See [`ASTRA-FIX-REPORT.md`](_retrofit-2026-09-04/ASTRA-FIX-REPORT.md).
+
+### 2026-09-04 — Verifier-owned challenge runner
+
+- Added the `challenge` verb and committed `.checkyourself/challenges.json`.
+  Definitions use argv-only commands and bounded timeouts; failed and timed-out
+  runs fail closed. Only successful verifier-executed `EXECUTED` receipts can
+  receive full credit; caller-issued receipts are explicitly `UNVERIFIED` and
+  capped. See [`CHALLENGE-RUNNER-REPORT.md`](_retrofit-2026-09-04/CHALLENGE-RUNNER-REPORT.md).
+
+### 2026-09-05 — Runner hardening and semantic vacuity
+
+- Score-time verification now re-executes stored receipts, binds each run with
+  a project-local HMAC, and checks source, capture, exit, timeout, execution,
+  and semantic output state. The HMAC is tamper evidence, not proof of
+  independent issuance; external custody remains future work. See
+  [`RUNNER-HARDEN-REPORT.md`](_retrofit-2026-09-04/RUNNER-HARDEN-REPORT.md).
+- Verifier-owned per-surface minimum contracts reject or cap no-op, echo,
+  print-only, hollow-runner, and trivial-regex challenges. See [`VACUITY-REPORT.md`](_retrofit-2026-09-04/VACUITY-REPORT.md).
+
+### 2026-09-05 — Semantic re-execution normalization
+
+- Fresh challenge runs now compare a semantic output digest that normalizes
+  volatile durations, timestamps, and absolute paths while retaining raw capture
+  hashing for tamper evidence. The final repository proof records 150 tests and
+  88 subtests passed. See [`REEXEC-NORM-REPORT.md`](_retrofit-2026-09-04/REEXEC-NORM-REPORT.md).
+
+### 2026-09-05 — Final independent green pair at `cd9cf85`
+
+- Grok and Sol independently reviewed pinned `cd9cf85`; both reported fully
+  green after ASTRA, challenge-runner, hardening, and normalization work. The
+  receipts are [`FINAL-grok.md`](_retrofit-2026-09-04/FINAL-grok.md) and [`FINAL-sol.md`](_retrofit-2026-09-04/FINAL-sol.md).
+
 ## 1.7.0 — 2026-06-12
 
 Major reliability, security, and detection-depth pass.

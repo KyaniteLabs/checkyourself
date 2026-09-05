@@ -33,17 +33,23 @@ language at runtime. Include a second language only when the user explicitly
 requests it or confirms the inferred candidate.
 
 Voice guidance: useful side-eye is welcome; mean-spirited roasting is not. The
-dashboard can say "not ready yet" clearly, but it must also show the next safest
-move.
+dashboard can say "not ready yet" clearly, but it must also show the current
+approval decision and its next reviewable move. A CLI-generated
+`highest_severity_batch` is an ordering result, not a safety judgment.
 
 ## Important
 
 The dashboard is **not** the source of truth. The Markdown Production Reality Report is the source of truth because it is easier to diff, update, and keep token-efficient.
 
-Only generate the dashboard when the user asks for it or includes:
+Only generate the dashboard when the user asks for it or includes one of these
+explicit triggers:
 
 ```text
 dashboard yes
+dashboard inline
 ```
+
+Use `dashboard yes` for the self-contained HTML/CSS dashboard. Use
+`dashboard inline` for the compact Markdown fallback.
 
 Do not generate it by default.

@@ -1,0 +1,6 @@
+# ROLE: LUNA FIX TEAM — DOGFOOD-CAUGHT DEFECTS (checkyourself)
+The REAL dogfood (SOL on liminal, REPORT @~/workspaces/liminal/_cy-dogfood-2026-09-04/REPORT-sol.md §14) caught three product defects. Fix all three:
+1. PIPELINE-READABILITY: score rejects the just-emitted coverage skeleton in a way that reads like a failure — make the error message (or the emitted skeleton header) state plainly: "fill coverage.json with evidence, then re-run score" (docs + error text, not behavior change).
+2. ZERO-BYTE FILE ON FAILED REDIRECT: a failed `score --format json > file` leaves a 0-byte file that breaks downstream JSON parsers — write only on success, or write a valid JSON error object, pick the library-consistent cure.
+3. FALSE-POSITIVE EVAL/SECRET NOISE: scanner flags detector source strings, doc/audit snapshots, and intentional guarded eval alongside real sinks (50+ low-confidence findings on liminal) — add context suppression (guarded eval, docs/tests/detector paths) with suppression REASONS in output; never suppress unsuppressed-real sinks.
+Acceptance: describe/scan/coverage/score/backlog/next/diff all run clean on the checkyourself repo itself + a quick liminal spot-check via the scan path; record outputs. Write _retrofit-2026-09-04/DOGFOOD-REPORT.md. GIT: none. No installs/network.

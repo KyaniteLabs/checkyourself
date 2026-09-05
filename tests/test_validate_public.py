@@ -37,6 +37,25 @@ class ValidatePublicTests(unittest.TestCase):
         self.assertIn("missing required public file: tools/checkyourself.py", result.stdout)
         self.assertNotIn("Traceback", result.stderr)
 
+    def test_required_paths_must_be_regular_in_root_files(self) -> None:
+        with tempfile.TemporaryDirectory() as outside, tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "README.md").mkdir()
+            (Path(outside) / "private.md").write_text("private\n", encoding="utf-8")
+            (project / "CONTEXT.md").symlink_to(Path(outside) / "private.md")
+            result = self.run_validator(project)
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "required public path must be a regular in-root file: README.md",
+            result.stdout,
+        )
+        self.assertIn(
+            "required public path must be a regular in-root file: CONTEXT.md",
+            result.stdout,
+        )
+        self.assertNotIn("Traceback", result.stderr)
+
     def test_invalid_json_is_reported_with_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / "broken.json").write_text("{not json", encoding="utf-8")
@@ -120,6 +139,37 @@ class ValidatePublicTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("broken local markdown link: esc.md:1", result.stdout)
 
+    def test_markdown_link_titles_and_escaped_destinations_are_validated(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "target.md").write_text("# target\n", encoding="utf-8")
+            (project / "a(b).md").write_text("# escaped\n", encoding="utf-8")
+            (project / "doc.md").write_text(
+                "\n".join([
+                    '[quoted](target.md "a title")',
+                    "[angle](<target.md> 'another title')",
+                    r"[escaped](a\(b\).md \"title\")",
+                    "",
+                ]),
+                encoding="utf-8",
+            )
+            result = self.run_validator(project)
+
+        self.assertNotIn("broken local markdown link", result.stdout)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_markdown_file_line_citations_resolve_to_the_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            target = project / "src" / "app.py"
+            target.parent.mkdir()
+            target.write_text("print('ok')\n", encoding="utf-8")
+            (project / "doc.md").write_text(f"[source]({target}:1)\n", encoding="utf-8")
+            result = self.run_validator(project)
+
+        self.assertNotIn("broken local markdown link", result.stdout)
+        self.assertNotIn("Traceback", result.stderr)
+
     def test_stale_public_phrase_is_reported(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / "notes.md").write_text("status Dashboard=Yes for launch\n", encoding="utf-8")
@@ -170,6 +220,22 @@ class ValidatePublicTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 1)
         self.assertIn("duplicate asset files: assets/one.png, assets/two.png", result.stdout)
+
+    def test_asset_symlink_is_rejected_without_reading_target(self) -> None:
+        with tempfile.TemporaryDirectory() as outside, tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            assets = project / "assets"
+            assets.mkdir()
+            (assets / "one.png").write_bytes(b"same-bytes")
+            external = Path(outside) / "two.png"
+            external.write_bytes(b"same-bytes")
+            (assets / "two.png").symlink_to(external)
+            result = self.run_validator(project)
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("public asset must be a regular in-root file: assets/two.png", result.stdout)
+        self.assertNotIn("duplicate asset files", result.stdout)
+        self.assertNotIn("Traceback", result.stderr)
 
     def test_manifest_contract_is_enforced(self) -> None:
         manifest = {
@@ -257,6 +323,17 @@ class ValidatePublicTests(unittest.TestCase):
         self.assertIn("scanner-generated project context output is not ignored", result_without.stdout)
         self.assertNotIn("not listed in .gitignore", result_with.stdout)
         self.assertNotIn("scanner-generated project context output is not ignored", result_with.stdout)
+
+    def test_security_policy_names_current_release_line_and_main(self) -> None:
+        manifest = json.loads((ROOT / "checkyourself.manifest.json").read_text(encoding="utf-8"))
+        version = manifest["version"]
+        release_line = ".".join(version.split(".")[:2]) + ".x"
+        security = (ROOT / "SECURITY.md").read_text(encoding="utf-8").lower()
+
+        self.assertIn(f"latest tagged release is `{version}`", security)
+        self.assertIn(release_line.lower(), security)
+        self.assertIn("public `main` branch", security)
+        self.assertIn("unsupported", security)
 
 
 if __name__ == "__main__":

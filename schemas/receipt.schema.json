@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CheckYourself Verifier Receipt",
+  "type": "object",
+  "required": [
+    "reference",
+    "sha256",
+    "subject_digest",
+    "surface_id",
+    "source_revision",
+    "command",
+    "claim",
+    "origin",
+    "source_state",
+    "result",
+    "issuer",
+    "issued_at",
+    "receipt_sha256"
+  ],
+  "properties": {
+    "reference": { "type": "string", "minLength": 1 },
+    "sha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
+    "subject_digest": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
+    "surface_id": { "type": "string", "pattern": "^S(0[1-9]|1[0-9]|20)$" },
+    "source_revision": { "type": "string", "minLength": 1 },
+    "command": { "type": "string", "minLength": 1 },
+    "claim": { "type": "string", "minLength": 1 },
+    "origin": { "type": "string", "minLength": 1 },
+    "source_state": { "type": "string", "minLength": 1 },
+    "result": { "type": "string", "minLength": 1 },
+    "issuer": { "type": "string", "const": "checkyourself-verifier/1" },
+    "issued_at": { "type": "string", "minLength": 1 },
+    "receipt_sha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" }
+  }
+}

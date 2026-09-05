@@ -1,24 +1,64 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "CheckYourself Production Reality Report",
+  "description": "The complete machine-readable contract for a Production Reality Report. Every documented report section is represented so a partial report cannot validate as complete.",
   "type": "object",
   "required": [
     "project",
+    "executive_summary",
+    "app_purpose",
+    "detected_stack",
+    "unknowns_and_assumptions",
     "score",
     "confidence",
+    "score_breakdown",
+    "score_caps",
+    "coverage",
     "findings",
+    "evidence_table",
     "remediation_backlog",
     "first_approval_batch",
-    "learning_plan_seeds"
+    "full_remediation_path",
+    "deferred_items",
+    "questions",
+    "approval_prompts",
+    "learning_plan_seeds",
+    "dashboard_handoff"
   ],
   "properties": {
     "project": {
       "type": "string"
     },
+    "executive_summary": {
+      "type": "string",
+      "description": "Section 1: the concise outcome and launch decision."
+    },
+    "app_purpose": {
+      "type": "string",
+      "description": "Section 2: what the app appears to do, including users and harm context."
+    },
+    "detected_stack": {
+      "type": "array",
+      "description": "Section 3: detected technologies and the evidence and confidence behind them.",
+      "items": {
+        "type": ["object", "string"]
+      }
+    },
+    "unknowns_and_assumptions": {
+      "type": "array",
+      "description": "Section 4: unresolved assumptions, why they matter, and how to resolve them.",
+      "items": {
+        "type": "object"
+      }
+    },
     "score": {
       "type": "integer",
       "minimum": 0,
       "maximum": 100
+    },
+    "claim": {
+      "type": "string",
+      "description": "Accepted completion claim recorded for this report; it is not an independently challenged result."
     },
     "confidence": {
       "type": "string",
@@ -27,6 +67,17 @@
         "medium",
         "low"
       ]
+    },
+    "score_breakdown": {
+      "type": ["array", "object"],
+      "description": "Section 5: awarded points, evidence, and score-improvement path for every category."
+    },
+    "score_caps": {
+      "type": "array",
+      "description": "Section 5: the applied or explicitly cleared score caps.",
+      "items": {
+        "type": ["string", "object"]
+      }
     },
     "coverage": {
       "type": "array",
@@ -121,6 +172,13 @@
         }
       }
     },
+    "evidence_table": {
+      "type": "array",
+      "description": "Section 11: evidence locations, supported findings, and confidence.",
+      "items": {
+        "type": "object"
+      }
+    },
     "remediation_backlog": {
       "type": "array",
       "items": {
@@ -183,11 +241,44 @@
         "type": "string"
       }
     },
-    "learning_plan_seeds": {
+    "full_remediation_path": {
       "type": "array",
+      "description": "Section 14: the wave-by-wave path until each issue is fixed, deferred, accepted, or proven not applicable.",
+      "items": {
+        "type": "object"
+      }
+    },
+    "deferred_items": {
+      "type": "array",
+      "description": "Section 15: deferred work, its reason, and the trigger that makes it urgent.",
+      "items": {
+        "type": "object"
+      }
+    },
+    "questions": {
+      "type": "array",
+      "description": "Section 16: questions whose answers could change the diagnosis.",
       "items": {
         "type": "string"
       }
+    },
+    "approval_prompts": {
+      "type": "array",
+      "description": "Approval questions for the proposed remediation cards.",
+      "items": {
+        "type": ["string", "object"]
+      }
+    },
+    "learning_plan_seeds": {
+      "type": "array",
+      "description": "Section 17: learning priorities tied to the findings and remediation history.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "dashboard_handoff": {
+      "type": ["object", "string"],
+      "description": "Sections 18-19: whether the optional dashboard was generated and the handoff data or reason it was not."
     }
   }
 }
