@@ -1,0 +1,3 @@
+# ROLE: LUNA FIX TEAM — STREAK-3 REMEDIATION (checkyourself; SOL round-1 findings)
+SOL verdict FULLY-GREEN: no, 3 findings (log tail: real report parser/regenerator + byte-stable round-trip test; subprocess termination + permission-denial + interrupted recovery-write tests; BOM + trailing-whitespace + numeric-overflow fixtures). Read ~/.local/share/pushing-dispatch/logs/w-ee18-cy-streak3b-sol.log §findings for full detail. Implement all three as REAL tests + any code fixes they expose.
+Acceptance: python3 -m pytest tests/ -q fully green incl. new families; validate_public green. Write _retrofit-2026-09-04/STREAK3-REMED-REPORT.md. GIT: none. No installs/network.

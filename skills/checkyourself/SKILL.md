@@ -37,6 +37,43 @@ python3 tools/checkyourself.py diff --old baseline.json --new current.json --ci 
      scoring or backlog path. If Python is unavailable, sweep manually and say
      the score is hand-computed.
 
+### Manual fallback contract
+
+When the CLI is unavailable, manual output still uses a canonical rule-ID
+registry and evidence rubric:
+
+| Rule ID | Canonical manual condition |
+|---|---|
+| `CY-MANUAL-AUTH-001` | Auth, permission, session, or admin behavior lacks verified server-side evidence. |
+| `CY-MANUAL-DATA-001` | Data storage, recovery, retention, or tenant isolation lacks verified evidence. |
+| `CY-MANUAL-PRIVACY-001` | Privacy, consent, deletion, or third-party data handling lacks verified evidence. |
+| `CY-MANUAL-TEST-001` | A dangerous or launch-critical path lacks a focused test receipt. |
+| `CY-MANUAL-RELEASE-001` | Deployment, rollback, CI/CD, or supply-chain behavior lacks a verified receipt. |
+| `CY-MANUAL-OBS-001` | Observability, alerting, or incident response lacks a verified receipt. |
+| `CY-MANUAL-AI-001` | AI/RAG/agent permissions, evaluation, or refusal behavior lacks verified evidence. |
+| `CY-MANUAL-OTHER-001` | A material gap does not match another registered manual condition. |
+
+Reuse a detector ID from the [canonical detector-rule registry](../../docs/cli.md#canonical-detector-rule-registry)
+when the condition matches a shipped detector. Do not invent a new ID or
+renumber this registry for one report.
+
+Every manual finding must include: the registry ID; severity and category; an
+exact file, command output, or owner-provided artifact with date/scope; the
+plain-English risk; and a status. A `Pass` needs direct evidence, a `Finding`
+needs evidence of the gap and its harm, `Unknown` needs an explicit missing-
+evidence request, and `Not applicable` needs a concrete reason. If no artifact
+can be inspected, label the result as a low-confidence hand-computed estimate.
+
+### Deterministic score contract
+
+The executable score is `final_score = min(base_score, minimum_cap)`, where
+`base_score` is the rounded sum of clamped per-category awards after evidence
+and unresolved-finding penalties. The cap is the minimum of 100, 49 for an
+unresolved P0, 74 for an unresolved P1, 84 for a missing critical-evidence
+category, and 90 for a missing high-score launch-gate category. `NotApplicable`
+with a concrete reason retains its category weight. See the [CLI scoring
+contract](../../docs/cli.md#scoring) and [executable implementation](../../tools/checkyourself.py).
+
 3. Sweep the production surface.
    Cover product purpose, frontend UX, accessibility, backend/API behavior, auth, data storage, migrations, secrets, runtime config, tests, CI/CD, dependencies, deploy/rollback, observability, performance, privacy, compliance, and AI/RAG/agent governance when relevant.
 
@@ -59,7 +96,7 @@ python3 tools/checkyourself.py diff --old baseline.json --new current.json --ci 
    - learning-plan seeds based on the actual gaps.
 
 5. Recommend before acting.
-   For each backlog item include finding ID, severity, fix summary, why it matters, likely files/systems touched, verification, rollback idea, learning value, and status. Do not modify files until the user approves a specific fix or batch.
+   For each backlog item include finding ID, severity, fix summary, impact or blast radius, why it matters, likely files/systems touched, verification, rollback idea, learning value, and status. Do not modify files until the user approves a specific fix or batch.
 
 6. After approval, run the guided fix loop.
    Make the smallest reversible change, verify it, update finding status, rescore when evidence changes, and continue until findings are fixed, accepted as risk, deferred with a reason, suppressed with evidence, or proven not applicable.

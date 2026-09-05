@@ -1,5 +1,9 @@
 # Replit / Lovable / Bolt Adapter
 
+Start with [`native-cli-mcp.md`](native-cli-mcp.md) when an exported project or
+local shell is available. This file only adds limited-inspection guidance for
+hosted builders.
+
 For tools where direct repo inspection may be limited:
 
 1. Export/download the code if possible.

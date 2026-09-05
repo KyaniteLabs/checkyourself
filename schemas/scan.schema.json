@@ -73,10 +73,37 @@
           "evidence": { "type": "array", "items": { "type": "string" } },
           "recommended_fix": { "type": "string" },
           "status": { "type": "string" },
-          "suppression": { "type": "object" }
+          "suppression": { "type": "object" },
+          "suppressed_evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["evidence", "reason", "reviewed_by", "reviewed_at"],
+              "properties": {
+                "evidence": { "type": "string" },
+                "reason": { "type": "string" },
+                "reviewed_by": { "type": "string" },
+                "reviewed_at": { "type": "string" }
+              }
+            }
+          }
         }
       }
     },
+    "context_suppressions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "line", "detector", "reason"],
+        "properties": {
+          "path": { "type": "string" },
+          "line": { "type": "integer", "minimum": 1 },
+          "detector": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "context_suppression_count": { "type": "integer", "minimum": 0 },
     "counts": {
       "type": "object",
       "required": ["P0", "P1", "P2", "P3"],

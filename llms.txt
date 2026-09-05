@@ -11,8 +11,8 @@
 
 ## Core Reference
 
-- [rules.md](rules.md) — all detection rules with stable IDs (e.g. CY-SECRET-001) and severity levels
-- [docs/cli.md](docs/cli.md) — CLI command reference (scan, diagnostic, diff, score, coverage, backlog, next)
+- [rules.md](rules.md) — review, safety, evidence, and workflow rules for the diagnostic
+- [docs/cli.md](docs/cli.md) — canonical detector-rule registry and CLI command reference (scan, diagnostic, diff, score, coverage, backlog, next)
 - [docs/mcp.md](docs/mcp.md) — MCP server setup, tool list, scan-root confinement, expected agent flow
 - [CHANGELOG.md](CHANGELOG.md) — version history including the v1.7.0 diff command and stable rule IDs
 
@@ -26,7 +26,7 @@ The `schemas/` directory contains JSON schema contracts for every structured out
 - [schemas/checkyourself-report.schema.json](schemas/checkyourself-report.schema.json) — full diagnostic report
 - [schemas/coverage.schema.json](schemas/coverage.schema.json) — coverage evidence structure
 - [schemas/backlog.schema.json](schemas/backlog.schema.json) — ranked fix backlog
-- [schemas/next-batch.schema.json](schemas/next-batch.schema.json) — safest first fix batch
+- [schemas/next-batch.schema.json](schemas/next-batch.schema.json) — next highest-severity batch; safety analysis remains with the diagnostic and reviewer
 
 ## Diagnostic Reference
 

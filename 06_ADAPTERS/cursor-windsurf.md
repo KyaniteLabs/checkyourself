@@ -1,5 +1,8 @@
 # Cursor / Windsurf Adapter
 
+Start with [`native-cli-mcp.md`](native-cli-mcp.md); this file only adds
+editor-panel and workspace-context steps.
+
 1. Put the `checkyourself/` folder inside the repo.
 2. Open the chat/agent panel.
 3. Ask:

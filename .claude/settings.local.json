@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd /Users/simongonzalezdecruz/workspaces/checkyourself *)"
+    ]
+  }
+}

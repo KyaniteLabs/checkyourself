@@ -1,5 +1,8 @@
 # Local Agents
 
+Start with [`native-cli-mcp.md`](native-cli-mcp.md); this file only adds
+file-aware local-agent context steps.
+
 Use CheckYourself with any local or repo-aware AI assistant that can read files.
 
 Recommended flow:

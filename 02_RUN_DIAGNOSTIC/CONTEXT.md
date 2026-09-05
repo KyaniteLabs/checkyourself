@@ -23,7 +23,7 @@ Use this stage for the full read-only CheckYourself diagnostic.
    scoring or backlog path. If Python is unavailable, run the same sweep
    manually and say the score is hand-computed using `scoring-method.md`.
 3. Inspect evidence before assumptions.
-4. Represent every coverage-matrix row as Pass, Finding, Unknown, or N/A.
+4. Represent every coverage-matrix row as Pass, Finding, Unknown, or Not applicable.
 5. Rank findings by harm and reversibility using `risk-taxonomy.md`.
 6. Produce the Production Reality Report using
    `05_OUTPUT_TEMPLATES/production-reality-report.md`.
