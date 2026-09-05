@@ -5,8 +5,8 @@ deterministic engine an agent can drive.
 
 It uses only the Python standard library, sends nothing over the network, and
 never prints secret values. The AI still supplies judgment. The CLI supplies
-repeatable receipts: discovery, schemas, coverage checks, scoring, backlog
-ranking, validation, and the thin MCP wrapper.
+repeatable receipts: discovery, schemas, verifier-owned challenges, coverage
+checks, scoring, backlog ranking, validation, and the thin MCP wrapper.
 
 For native host setup, discovery, and write boundaries, see the canonical
 [`native CLI/MCP adapter`](../06_ADAPTERS/native-cli-mcp.md).
@@ -40,6 +40,7 @@ python3 tools/checkyourself.py describe --format json
 | `scan --deep` | Adds slower validation checks for detected surfaces, including mutable GitHub Actions and dependency-update coverage. |
 | `coverage --emit` | Writes the 20-surface coverage skeleton for an agent to fill. Use `--format json` for stdout. |
 | `coverage --check FILE` | Checks a filled coverage artifact for completeness. |
+| `challenge [--surface S]` | Executes a committed per-surface command, captures all output, and mints an `EXECUTED` receipt. |
 | `receipt` | Issues one verifier-hashed receipt whose subject digest is bound to one coverage surface, source revision, command, claim, and observed result. |
 | `score --findings FILE [--coverage FILE] [--claim TEXT]` | Computes the bounded evidence score or a low-confidence estimate; optionally records an accepted completion claim. |
 | `backlog --findings FILE` | Ranks the complete remediation backlog and emits a `highest_severity_batch`; it does not analyze safety. |
@@ -194,6 +195,31 @@ P0/P1, or an increase in the aggregate open P0/P1 count. Status-only
 open-to-resolved transitions appear in `resolved`; other status and severity
 transitions remain explicit in `regressions` or `count_regression`.
 
+## Verifier-owned challenges
+
+`challenge` executes commands from the committed `.checkyourself/challenges.json`
+configuration with `shell=False`, a bounded timeout, and the configured output
+assertions. It captures stdout and stderr under `.checkyourself/challenge-runs/`,
+then writes one `EXECUTED` receipt per surface. The receipt records the argv
+list, exit code, capture digest, current project tree hash, and timestamp. A
+failed or timed-out command is a `FAIL` receipt and an open P1 finding; it is
+never silently ignored.
+
+```bash
+python3 tools/checkyourself.py challenge --surface S11 --format json
+python3 tools/checkyourself.py challenge --format json
+```
+
+The shipped configuration provides a working self-test challenge for S11. The
+other surfaces are explicitly marked as requiring a project-specific command;
+running one without that command fails closed. A command is always an argv
+list, never a shell string. Only an `EXECUTED` receipt can satisfy a coverage
+`Pass`. The compatibility `receipt` command remains available, but its
+caller-authored fields are labelled `UNVERIFIED` and cannot earn full credit or
+high confidence. On re-check, the verifier re-hashes the stored capture,
+re-applies the committed assertions, and rejects a receipt whose project tree
+or challenge definition changed.
+
 ## Coverage
 
 ```bash
@@ -316,8 +342,8 @@ risk until the finding is fixed or proven not applicable.
 
 `--claim` records the accepted completion claim and adds per-category
 claim-binding rows. Evidence is unbound unless the coverage row explicitly
-lists it in `claim_bound_evidence`; this wave records the boundary but does not
-run the verifier-owned challenge runner.
+lists it in `claim_bound_evidence`; use the verifier-owned `challenge` command
+for execution evidence.
 
 Without `--coverage`, the CLI produces a `scan-derived-estimate` when the
 findings file is scan JSON, or a `finding-only-estimate` otherwise. Both keep

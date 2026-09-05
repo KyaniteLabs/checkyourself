@@ -725,7 +725,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             diff = json.loads(diff_result.stdout)
             self.assertEqual(diff["unchanged"], ["F-✨"])
 
-    def test_not_applicable_scoring_preserves_its_weight(self) -> None:
+    def test_caller_issued_not_applicable_receipts_are_unverified(self) -> None:
         coverage = self._full_coverage()
         row = next(item for item in coverage["surfaces"] if item["id"] == "S19")
         row.update(
@@ -759,9 +759,9 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         self.assertEqual(result.returncode, 0, result.stderr)
         score = json.loads(result.stdout)
         c10 = next(category for category in score["per_category"] if category["id"] == "C10")
-        self.assertEqual(c10["coverage_status"], "NotApplicable")
-        self.assertEqual(c10["awarded"], 6)
-        self.assertEqual(score["score"], 100)
+        self.assertEqual(c10["coverage_status"], "Unknown")
+        self.assertEqual(score["confidence"], "low")
+        self.assertLess(score["score"], 100)
 
     def test_not_applicable_without_delegation_evidence_is_unknown(self) -> None:
         coverage = self._full_coverage()
@@ -1946,7 +1946,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                 self.assertNotIn("score", mcp_result["structuredContent"])
                 self.assertNotIn("confidence", mcp_result["structuredContent"])
 
-    def test_coverage_backed_full_evidence_reaches_high_confidence(self) -> None:
+    def test_caller_issued_full_evidence_cannot_reach_high_confidence(self) -> None:
         from importlib import util as _util
         spec = _util.spec_from_file_location("cy", CLI)
         cy = _util.module_from_spec(spec)
@@ -1971,9 +1971,9 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             )
         self.assertEqual(result.returncode, 0, result.stderr)
         score = json.loads(result.stdout)
-        self.assertTrue(score["coverage_complete"])
-        self.assertEqual(score["confidence"], "high")
-        self.assertEqual(score["score"], 100)
+        self.assertFalse(score["coverage_complete"])
+        self.assertEqual(score["confidence"], "low")
+        self.assertLess(score["score"], 100)
 
     def test_verifier_receipt_command_emits_surface_bound_binding_hash(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2276,7 +2276,8 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             )
         self.assertEqual(result.returncode, 0, result.stderr)
         score = json.loads(result.stdout)
-        self.assertEqual(score["score"], 82)
+        self.assertLess(score["score"], 84)
+        self.assertIn("CY-COVERAGE-S07", score["findings_scored"])
         self.assertNotEqual(score["confidence"], "high")
         self.assertLessEqual(score["score"], 84)
         self.assertIn(84, [cap["cap"] for cap in score["caps_applied"]])
@@ -2672,6 +2673,193 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         score = json.loads(result.stdout)
         c3 = next(cat for cat in score["per_category"] if cat["id"] == "C3")
         self.assertIn("F-001", [p.get("finding_id") for p in c3["penalties"]])
+
+    def _write_challenges(self, project: Path, definitions: dict) -> None:
+        path = project / ".checkyourself" / "challenges.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({
+            "schema": "checkyourself-challenges/1",
+            "challenges": definitions,
+        }), encoding="utf-8")
+
+    def test_executed_challenge_receipt_is_the_only_full_credit_class(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            self._write_challenges(project, {
+                "S11": {
+                    "command": [sys.executable, "-c", "print('challenge ok')"],
+                    "timeout_s": 10,
+                    "success": {"exit_zero": True},
+                    "output_kind": "text",
+                },
+            })
+            challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
+            self.assertEqual(challenge.returncode, 0, challenge.stderr)
+            result = json.loads(challenge.stdout)
+            receipt = result["receipts"][0]
+            self.assertEqual(receipt["receipt_type"], "EXECUTED")
+            self.assertEqual(receipt["exit_code"], 0)
+            self.assertNotIn("claim", receipt)
+            self.assertNotIn("origin", receipt)
+            self.assertTrue((project / receipt["captured_output"]).exists())
+
+            coverage = {
+                "schema": "checkyourself-coverage/1",
+                "surfaces": [{
+                    "id": "S11",
+                    "surface": "Tests, quality gates, and regression coverage",
+                    "category": "C5",
+                    "status": "Pass",
+                    "evidence_reviewed": [receipt["captured_output"]],
+                    "evidence_receipts": [receipt],
+                }],
+            }
+            findings_path = project / "findings.json"
+            coverage_path = project / "coverage.json"
+            findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
+            coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
+            score = self.run_cli(
+                "score", "--findings", str(findings_path), "--coverage", str(coverage_path),
+                "--no-history", "--format", "json",
+            )
+            self.assertEqual(score.returncode, 0, score.stderr)
+            c5 = next(item for item in json.loads(score.stdout)["per_category"] if item["id"] == "C5")
+            self.assertEqual(c5["coverage_status"], "Pass")
+            self.assertEqual(c5["verified_evidence"], [receipt["captured_output"]])
+
+    def test_caller_issued_receipt_is_explicitly_unverified(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            artifact = self._verification_artifact(project, "S11")
+            receipt = self._receipt(
+                artifact, project, "caller", "caller state", "perfect", surface_id="S11",
+            )
+            coverage = {
+                "schema": "checkyourself-coverage/1",
+                "surfaces": [{
+                    "id": "S11", "surface": "Tests, quality gates, and regression coverage", "category": "C5",
+                    "status": "Pass", "evidence_reviewed": [artifact.relative_to(project).as_posix()],
+                    "evidence_receipts": [receipt],
+                }],
+            }
+            findings_path = project / "findings.json"
+            coverage_path = project / "coverage.json"
+            findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
+            coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
+            score = self.run_cli(
+                "score", "--findings", str(findings_path), "--coverage", str(coverage_path),
+                "--no-history", "--format", "json",
+            )
+            self.assertEqual(score.returncode, 0, score.stderr)
+            data = json.loads(score.stdout)
+            self.assertEqual(data["confidence"], "low")
+            self.assertIn(
+                "UNVERIFIED",
+                " ".join(
+                    str(item)
+                    for needed in data["manual_evidence_needed"]
+                    for item in needed["needed"]
+                ),
+            )
+            self.assertLess(data["score"], 100)
+
+    def test_challenge_output_assertions_and_surface_binding(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            self._write_challenges(project, {
+                "S02": {"command": [sys.executable, "-c", "import json; print(json.dumps({'ok': True}))"], "timeout_s": 10, "success": {"json_field": {"ok": True}, "regex_not_match": ["failure"]}, "output_kind": "json"},
+                "S05": {"command": [sys.executable, "-c", "print('auth')"], "timeout_s": 10, "success": {"exit_zero": True}, "output_kind": "text"},
+            })
+            challenge = self.run_cli("challenge", str(project), "--surface", "S02", "--format", "json")
+            self.assertEqual(challenge.returncode, 0, challenge.stderr)
+            receipt = json.loads(challenge.stdout)["receipts"][0]
+            self.assertEqual(receipt["surface_id"], "S02")
+            self.assertEqual(receipt["status"], "PASS")
+            coverage = {
+                "schema": "checkyourself-coverage/1",
+                "surfaces": [{
+                    "id": "S05", "surface": "Auth, permissions, sessions, roles, and admin paths", "category": "C2",
+                    "status": "Pass", "evidence_reviewed": [receipt["captured_output"]],
+                    "evidence_receipts": [receipt],
+                }],
+            }
+            findings_path = project / "findings.json"
+            coverage_path = project / "coverage.json"
+            findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
+            coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
+            score = self.run_cli("score", "--findings", str(findings_path), "--coverage", str(coverage_path), "--no-history", "--format", "json")
+            self.assertEqual(score.returncode, 0, score.stderr)
+            c2 = next(item for item in json.loads(score.stdout)["per_category"] if item["id"] == "C2")
+            self.assertEqual(c2["coverage_status"], "Unknown")
+
+    def test_invalid_override_fails_closed_without_shell_execution(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            self._write_challenges(project, {"S05": {"command": "echo injected"}})
+            result = self.run_cli("challenge", str(project), "--surface", "S05", "--format", "json")
+            self.assertEqual(result.returncode, 1)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["surfaces"][0]["status"], "FAIL")
+            self.assertEqual(data["receipts"][0]["command"], [])
+            self.assertTrue(data["findings"])
+
+    def test_failing_challenge_is_scored_as_a_finding_and_cap(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            self._write_challenges(project, {
+                "S11": {"command": [sys.executable, "-c", "raise SystemExit(3)"], "timeout_s": 10, "success": {"exit_zero": True}, "output_kind": "text"},
+            })
+            challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
+            self.assertEqual(challenge.returncode, 1)
+            receipt = json.loads(challenge.stdout)["receipts"][0]
+            coverage = {"schema": "checkyourself-coverage/1", "surfaces": [{
+                "id": "S11", "surface": "Tests, quality gates, and regression coverage", "category": "C5",
+                "status": "Pass", "evidence_reviewed": [receipt["captured_output"]], "evidence_receipts": [receipt],
+            }]}
+            findings_path = project / "findings.json"
+            coverage_path = project / "coverage.json"
+            findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
+            coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
+            score = self.run_cli("score", "--findings", str(findings_path), "--coverage", str(coverage_path), "--no-history", "--format", "json")
+            self.assertEqual(score.returncode, 0, score.stderr)
+            data = json.loads(score.stdout)
+            self.assertIn("CY-CHALLENGE-S11", data["findings_scored"])
+            self.assertIn(74, [cap["cap"] for cap in data["caps_applied"]])
+
+    def test_timeout_is_bounded_and_receipted_as_fail(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            self._write_challenges(project, {
+                "S11": {"command": [sys.executable, "-c", "import time; time.sleep(2)"], "timeout_s": 0.1, "success": {"exit_zero": True}, "output_kind": "text"},
+            })
+            result = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
+            self.assertEqual(result.returncode, 1)
+            data = json.loads(result.stdout)
+            self.assertTrue(data["receipts"][0]["timed_out"])
+            self.assertEqual(data["receipts"][0]["status"], "FAIL")
+
+    def test_executed_receipt_is_invalid_after_source_tree_change(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            self._write_challenges(project, {
+                "S11": {"command": [sys.executable, "-c", "print('ok')"], "timeout_s": 10, "success": {"exit_zero": True}, "output_kind": "text"},
+            })
+            challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
+            self.assertEqual(challenge.returncode, 0, challenge.stderr)
+            receipt = json.loads(challenge.stdout)["receipts"][0]
+            (project / "app.py").write_text("print('changed')\n", encoding="utf-8")
+            coverage = {"schema": "checkyourself-coverage/1", "surfaces": [{
+                "id": "S11", "surface": "Tests, quality gates, and regression coverage", "category": "C5",
+                "status": "Pass", "evidence_reviewed": [receipt["captured_output"]], "evidence_receipts": [receipt],
+            }]}
+            findings_path = project / "findings.json"
+            coverage_path = project / "coverage.json"
+            findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
+            coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
+            score = self.run_cli("score", "--findings", str(findings_path), "--coverage", str(coverage_path), "--no-history", "--format", "json")
+            self.assertEqual(score.returncode, 0, score.stderr)
+            c5 = next(item for item in json.loads(score.stdout)["per_category"] if item["id"] == "C5")
+            self.assertEqual(c5["coverage_status"], "Unknown")
 
 
 if __name__ == "__main__":
