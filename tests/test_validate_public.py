@@ -158,6 +158,18 @@ class ValidatePublicTests(unittest.TestCase):
         self.assertNotIn("broken local markdown link", result.stdout)
         self.assertNotIn("Traceback", result.stderr)
 
+    def test_markdown_file_line_citations_resolve_to_the_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            target = project / "src" / "app.py"
+            target.parent.mkdir()
+            target.write_text("print('ok')\n", encoding="utf-8")
+            (project / "doc.md").write_text(f"[source]({target}:1)\n", encoding="utf-8")
+            result = self.run_validator(project)
+
+        self.assertNotIn("broken local markdown link", result.stdout)
+        self.assertNotIn("Traceback", result.stderr)
+
     def test_stale_public_phrase_is_reported(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / "notes.md").write_text("status Dashboard=Yes for launch\n", encoding="utf-8")

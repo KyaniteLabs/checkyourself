@@ -56,6 +56,20 @@
           "weight": { "type": "integer" },
           "coverage_status": { "type": "string" },
           "evidence_reviewed": { "type": "array", "items": { "type": "string" } },
+          "verified_evidence": { "type": "array", "items": { "type": "string" } },
+          "claim_bound_evidence": { "type": "array", "items": { "type": "string" } },
+          "claim_binding": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["evidence", "claim_bound", "basis"],
+              "properties": {
+                "evidence": { "type": "string" },
+                "claim_bound": { "type": "boolean" },
+                "basis": { "type": "string" }
+              }
+            }
+          },
           "missing_evidence": { "type": "array", "items": { "type": "string" } },
           "penalties": { "type": "array", "items": { "type": "object" } },
           "awarded": { "type": "number", "minimum": 0 }
@@ -64,6 +78,22 @@
     },
     "findings_scored": { "type": "array", "items": { "type": "string" } },
     "coverage_complete": { "type": "boolean" },
-    "manual_evidence_needed": { "type": "array", "items": { "type": "object" } }
+    "manual_evidence_needed": { "type": "array", "items": { "type": "object" } },
+    "workflow_dispositions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["finding_id", "status", "residual_risk"],
+        "properties": {
+          "finding_id": { "type": "string" },
+          "status": { "type": "string" },
+          "residual_risk": { "type": "string", "enum": ["open", "closed"] }
+        }
+      }
+    },
+    "claim": {
+      "type": "string",
+      "description": "The accepted completion claim recorded for this score; no independent challenge runner is implied."
+    }
   }
 }

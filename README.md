@@ -1,6 +1,6 @@
-# CheckYourself — AI Production-Readiness Diagnostic for Apps Built With AI
+# CheckYourself — Reviewable Completion Evidence for AI-Built Apps
 
-**TL;DR:** CheckYourself — AI production-readiness diagnostic for apps built with AI. Best for founders and engineers shipping AI-generated apps.
+**TL;DR:** CheckYourself is a local-first production-audit workflow for AI-built apps: it records reviewable completion evidence, assumptions, and unresolved risks. Its score is not a guarantee.
 
 > **Check yourself before you wreck yourself — for the apps you ship.** Before you launch it, CheckYourself.
 
@@ -9,7 +9,7 @@
 [![Production-hardening engine](https://img.shields.io/badge/engine-19%20capabilities-blueviolet.svg)](90_ADVANCED/)
 [![Read-only by default](https://img.shields.io/badge/safety-read--only%20first-brightgreen.svg)](#is-it-safe-to-run-on-my-codebase)
 
-**CheckYourself is a free, open-source, model-agnostic production-readiness system for apps built with AI coding assistants.** It turns any AI assistant — Cursor, Claude, ChatGPT, Gemini, Copilot, Windsurf, Replit, Lovable, Bolt, Codex, or a local agent — into a pre-launch auditor that inspects your app, infers the stack, finds production gaps, explains every risk in plain English, proposes fixes for your approval, verifies them, and then writes a learning plan built from the exact gaps your own project had.
+**CheckYourself is a free, open-source, model-agnostic completion-evidence workflow for apps built with AI coding assistants.** It turns any AI assistant — Cursor, Claude, ChatGPT, Gemini, Copilot, Windsurf, Replit, Lovable, Bolt, Codex, or a local agent — into a pre-launch reviewer that inspects your app, records observed and untested behavior, surfaces production gaps, proposes fixes for your approval, verifies local receipts, and writes a learning plan built from the exact gaps your own project had.
 
 Under the hood it is a complete, staged engineering system, not a single canned prompt: an ICM-style context workspace that routes the agent through each stage, an evidence-based 0–100 scoring method with severity caps, a 19-capability production-hardening engine spanning auth, data, secrets, CI/CD, observability, privacy, and AI governance, JSON output schemas, report and risk templates, and a public validation suite. You install it as your AI assistant's operating context — no SaaS, no account, no lock-in to any one model.
 
@@ -36,11 +36,11 @@ Under the hood it is a complete, staged engineering system, not a single canned 
 
 ## What is CheckYourself?
 
-CheckYourself is an open-source **production-readiness audit system** — a structured, staged engineering framework of context files, scoring logic, output schemas, templates, and a deep production-hardening capability stack that you load as an AI coding assistant's operating context, so it can grade an AI-built app the way real production would: honestly, completely, and before launch.
+CheckYourself is an open-source **reviewable completion-evidence system** — a structured, staged engineering framework of context files, scoring logic, output schemas, templates, and production-hardening guidance. It records what was observed, what was inferred, what remains untested, and which risks still block launch; the current scorer verifies local receipts and report consistency, not production safety or an independent challenge of the builder's claim.
 
 It answers one question that matters to every "vibe coder," indie hacker, and AI-assisted builder: **"Is this app actually ready to ship, and if not, what exactly is wrong and how do I fix it?"**
 
-Unlike a "top three issues" linter, CheckYourself builds a **complete findings register** and a **complete remediation backlog**, scores production readiness from 0–100, and walks you through fixes one safe, reversible batch at a time. When the audit is done, it generates a **bespoke learning plan** so you actually learn from what your project was missing.
+Unlike a "top three issues" linter, CheckYourself builds a **complete findings register** and a **complete remediation backlog**, produces a bounded 0–100 evidence score, and walks you through fixes one safe, reversible batch at a time. When the audit is done, it generates a **bespoke learning plan** so you actually learn from what your project was missing. It does not certify production safety or run an independent challenge of the original completion claim.
 
 It is also organized as an ICM-style context workspace: [`CONTEXT.md`](CONTEXT.md) routes the agent to staged folders, each major stage has its own `CONTEXT.md`, and durable handoff artifacts belong in stage `output/` folders. CheckYourself is not affiliated with the RinDig ICM project; it uses the same file-first idea so agents know what to read, do, and produce at each step.
 
@@ -62,7 +62,7 @@ CheckYourself gives you reality **before production does the grading** — a cal
 4. Run a read-only diagnostic and review the **Production Reality Report**.
 5. Approve fixes one at a time or in safe, reversible batches.
 6. Recheck and rescore after each batch.
-7. Continue until every finding is fixed, deferred with a reason, accepted as risk, suppressed with evidence, proven not applicable, or remains open with blocker context.
+7. Continue until every finding is fixed or proven not applicable; keep deferred, accepted-risk, and suppressed items visible as residual risk with owner and trigger context.
 8. Get a custom learning plan based on the actual gaps.
 
 > **No model lock-in. No required cloud account. No required command line.**
@@ -254,7 +254,7 @@ See [`docs/token-efficiency.md`](docs/token-efficiency.md).
 ## FAQ
 
 ### What is CheckYourself in one sentence?
-CheckYourself is a free, open-source, model-agnostic production-readiness system that turns any AI coding assistant into a pre-launch auditor for apps built with AI — a staged diagnostic workspace, an evidence-based score, a complete findings register and remediation backlog, approval-based guided fixes, and a 19-capability hardening engine that finds every gap, explains the risks, fixes them with your approval, and teaches you what you missed.
+CheckYourself is a free, open-source, model-agnostic review workflow that turns any AI coding assistant into a reviewer of completion evidence for AI-built apps — a staged diagnostic workspace, a bounded evidence-based score, a complete findings register and remediation backlog, approval-based guided fixes, and a 19-capability hardening engine that surfaces gaps, explains the risks, and teaches you what remains unproven.
 
 ### Do I need to install a toolchain or use the command line?
 No build step, no dependencies, and no required command line. You load CheckYourself as your AI assistant's operating context and it works through the stages with you. It also ships a small optional Python CLI and validator for maintainers and agent workflows, but you never need them to run an audit.
@@ -269,7 +269,7 @@ Yes. CheckYourself starts **read-only** by default. It will not change code or c
 A linter flags style and a few obvious problems. CheckYourself builds a *complete* findings register and remediation backlog across the entire production surface — auth, data, secrets, CI/CD, deployment, observability, privacy, and more — then guides fixes and produces a learning plan.
 
 ### What does the Production Reality Score mean?
-It is a 0–100 production-readiness score with severity caps and explicit reasoning, explained in [`docs/checkyourself-score-explained.md`](docs/checkyourself-score-explained.md). A low score with clear findings is more useful than a falsely high one.
+It is a bounded 0–100 evidence score with severity caps and explicit reasoning, explained in [`docs/checkyourself-score-explained.md`](docs/checkyourself-score-explained.md). A low score with clear unknowns is more useful than a falsely high one; the score is not a production-safety guarantee.
 
 ### Is CheckYourself free and open source?
 Yes — it is released under the [Apache License, Version 2.0](LICENSE) and is free to use, copy, and adapt under those terms.
@@ -314,7 +314,7 @@ Apache License, Version 2.0 — free and open source. See [`LICENSE`](LICENSE).
 
 ### What is CheckYourself?
 
-CheckYourself is a AI production-readiness diagnostic for apps built with AI. It helps founders and engineers shipping AI-generated apps score production readiness with evidence-backed findings and a fix path.
+CheckYourself is a reviewable completion-evidence workflow for AI-built apps. It helps founders and engineers record observed behavior, unresolved assumptions, evidence-backed findings, and a bounded score with a fix path.
 
 ### Who should use CheckYourself?
 
@@ -322,7 +322,7 @@ founders and engineers shipping AI-generated apps.
 
 ### How is CheckYourself different?
 
-Unlike style linters, CheckYourself judges ship-readiness with evidence, not only style.
+Unlike style linters, CheckYourself records reviewable evidence and unresolved risk, not only style. It does not replace production tests, expert review, or an independent challenge of the original completion claim.
 
 ### Is CheckYourself production software?
 

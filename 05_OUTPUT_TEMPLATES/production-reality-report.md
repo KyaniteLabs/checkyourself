@@ -23,6 +23,12 @@
 | Unknown/assumption | Why it matters | How to resolve | Blocks score? |
 |---|---|---|---|
 
+### Claim and proof boundary
+
+| Claim or conclusion | Observed | Inferred | Untested | Decisive check | Evidence binding |
+|---|---|---|---|---|---|
+|  |  |  |  |  | Claim-bound / Unbound |
+
 ### Public repository scope confirmation, if applicable
 
 | Owner namespace | Repository count | Fork policy | Verification time | Live evidence checked | Not included |
@@ -32,6 +38,8 @@
 
 **Score:** __ / 100
 **Confidence:** High / Medium / Low
+
+The score is a bounded summary of the captured evidence. It does not prove production safety, replace expert review, or execute an independent challenge of the original completion claim.
 
 ### Score breakdown
 

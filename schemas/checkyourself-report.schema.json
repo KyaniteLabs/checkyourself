@@ -56,6 +56,10 @@
       "minimum": 0,
       "maximum": 100
     },
+    "claim": {
+      "type": "string",
+      "description": "Accepted completion claim recorded for this report; it is not an independently challenged result."
+    },
     "confidence": {
       "type": "string",
       "enum": [

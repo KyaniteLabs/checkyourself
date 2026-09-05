@@ -40,7 +40,7 @@ python3 tools/checkyourself.py describe --format json
 | `scan --deep` | Adds slower validation checks for detected surfaces, including mutable GitHub Actions and dependency-update coverage. |
 | `coverage --emit` | Writes the 20-surface coverage skeleton for an agent to fill. Use `--format json` for stdout. |
 | `coverage --check FILE` | Checks a filled coverage artifact for completeness. |
-| `score --findings FILE [--coverage FILE]` | Computes the deterministic Production Reality Score or a low-confidence scan-derived estimate. |
+| `score --findings FILE [--coverage FILE] [--claim TEXT]` | Computes the bounded evidence score or a low-confidence estimate; optionally records an accepted completion claim. |
 | `backlog --findings FILE` | Ranks the complete remediation backlog and emits a `highest_severity_batch`; it does not analyze safety. |
 | `next --findings FILE` | Returns the next unresolved `highest_severity_batch`; it does not analyze safety. |
 | `diff --old FILE --new FILE` | Compares two findings artifacts and reports added, resolved, and regressed findings. |
@@ -212,14 +212,20 @@ Coverage has 20 surfaces. Each surface must be marked:
 - `Unknown`;
 - `NotApplicable`.
 
-`Pass` needs evidence. `Unknown` needs missing evidence. `NotApplicable` needs a
-reason.
+`Pass` needs reviewer assertions plus `evidence_receipts` whose referenced
+artifacts exist, are non-empty, match their recorded SHA-256 hash, and include
+origin, source-state, and result provenance. `Unknown` needs missing evidence.
+`NotApplicable` needs a reason plus `delegation_receipts` proving where the
+responsibility lives. A missing or unresolvable receipt is treated as Unknown
+with a warning. A `Finding` row creates a coverage finding penalty unless it is
+linked to a registered finding with `finding_ids`.
 
 ## Scoring
 
 ```bash
 python3 tools/checkyourself.py score --findings findings.json --coverage coverage.json --format json
 python3 tools/checkyourself.py score --findings CHECKYOURSELF_SCAN.generated.json --format json
+python3 tools/checkyourself.py score --findings findings.json --coverage coverage.json --claim "Export endpoint returns only the requesting user's records" --format json
 ```
 
 The score uses the weights and caps from
@@ -241,11 +247,18 @@ The result includes `per_category` penalties, caps applied, confidence, and the
 finding IDs scored.
 
 With `--coverage`, the result is `score_mode: "coverage-backed"`. A coverage
-entry marked `Pass` without `evidence_reviewed`, or `NotApplicable` without a
-reason, is downgraded to `Unknown`, and any surface omitted from the artifact
-counts as `Unknown` — so omitting or hand-waving a surface can never score
-better than honestly reporting it, and `confidence: "high"` requires all 20
-required surfaces present with real evidence.
+entry marked `Pass` without `evidence_reviewed` and a verifier-captured receipt,
+or `NotApplicable` without a reason and delegation receipt, is downgraded to
+`Unknown`. Any surface omitted from the artifact counts as `Unknown` — so
+omitting or hand-waving a surface can never score better than honestly
+reporting it, and `confidence: "high"` requires all 20 required surfaces with
+real receipts. `accepted-risk`, `deferred`, and `suppressed` remain residual
+risk until the finding is fixed or proven not applicable.
+
+`--claim` records the accepted completion claim and adds per-category
+claim-binding rows. Evidence is unbound unless the coverage row explicitly
+lists it in `claim_bound_evidence`; this wave records the boundary but does not
+run the verifier-owned challenge runner.
 
 Without `--coverage`, the CLI produces a `scan-derived-estimate` when the
 findings file is scan JSON, or a `finding-only-estimate` otherwise. Both keep

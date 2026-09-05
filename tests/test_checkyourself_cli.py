@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 from copy import deepcopy
 import signal
@@ -727,9 +728,27 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
     def test_not_applicable_scoring_preserves_its_weight(self) -> None:
         coverage = self._full_coverage()
         row = next(item for item in coverage["surfaces"] if item["id"] == "S19")
-        row.update(status="NotApplicable", evidence_reviewed=[], not_applicable_reason="Project has no AI or agent behavior.")
+        row.update(
+            status="NotApplicable",
+            evidence_reviewed=[],
+            not_applicable_reason="Project has no AI or agent behavior.",
+            # A reason alone is not delegated-responsibility evidence. This
+            # legacy expectation is intentionally covered by the regression
+            # test below; this test proves the accepted path retains weight.
+            delegation_receipts=[],
+        )
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
+            delegation = project / "delegation.md"
+            delegation.write_text("The hosting provider owns model execution.\n", encoding="utf-8")
+            row["delegation_receipts"] = [self._receipt(delegation, project, "provider contract", "temporary test tree", "delegated responsibility documented")]
+            for item in coverage["surfaces"]:
+                if item["id"] == "S19":
+                    continue
+                evidence = project / f"{item['id']}.txt"
+                evidence.write_text(f"verified {item['id']}\n", encoding="utf-8")
+                item["evidence_reviewed"] = [evidence.name]
+                item["evidence_receipts"] = [self._receipt(evidence, project, "fixture verifier", "temporary test tree", "non-empty artifact observed")]
             findings_path = project / "findings.json"
             coverage_path = project / "coverage.json"
             findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
@@ -745,6 +764,31 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         self.assertEqual(c10["coverage_status"], "NotApplicable")
         self.assertEqual(c10["awarded"], 6)
         self.assertEqual(score["score"], 100)
+
+    def test_not_applicable_without_delegation_evidence_is_unknown(self) -> None:
+        coverage = self._full_coverage()
+        for row in coverage["surfaces"]:
+            row.update(status="NotApplicable", evidence_reviewed=[], not_applicable_reason="Handled elsewhere.")
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            findings_path = project / "findings.json"
+            coverage_path = project / "coverage.json"
+            findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
+            coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
+            result = self.run_cli(
+                "score", "--findings", str(findings_path), "--coverage", str(coverage_path),
+                "--no-history", "--format", "json",
+            )
+            coverage_check = self.run_cli("coverage", "--check", str(coverage_path), "--format", "json")
+            self.assertEqual(coverage_check.returncode, 1, coverage_check.stderr)
+            checked = json.loads(coverage_check.stdout)
+            self.assertFalse(checked["complete"])
+            self.assertTrue(any("verifier-captured" in warning for warning in checked["warnings"]))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        score = json.loads(result.stdout)
+        self.assertEqual(score["confidence"], "low")
+        self.assertIn(84, [cap["cap"] for cap in score["caps_applied"]])
+        self.assertLess(score["score"], 100)
 
     def test_backlog_and_next_return_first_batch(self) -> None:
         findings = {
@@ -1719,6 +1763,55 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                 self.assertFalse(validation["valid"])
                 self.assertTrue(any(section in error for error in validation["errors"]))
 
+    def test_semantic_report_validation_rejects_tampered_verdict(self) -> None:
+        artifact = deepcopy(GOLDEN_REPORT)
+        artifact.update({
+            "score": 100,
+            "confidence": "high",
+            "score_caps": [],
+            "findings": [{
+                "id": "F-OPEN-P0", "severity": "P0", "category": "C1",
+                "finding": "Cross-user access remains possible",
+                "plain_english_risk": "A user may read another user's records.",
+                "evidence": ["auth.md:1"], "status": "open",
+            }],
+        })
+        artifact["remediation_backlog"] = [{
+            "finding_id": "F-OPEN-P0", "severity": "P0",
+            "fix_summary": "Prove tenant isolation.", "status": "open",
+        }]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "tampered-report.json"
+            path.write_text(json.dumps(artifact), encoding="utf-8")
+            result = self.run_cli("validate", "--kind", "report", str(path), "--format", "json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        validation = json.loads(result.stdout)
+        self.assertTrue(validation["schema_valid"])
+        self.assertFalse(validation["semantic_valid"])
+        self.assertFalse(validation["valid"])
+        self.assertTrue(any("P0 cap" in error for error in validation["semantic_errors"]))
+
+    def test_score_claim_records_explicit_and_unbound_evidence(self) -> None:
+        coverage = self._full_coverage()
+        coverage["surfaces"][5]["claim_bound_evidence"] = ["src/app.py:6"]
+        with tempfile.TemporaryDirectory() as tmp:
+            findings_path = Path(tmp) / "findings.json"
+            coverage_path = Path(tmp) / "coverage.json"
+            findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
+            coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
+            result = self.run_cli(
+                "score", "--findings", str(findings_path), "--coverage", str(coverage_path),
+                "--claim", "The export returns only the requester's records",
+                "--no-history", "--format", "json",
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        score = json.loads(result.stdout)
+        self.assertEqual(score["claim"], "The export returns only the requester's records")
+        c1 = next(category for category in score["per_category"] if category["id"] == "C1")
+        bindings = {item["evidence"]: item["claim_bound"] for item in c1["claim_binding"]}
+        self.assertTrue(bindings["src/app.py:6"])
+        self.assertTrue(any(not bound for bound in bindings.values()))
+
     def _full_coverage(self) -> dict:
         from importlib import util as _util
         spec = _util.spec_from_file_location("cy", CLI)
@@ -1736,6 +1829,15 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                 }
                 for index, (sid, surface, category) in enumerate(cy.COVERAGE_SURFACES, start=1)
             ],
+        }
+
+    def _receipt(self, path: Path, root: Path, origin: str, source_state: str, result: str) -> dict:
+        return {
+            "reference": path.relative_to(root).as_posix(),
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "origin": origin,
+            "source_state": source_state,
+            "result": result,
         }
 
     def _run_mcp_score(self, coverage: object) -> dict:
@@ -1825,15 +1927,18 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         cy = _util.module_from_spec(spec)
         spec.loader.exec_module(cy)
         surfaces = []
-        for sid, surface, category in cy.COVERAGE_SURFACES:
-            surfaces.append({
-                "id": sid, "surface": surface, "category": category,
-                "status": "Pass", "evidence_reviewed": [f"{surface}: verified in src/app.py:10"],
-            })
-        coverage = {"schema": "checkyourself-coverage/1", "surfaces": surfaces}
         with tempfile.TemporaryDirectory() as tmp:
             findings_path = Path(tmp) / "findings.json"
             coverage_path = Path(tmp) / "coverage.json"
+            for index, (sid, surface, category) in enumerate(cy.COVERAGE_SURFACES, start=1):
+                evidence = Path(tmp) / f"receipt-{index}.txt"
+                evidence.write_text(f"verified {sid} {surface}\n", encoding="utf-8")
+                surfaces.append({
+                    "id": sid, "surface": surface, "category": category,
+                    "status": "Pass", "evidence_reviewed": [evidence.name],
+                    "evidence_receipts": [self._receipt(evidence, Path(tmp), "fixture verifier", "temporary test tree", "non-empty artifact observed")],
+                })
+            coverage = {"schema": "checkyourself-coverage/1", "surfaces": surfaces}
             findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
             coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
             result = self.run_cli(
@@ -1845,6 +1950,69 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         self.assertTrue(score["coverage_complete"])
         self.assertEqual(score["confidence"], "high")
         self.assertEqual(score["score"], 100)
+
+    def test_fabricated_evidence_references_cannot_earn_pass_credit(self) -> None:
+        coverage = self._full_coverage()
+        with tempfile.TemporaryDirectory() as tmp:
+            findings_path = Path(tmp) / "findings.json"
+            coverage_path = Path(tmp) / "coverage.json"
+            findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
+            coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
+            result = self.run_cli(
+                "score", "--findings", str(findings_path), "--coverage", str(coverage_path),
+                "--no-history", "--format", "json",
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        score = json.loads(result.stdout)
+        self.assertEqual(score["confidence"], "low")
+        self.assertLess(score["score"], 100)
+        c1 = next(category for category in score["per_category"] if category["id"] == "C1")
+        self.assertTrue(c1["missing_evidence"])
+
+    def test_accepted_p0_retains_residual_risk_penalty_and_cap(self) -> None:
+        findings = {
+            "findings": [{
+                "id": "F-ACCEPTED-P0", "severity": "P0", "category": "C1",
+                "finding": "Cross-user access remains possible", "status": "accepted-risk",
+            }]
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "findings.json"
+            path.write_text(json.dumps(findings), encoding="utf-8")
+            result = self.run_cli("score", "--findings", str(path), "--no-history", "--format", "json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        score = json.loads(result.stdout)
+        self.assertEqual(score["counts"]["P0"], 1)
+        self.assertIn(49, [cap["cap"] for cap in score["caps_applied"]])
+        self.assertLessEqual(score["score"], 49)
+        self.assertEqual(score["workflow_dispositions"], [{
+            "finding_id": "F-ACCEPTED-P0", "status": "accepted-risk", "residual_risk": "open",
+        }])
+
+    def test_unknown_evidence_survives_finding_category_override(self) -> None:
+        coverage = self._full_coverage()
+        s06 = next(item for item in coverage["surfaces"] if item["id"] == "S06")
+        s06.update(status="Unknown", evidence_reviewed=[], missing_evidence=["restore receipt"])
+        s07 = next(item for item in coverage["surfaces"] if item["id"] == "S07")
+        s07.update(status="Finding", evidence_reviewed=["fixture.md:1"], finding_ids=["F-ISOLATION"])
+        findings = {"findings": [{
+            "id": "F-ISOLATION", "severity": "P3", "category": "C1",
+            "finding": "Isolation evidence is incomplete", "status": "open",
+        }]}
+        with tempfile.TemporaryDirectory() as tmp:
+            findings_path = Path(tmp) / "findings.json"
+            coverage_path = Path(tmp) / "coverage.json"
+            findings_path.write_text(json.dumps(findings), encoding="utf-8")
+            coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
+            result = self.run_cli(
+                "score", "--findings", str(findings_path), "--coverage", str(coverage_path),
+                "--no-history", "--format", "json",
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        score = json.loads(result.stdout)
+        self.assertEqual(score["confidence"], "low")
+        self.assertIn(84, [cap["cap"] for cap in score["caps_applied"]])
+        self.assertLess(score["score"], 100)
 
     def test_diff_detects_regression_and_gates_in_ci(self) -> None:
         old = {"findings": [{"id": "CY-TEST-001", "severity": "P1", "category": "C5", "finding": "No tests", "status": "open"}]}
