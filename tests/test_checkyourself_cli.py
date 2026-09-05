@@ -739,15 +739,13 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         )
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
-            delegation = project / "delegation.md"
-            delegation.write_text("The hosting provider owns model execution.\n", encoding="utf-8")
+            delegation = self._verification_artifact(project, "S19", suffix="delegation")
             row["delegation_receipts"] = [self._receipt(delegation, project, "provider contract", "temporary test tree", "delegated responsibility documented", surface_id="S19")]
             for item in coverage["surfaces"]:
                 if item["id"] == "S19":
                     continue
-                evidence = project / f"{item['id']}.txt"
-                evidence.write_text(f"verified {item['id']}\n", encoding="utf-8")
-                item["evidence_reviewed"] = [evidence.name]
+                evidence = self._verification_artifact(project, item["id"])
+                item["evidence_reviewed"] = [evidence.relative_to(project).as_posix()]
                 item["evidence_receipts"] = [self._receipt(evidence, project, "fixture verifier", "temporary test tree", "non-empty artifact observed", surface_id=item["id"])]
             findings_path = project / "findings.json"
             coverage_path = project / "coverage.json"
@@ -1831,6 +1829,18 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             ],
         }
 
+    def _verification_artifact(self, root: Path, surface_id: str, *, suffix: str = "proof") -> Path:
+        path = root / "coverage" / "verification" / surface_id / f"{suffix}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({
+            "kind": "surface-verification-record",
+            "surface_id": surface_id,
+            "source_revision": "fixture-revision",
+            "command": f"verify {surface_id}",
+            "result": "verified",
+        }) + "\n", encoding="utf-8")
+        return path
+
     def _receipt(self, path: Path, root: Path, origin: str, source_state: str, result: str, *, surface_id: str, claim: str = "fixture claim") -> dict:
         receipt = {
             "reference": path.relative_to(root).as_posix(),
@@ -1946,11 +1956,10 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             findings_path = Path(tmp) / "findings.json"
             coverage_path = Path(tmp) / "coverage.json"
             for index, (sid, surface, category) in enumerate(cy.COVERAGE_SURFACES, start=1):
-                evidence = Path(tmp) / f"receipt-{index}.txt"
-                evidence.write_text(f"verified {sid} {surface}\n", encoding="utf-8")
+                evidence = self._verification_artifact(Path(tmp), sid, suffix=f"receipt-{index}")
                 surfaces.append({
                     "id": sid, "surface": surface, "category": category,
-                    "status": "Pass", "evidence_reviewed": [evidence.name],
+                    "status": "Pass", "evidence_reviewed": [evidence.relative_to(Path(tmp)).as_posix()],
                     "evidence_receipts": [self._receipt(evidence, Path(tmp), "fixture verifier", "temporary test tree", "non-empty artifact observed", surface_id=sid)],
                 })
             coverage = {"schema": "checkyourself-coverage/1", "surfaces": surfaces}
@@ -1969,13 +1978,12 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
     def test_verifier_receipt_command_emits_surface_bound_binding_hash(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
-            evidence = project / "evidence.txt"
-            evidence.write_text("observed output\n", encoding="utf-8")
+            evidence = self._verification_artifact(project, "S11", suffix="pytest")
             receipt_path = project / "receipt.json"
             result = self.run_cli(
                 "receipt",
                 "--root", str(project),
-                "--reference", evidence.name,
+                "--reference", evidence.relative_to(project).as_posix(),
                 "--surface-id", "S11",
                 "--source-revision", "abc123",
                 "--source-state", "temporary test tree",
@@ -1989,7 +1997,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
             self.assertEqual(receipt["issuer"], "checkyourself-verifier/1")
             self.assertEqual(receipt["surface_id"], "S11")
-            self.assertEqual(receipt["reference"], "evidence.txt")
+            self.assertEqual(receipt["reference"], "coverage/verification/S11/pytest.json")
             self.assertEqual(self.run_cli("validate", "--kind", "receipt", str(receipt_path)).returncode, 0)
             tampered_path = project / "tampered-receipt.json"
             tampered = deepcopy(receipt)
@@ -2002,12 +2010,11 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
     def test_receipt_subject_digest_must_match_registered_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
-            evidence = project / "evidence.txt"
-            evidence.write_text("observed output\n", encoding="utf-8")
+            evidence = self._verification_artifact(project, "S11", suffix="pytest")
             result = self.run_cli(
                 "receipt",
                 "--root", str(project),
-                "--reference", evidence.name,
+                "--reference", evidence.relative_to(project).as_posix(),
                 "--surface-id", "S11",
                 "--source-revision", "abc123",
                 "--source-state", "temporary test tree",
@@ -2020,7 +2027,51 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn("subject_digest must match", result.stderr)
 
-    def test_one_artifact_twenty_issued_receipts_fails_closed(self) -> None:
+    def test_explicit_registry_override_changes_path_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            evidence = project / "custom" / "S11" / "pytest-proof.json"
+            evidence.parent.mkdir(parents=True)
+            evidence.write_text(json.dumps({
+                "kind": "surface-verification-record",
+                "surface_id": "S11",
+                "source_revision": "abc123",
+                "command": "pytest tests/test_app.py -q",
+                "result": "1 passed",
+            }) + "\n", encoding="utf-8")
+            (project / ".checkyourself.json").write_text(json.dumps({
+                "verification_artifact_registry": {
+                    "S11": {
+                        "path_roots": ["custom/S11"],
+                        "path_patterns": ["pytest-*.json"],
+                    }
+                }
+            }), encoding="utf-8")
+            result = self.run_cli(
+                "receipt", "--root", str(project),
+                "--reference", evidence.relative_to(project).as_posix(),
+                "--surface-id", "S11", "--source-revision", "abc123",
+                "--source-state", "temporary test tree",
+                "--command", "pytest tests/test_app.py -q",
+                "--claim", "The focused quality gate passes", "--result", "1 passed",
+                "--format", "json",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            wrong_shape = project / "custom" / "S11" / "pytest-wrong.json"
+            wrong_shape.write_text(json.dumps({"surface_id": "S11"}), encoding="utf-8")
+            rejected = self.run_cli(
+                "receipt", "--root", str(project),
+                "--reference", wrong_shape.relative_to(project).as_posix(),
+                "--surface-id", "S11", "--source-revision", "abc123",
+                "--source-state", "temporary test tree",
+                "--command", "pytest tests/test_app.py -q",
+                "--claim", "The focused quality gate passes", "--result", "1 passed",
+                "--format", "json",
+            )
+        self.assertEqual(rejected.returncode, 2, rejected.stderr)
+        self.assertIn("expected", rejected.stderr)
+
+    def test_distinct_unregistered_artifacts_fail_closed_for_issuance_and_score(self) -> None:
         from importlib import util as _util
         spec = _util.spec_from_file_location("cy", CLI)
         cy = _util.module_from_spec(spec)
@@ -2028,20 +2079,76 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         coverage = self._full_coverage()
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
-            evidence = project / "README.md"
-            evidence.write_text("One authentic artifact is not twenty surface verifications.\n", encoding="utf-8")
             for row in coverage["surfaces"]:
-                row["evidence_reviewed"] = [evidence.name]
-                row["evidence_receipts"] = [cy.issue_receipt(
-                    evidence.name,
+                evidence = project / f"irrelevant-{row['id']}.md"
+                evidence.write_text(f"Existing but unregistered artifact for {row['id']}.\n", encoding="utf-8")
+                reference = evidence.relative_to(project).as_posix()
+                row["evidence_reviewed"] = [reference]
+                row["evidence_receipts"] = [self._receipt(
+                    evidence,
                     project,
+                    "fixture verifier",
+                    "temporary test tree",
+                    "verified",
                     surface_id=row["id"],
-                    source_revision="fixture-revision",
-                    source_state="temporary test tree",
-                    command=f"verify {row['id']}",
-                    claim=f"The {row['id']} verification passes",
-                    result="verified",
                 )]
+                with self.assertRaisesRegex(cy.CliError, "not a registered verification artifact"):
+                    cy.issue_receipt(
+                        reference,
+                        project,
+                        surface_id=row["id"],
+                        source_revision="fixture-revision",
+                        source_state="temporary test tree",
+                        command=f"verify {row['id']}",
+                        claim=f"The {row['id']} verification passes",
+                        result="verified",
+                    )
+            findings_path = project / "findings.json"
+            coverage_path = project / "coverage.json"
+            findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
+            coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
+            result = self.run_cli(
+                "score", "--findings", str(findings_path), "--coverage", str(coverage_path),
+                "--no-history", "--format", "json",
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        score = json.loads(result.stdout)
+        self.assertLessEqual(score["score"], 84)
+        self.assertNotEqual(score["confidence"], "high")
+        self.assertIn(84, [cap["cap"] for cap in score["caps_applied"]])
+
+    def test_distinct_unregistered_delegation_artifacts_fail_closed(self) -> None:
+        from importlib import util as _util
+        spec = _util.spec_from_file_location("cy", CLI)
+        cy = _util.module_from_spec(spec)
+        spec.loader.exec_module(cy)
+        coverage = self._full_coverage()
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            for row in coverage["surfaces"]:
+                evidence = project / f"delegation-{row['id']}.md"
+                evidence.write_text(f"Existing but unregistered delegation artifact for {row['id']}.\n", encoding="utf-8")
+                reference = evidence.relative_to(project).as_posix()
+                row.update(
+                    status="NotApplicable",
+                    evidence_reviewed=[],
+                    not_applicable_reason="Responsibility is delegated.",
+                    delegation_receipts=[self._receipt(
+                        evidence, project, "fixture delegation", "temporary test tree",
+                        "delegated", surface_id=row["id"], claim="Delegation is documented",
+                    )],
+                )
+                with self.assertRaisesRegex(cy.CliError, "not a registered verification artifact"):
+                    cy.issue_receipt(
+                        reference,
+                        project,
+                        surface_id=row["id"],
+                        source_revision="fixture-revision",
+                        source_state="temporary test tree",
+                        command=f"delegate {row['id']}",
+                        claim="Delegation is documented",
+                        result="delegated",
+                    )
             findings_path = project / "findings.json"
             coverage_path = project / "coverage.json"
             findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
@@ -2066,11 +2173,10 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             project = Path(tmp)
             receipts = {}
             for row in coverage["surfaces"]:
-                evidence = project / f"{row['id']}.txt"
-                evidence.write_text(f"verified {row['id']}\n", encoding="utf-8")
-                row["evidence_reviewed"] = [evidence.name]
+                evidence = self._verification_artifact(project, row["id"])
+                row["evidence_reviewed"] = [evidence.relative_to(project).as_posix()]
                 receipts[row["id"]] = cy.issue_receipt(
-                    evidence.name,
+                    evidence.relative_to(project).as_posix(),
                     project,
                     surface_id=row["id"],
                     source_revision="fixture-revision",
@@ -2085,7 +2191,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             rebound["surface_id"] = "S02"
             rebound["receipt_sha256"] = cy._receipt_binding_digest(rebound)
             s02 = next(row for row in coverage["surfaces"] if row["id"] == "S02")
-            s02["evidence_reviewed"] = ["S01.txt"]
+            s02["evidence_reviewed"] = ["coverage/verification/S01/proof.json"]
             s02["evidence_receipts"] = [rebound]
             findings_path = project / "findings.json"
             coverage_path = project / "coverage.json"
@@ -2152,9 +2258,8 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             for row in coverage["surfaces"]:
-                evidence = project / f"{row['id']}.txt"
-                evidence.write_text(f"verified {row['id']}\n", encoding="utf-8")
-                row["evidence_reviewed"] = [evidence.name]
+                evidence = self._verification_artifact(project, row["id"])
+                row["evidence_reviewed"] = [evidence.relative_to(project).as_posix()]
                 row["evidence_receipts"] = [self._receipt(
                     evidence, project, "fixture verifier", "temporary test tree",
                     "non-empty artifact observed", surface_id=row["id"],

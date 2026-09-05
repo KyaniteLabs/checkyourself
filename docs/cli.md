@@ -206,20 +206,56 @@ Issue a receipt with the verifier command before adding it to one coverage row:
 
 ```bash
 python3 tools/checkyourself.py receipt \
-  --root . --reference tests/test_app.py --surface-id S11 \
+  --root . --reference coverage/verification/S11/pytest.json --surface-id S11 \
   --source-revision "<revision>" --source-state "<environment state>" \
   --command "pytest tests/test_app.py -q" \
   --claim "The focused quality gate passes" --result "1 passed" \
-  --out S11-receipt.json --format json
+  --out coverage/verification/S11/S11-receipt.json --format json
 ```
 
-Coverage receipts must be issued by this command, bind to the row's canonical
-surface ID, and include a `subject_digest` equal to the content hash of the
-verification artifact that surface actually consumed or produced, plus a
-second hash covering the binding fields. A caller-authored `origin`,
-`source_state`, and `result` is not proof. The same receipt or subject artifact
-cannot be reused for another surface or claim, even if the receipt binding is
-recomputed.
+Before issuing the receipt, `coverage/verification/S11/pytest.json` must be a
+JSON object with this common record shape:
+
+```json
+{
+  "kind": "surface-verification-record",
+  "surface_id": "S11",
+  "source_revision": "<revision>",
+  "command": "pytest tests/test_app.py -q",
+  "result": "1 passed"
+}
+```
+
+The default per-surface verification-artifact registry requires JSON records
+under `coverage/verification/<surface-id>/`, with the record's `surface_id`
+matching the receipt. Issuance rejects an unregistered path, a path registered
+to another surface, or a record with the wrong kind or missing required fields.
+Receipt verification repeats the same registry check, so hand-built or
+tampered receipts become `Unknown` rather than earning score credit. The
+registry covers all 20 coverage-matrix surfaces, including the 10 scored
+categories, and the same contract applies to `delegation_receipts` for
+`NotApplicable` rows.
+
+Projects with a different verifier output location may override individual
+contracts explicitly in `.checkyourself.json`:
+
+```json
+{
+  "verification_artifact_registry": {
+    "S11": {
+      "path_roots": ["artifacts/checkyourself/S11"],
+      "path_patterns": ["pytest-*.json"],
+      "expected_kind": "surface-verification-record"
+    }
+  }
+}
+```
+
+Overrides are validated and merged with the shipped defaults. A malformed
+registry is fail-closed for receipt issuance and verification. A caller-authored
+`origin`, `source_state`, and `result` is not proof. The same receipt or subject
+artifact cannot be reused for another surface or claim, even if the receipt
+binding is recomputed.
 
 In text mode, `coverage --emit` writes
 `CHECKYOURSELF_COVERAGE.generated.json` in the current directory. Use
