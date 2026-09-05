@@ -60,10 +60,13 @@ renumber this registry for one report.
 Every manual finding must include: the registry ID; severity and category; an
 exact file, command output, or owner-provided artifact with date/scope; the
 plain-English risk; and a status. A `Pass` needs reviewer assertions plus a
-verifier-captured, non-empty artifact receipt with a matching content hash and
-provenance. A `Finding` needs evidence of the gap and its harm, `Unknown` needs
-an explicit missing-evidence request, and `Not applicable` needs a concrete
-reason plus a verifier-captured delegation receipt. If no artifact can be
+receipt issued by `checkyourself receipt`, bound to one canonical surface,
+source revision, command, claim, and observed result. Its content hash and
+binding hash must verify, and a receipt cannot be reused across surfaces or
+claims. A caller-authored provenance string is not proof. A `Finding` needs
+evidence of the gap and its harm, `Unknown` needs an explicit missing-evidence
+request, and `Not applicable` needs a concrete reason plus the same verifier-
+captured receipt contract for delegated responsibility. If no artifact can be
 inspected, label the result as a low-confidence hand-computed estimate.
 
 ### Deterministic score contract

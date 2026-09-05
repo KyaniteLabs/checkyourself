@@ -31,6 +31,8 @@ SCAN_SCHEMA_ID = "checkyourself-scan/1"
 COVERAGE_SCHEMA_ID = "checkyourself-coverage/1"
 SCORE_SCHEMA_ID = "checkyourself-score/1"
 CAPABILITIES_SCHEMA_ID = "checkyourself-capabilities/1"
+RECEIPT_SCHEMA_ID = "checkyourself-receipt/1"
+RECEIPT_ISSUER = "checkyourself-verifier/1"
 MCP_PROTOCOL_VERSION = "2025-11-25"
 SUPPORTED_MCP_PROTOCOLS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
 PUBLIC_REPO_SCOPE_GUARDRAILS = [
@@ -244,6 +246,19 @@ SEVERITY_PENALTIES = {"P0": 1.0, "P1": 0.60, "P2": 0.25, "P3": 0.10}
 CRITICAL_CATEGORIES = {"C1", "C2", "C3"}
 HIGH_SCORE_GATE_CATEGORIES = {"C1", "C2", "C3", "C5", "C6", "C7"}
 VALID_COVERAGE_STATUSES = {"Pass", "Finding", "Unknown", "NotApplicable"}
+RECEIPT_BINDING_FIELDS = (
+    "reference",
+    "sha256",
+    "surface_id",
+    "source_revision",
+    "command",
+    "claim",
+    "origin",
+    "source_state",
+    "result",
+    "issuer",
+    "issued_at",
+)
 _NO_COVERAGE = object()
 EVIDENCE_PATH_RE = re.compile(
     r"(?<![A-Za-z0-9_])(?P<path>(?:[A-Za-z0-9_./~\\-]+/)?[A-Za-z0-9_.~-]+\.[A-Za-z0-9_-]+)(?::\d+(?::\d+)?)?"
@@ -1478,6 +1493,7 @@ def coverage_emit(project: str = "") -> dict:
                 "not_applicable_reason": "",
                 "delegation_receipts": [],
                 "claim_bound_evidence": [],
+                "claim": "",
                 "finding_ids": [],
             }
             for sid, surface, category in COVERAGE_SURFACES
@@ -1523,21 +1539,134 @@ def _resolve_evidence_reference(reference: Any, root: Optional[Path]) -> Tuple[O
     return resolved, ""
 
 
+def _receipt_binding_digest(receipt: dict) -> str:
+    """Hash the complete verifier-issued receipt binding, excluding its hash."""
+    binding = {field: receipt.get(field) for field in RECEIPT_BINDING_FIELDS}
+    encoded = json.dumps(
+        binding,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _receipt_text_fields(receipt: dict) -> List[str]:
+    return [
+        field
+        for field in (
+            "reference",
+            "surface_id",
+            "source_revision",
+            "command",
+            "claim",
+            "origin",
+            "source_state",
+            "result",
+            "issuer",
+            "issued_at",
+        )
+        if not isinstance(receipt.get(field), str) or not receipt.get(field, "").strip()
+    ]
+
+
+def issue_receipt(
+    reference: str,
+    root: Optional[Path],
+    *,
+    surface_id: str,
+    source_revision: str,
+    command: str,
+    claim: str,
+    result: str,
+    source_state: str,
+) -> dict:
+    """Issue one receipt whose content and claim binding are verifier-hashed."""
+    canonical_surfaces = {sid for sid, _surface, _category in COVERAGE_SURFACES}
+    if surface_id not in canonical_surfaces:
+        raise CliError(f"receipt surface_id must be one canonical coverage surface: {surface_id!r}")
+    resolved, reason = _resolve_evidence_reference(reference, root)
+    if resolved is None:
+        raise CliError(f"receipt reference is invalid: {reason}")
+    missing = {
+        "source_revision": source_revision,
+        "command": command,
+        "claim": claim,
+        "result": result,
+        "source_state": source_state,
+    }
+    missing_fields = [field for field, value in missing.items() if not str(value or "").strip()]
+    if missing_fields:
+        raise CliError("receipt fields must not be empty: " + ", ".join(missing_fields))
+    try:
+        relative = resolved.relative_to(_evidence_root(root)).as_posix()
+    except ValueError:
+        relative = str(resolved)
+    receipt = {
+        "reference": relative,
+        "sha256": hashlib.sha256(resolved.read_bytes()).hexdigest(),
+        "surface_id": surface_id,
+        "source_revision": str(source_revision).strip(),
+        "command": str(command).strip(),
+        "claim": str(claim).strip(),
+        "origin": "checkyourself verifier receipt command",
+        "source_state": str(source_state).strip(),
+        "result": str(result).strip(),
+        "issuer": RECEIPT_ISSUER,
+        "issued_at": now_iso(),
+    }
+    receipt["receipt_sha256"] = _receipt_binding_digest(receipt)
+    return receipt
+
+
 def _verify_receipts(
     receipts: Any,
     root: Optional[Path],
     *,
     require_provenance: bool = True,
+    expected_surface_id: Optional[str] = None,
+    expected_claim: Optional[str] = None,
+    used_receipt_ids: Optional[set[str]] = None,
 ) -> Tuple[List[str], List[str]]:
-    """Verify receipt artifacts without treating reviewer prose as proof."""
+    """Verify verifier-issued, surface-bound receipts without trusting prose."""
     if not isinstance(receipts, list) or not receipts:
         return [], ["no verifier-captured receipts supplied"]
     verified: List[str] = []
     errors: List[str] = []
+    seen_receipt_ids = used_receipt_ids if used_receipt_ids is not None else set()
     for index, receipt in enumerate(receipts):
         prefix = f"receipt {index}"
         if not isinstance(receipt, dict):
             errors.append(f"{prefix} is not an object")
+            continue
+        missing_fields = _receipt_text_fields(receipt)
+        if missing_fields:
+            errors.append(f"{prefix}: missing verifier binding fields: {', '.join(missing_fields)}")
+            continue
+        if receipt.get("issuer") != RECEIPT_ISSUER:
+            errors.append(f"{prefix}: receipt was not issued by {RECEIPT_ISSUER}")
+            continue
+        receipt_id = receipt.get("receipt_sha256")
+        if not isinstance(receipt_id, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", receipt_id):
+            errors.append(f"{prefix}: receipt_sha256 must be a 64-character hexadecimal binding hash")
+            continue
+        if receipt_id.lower() in seen_receipt_ids:
+            errors.append(f"{prefix}: receipt reuse is not allowed across surfaces or claims")
+            continue
+        if expected_surface_id is None:
+            errors.append(f"{prefix}: verifier expected a canonical surface binding")
+            continue
+        if receipt.get("surface_id") != expected_surface_id:
+            errors.append(
+                f"{prefix}: surface binding {receipt.get('surface_id')!r} does not match {expected_surface_id}"
+            )
+            continue
+        if expected_claim is not None and receipt.get("claim") != expected_claim:
+            errors.append(f"{prefix}: claim binding does not match the coverage claim")
+            continue
+        if receipt_id.lower() != _receipt_binding_digest(receipt).lower():
+            errors.append(f"{prefix}: receipt_sha256 does not cover its bound fields")
             continue
         reference = receipt.get("reference")
         resolved, reason = _resolve_evidence_reference(reference, root)
@@ -1566,10 +1695,25 @@ def _verify_receipts(
         except ValueError:
             relative = str(resolved)
         verified.append(relative)
+        seen_receipt_ids.add(receipt_id.lower())
     return sorted(set(verified)), errors
 
 
-def _coverage_evidence_state(item: dict, evidence_root: Optional[Path]) -> dict:
+def _coverage_surface_id(item: dict) -> Optional[str]:
+    by_name = {surface: sid for sid, surface, _category in COVERAGE_SURFACES}
+    raw_id = item.get("id")
+    if isinstance(raw_id, str) and raw_id in {sid for sid, _surface, _category in COVERAGE_SURFACES}:
+        return raw_id
+    raw_surface = item.get("surface")
+    return by_name.get(raw_surface) if isinstance(raw_surface, str) else None
+
+
+def _coverage_evidence_state(
+    item: dict,
+    evidence_root: Optional[Path],
+    *,
+    used_receipt_ids: Optional[set[str]] = None,
+) -> dict:
     status = item.get("status")
     result = {
         "status": status,
@@ -1577,10 +1721,19 @@ def _coverage_evidence_state(item: dict, evidence_root: Optional[Path]) -> dict:
         "verified_delegation": [],
         "warnings": [],
     }
+    surface_id = _coverage_surface_id(item)
+    claim_value = item.get("claim") if isinstance(item.get("claim"), str) else ""
+    claim = claim_value.strip() or None
     if status == "Pass":
         if not item.get("evidence_reviewed"):
             result["warnings"].append("Pass requires reviewer assertions in evidence_reviewed")
-        verified, errors = _verify_receipts(item.get("evidence_receipts"), evidence_root)
+        verified, errors = _verify_receipts(
+            item.get("evidence_receipts"),
+            evidence_root,
+            expected_surface_id=surface_id,
+            expected_claim=claim,
+            used_receipt_ids=used_receipt_ids,
+        )
         asserted: List[str] = []
         for assertion in item.get("evidence_reviewed") or []:
             resolved, _reason = _resolve_evidence_reference(assertion, evidence_root)
@@ -1598,7 +1751,13 @@ def _coverage_evidence_state(item: dict, evidence_root: Optional[Path]) -> dict:
     elif status == "NotApplicable":
         if not str(item.get("not_applicable_reason") or "").strip():
             result["warnings"].append("NotApplicable requires a concrete reason")
-        verified, errors = _verify_receipts(item.get("delegation_receipts"), evidence_root)
+        verified, errors = _verify_receipts(
+            item.get("delegation_receipts"),
+            evidence_root,
+            expected_surface_id=surface_id,
+            expected_claim=claim,
+            used_receipt_ids=used_receipt_ids,
+        )
         result["verified_delegation"] = verified
         result["warnings"].extend(f"delegation receipt: {error}" for error in errors)
         if not verified:
@@ -1734,6 +1893,7 @@ def coverage_check(data: Any, evidence_root: Optional[Path] = None) -> dict:
     valid_statuses = VALID_COVERAGE_STATUSES
     pathlike_re = re.compile(r"[\w./\\-]+\.\w+|:\d+")
     verification_gap = False
+    used_receipt_ids: set[str] = set()
 
     for sid, surface, _category in COVERAGE_SURFACES:
         item = by_id.get(sid) or by_name.get(surface)
@@ -1750,7 +1910,11 @@ def coverage_check(data: Any, evidence_root: Optional[Path] = None) -> dict:
             errors.append(f"{sid} is Pass but has no evidence_reviewed")
         if status == "Pass" and evidence and not any(pathlike_re.search(str(e)) for e in evidence):
             warnings.append(f"{sid} Pass evidence has no file or file:line reference; prefer concrete receipts")
-        evidence_state = _coverage_evidence_state(item, evidence_root)
+        evidence_state = _coverage_evidence_state(
+            item,
+            evidence_root,
+            used_receipt_ids=used_receipt_ids,
+        )
         for warning in evidence_state["warnings"]:
             warnings.append(f"{sid} {warning}")
         if status == "Unknown" and not missing:
@@ -1933,6 +2097,7 @@ def category_coverage(
     }
     status_rank = {"Finding": 4, "Unknown": 3, "Pass": 2, "NotApplicable": 1}
     present_ids = set()
+    used_receipt_ids: set[str] = set()
 
     for item in surfaces:
         if not isinstance(item, dict):
@@ -1948,7 +2113,11 @@ def category_coverage(
         state = category_state[category]
         status = item.get("status") or "Unknown"
         evidence = [str(x) for x in item.get("evidence_reviewed") or []]
-        evidence_state = _coverage_evidence_state(item, evidence_root)
+        evidence_state = _coverage_evidence_state(
+            item,
+            evidence_root,
+            used_receipt_ids=used_receipt_ids,
+        )
         if status == "Pass" and not evidence:
             status = "Unknown"
             state["missing_evidence"].append(f"{sid or 'surface'} marked Pass without evidence_reviewed")
@@ -2120,12 +2289,18 @@ def score_from_inputs(
         ):
             raise CliError(f"invalid scoring weight for {cid}: {weight!r}")
         category_findings = [f for f in unresolved if f.get("category") == cid]
-        registered_ids = {f.get("id") for f in findings}
+        unresolved_ids = {f.get("id") for f in unresolved}
         for coverage_finding in coverage_by_category[cid].get("coverage_findings", []):
             linked = set(coverage_finding.get("linked_finding_ids") or [])
-            if not linked.intersection(registered_ids):
+            live_linked = linked.intersection(unresolved_ids)
+            if not live_linked:
                 category_findings.append(coverage_finding)
                 coverage_findings_scored.append(coverage_finding["id"])
+                coverage_state = coverage_by_category[cid]
+                coverage_state["has_unknown"] = True
+                coverage_state["missing_evidence"].append(
+                    f"{coverage_finding['id']} has no linked unresolved finding; coverage Finding remains independently blocked"
+                )
         coverage_state = coverage_by_category[cid]
         penalties: List[dict] = []
         awarded = float(weight)
@@ -2500,6 +2675,7 @@ def describe_capabilities() -> dict:
         ("diagnostic", "Alias for scan; use it when docs or agents ask to run a diagnostic.", {"project": "path", "deep": "optional boolean"}, SCAN_SCHEMA_ID),
         ("coverage --emit", "Write the 20-surface coverage skeleton by default, or print JSON with --format json.", {"project": "optional string"}, COVERAGE_SCHEMA_ID),
         ("coverage --check", "Validate coverage completeness.", {"file": "coverage json path"}, "checkyourself-coverage-check/1"),
+        ("receipt", "Issue one verifier-hashed, surface-bound receipt for an existing artifact.", {"reference": "artifact path", "surface_id": "canonical surface ID", "source_revision": "revision", "command": "command recorded at issuance", "claim": "claim", "result": "observed result", "source_state": "source/environment state"}, RECEIPT_SCHEMA_ID),
         ("score", "Compute a deterministic Production Reality Score from findings and optional verifier-checked coverage; optionally record a completion claim without executing a challenge runner.", {"findings": "json path", "coverage": "optional json path", "claim": "optional accepted completion claim", "history": "optional path"}, SCORE_SCHEMA_ID),
         ("backlog", "Rank remediation backlog and return a highest-severity batch; safety analysis is not performed.", {"findings": "json path"}, "checkyourself-backlog/1"),
         ("next", "Return the next highest-severity unresolved approval batch; safety analysis is not performed.", {"findings": "json path"}, "checkyourself-next-batch/1"),
@@ -2569,6 +2745,7 @@ def schema_registry() -> Dict[str, str]:
         "learning-plan": "learning-plan.schema.json",
         "scan": "scan.schema.json",
         "coverage": "coverage.schema.json",
+        "receipt": "receipt.schema.json",
         "score": "score-result.schema.json",
         "backlog": "backlog.schema.json",
         "next": "next-batch.schema.json",
@@ -2825,12 +3002,31 @@ def validate_json_schema(
     return errors
 
 
+def semantic_receipt_errors(receipt: Any) -> List[str]:
+    """Validate receipt integrity that JSON shape alone cannot establish."""
+    if not isinstance(receipt, dict):
+        return ["receipt must be an object"]
+    errors: List[str] = []
+    missing = _receipt_text_fields(receipt)
+    if missing:
+        errors.append("receipt is missing verifier binding fields: " + ", ".join(missing))
+    if receipt.get("issuer") != RECEIPT_ISSUER:
+        errors.append(f"receipt issuer must be {RECEIPT_ISSUER}")
+    receipt_hash = receipt.get("receipt_sha256")
+    if isinstance(receipt_hash, str) and re.fullmatch(r"[0-9a-fA-F]{64}", receipt_hash):
+        if receipt_hash.lower() != _receipt_binding_digest(receipt).lower():
+            errors.append("receipt_sha256 does not cover the bound fields")
+    return errors
+
+
 def validate_artifact(kind: str, data: Any) -> dict:
     schema = load_schema(kind)
     schema_errors = validate_json_schema(data, schema)
     semantic_errors: List[str] = []
     if kind == "report" and not schema_errors:
         semantic_errors = semantic_report_errors(data)
+    elif kind == "receipt" and not schema_errors:
+        semantic_errors = semantic_receipt_errors(data)
     errors = schema_errors + semantic_errors
     return {
         "tool": TOOL_NAME,
@@ -3164,6 +3360,35 @@ def command_coverage(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_receipt(args: argparse.Namespace) -> int:
+    root = Path(args.root).resolve()
+    if not root.is_dir():
+        raise CliError(f"receipt evidence root not found: {root}")
+    receipt = issue_receipt(
+        args.reference,
+        root,
+        surface_id=args.surface_id,
+        source_revision=args.source_revision,
+        command=args.command,
+        claim=args.claim,
+        result=args.result,
+        source_state=args.source_state,
+    )
+    if args.out:
+        out = Path(args.out)
+        if not out.is_absolute():
+            out = Path.cwd() / out
+        safe_write_text(out, json.dumps(receipt, indent=2, allow_nan=False) + "\n")
+    if args.format == "json":
+        write_json(receipt)
+    else:
+        if args.out:
+            print(f"Wrote verifier receipt: {args.out}")
+        else:
+            print(json.dumps(receipt, indent=2, allow_nan=False))
+    return 0
+
+
 def command_score(args: argparse.Namespace) -> int:
     findings_data = load_json_arg(args.findings)
     if args.coverage is not None:
@@ -3362,6 +3587,25 @@ def mcp_tools() -> List[dict]:
             "outputSchema": {"type": "object", "description": "Coverage completeness result using schema checkyourself-coverage-check/1."},
         },
         {
+            "name": "receipt_issue",
+            "title": "Issue Verifier Receipt",
+            "description": description(
+                "Issue one verifier-hashed, surface-bound receipt for an existing artifact under the configured MCP scan root. "
+                "The result is returned inline and is not written to disk."
+            ),
+            "inputSchema": object_schema({
+                "reference": {"type": "string", "description": "In-root artifact path to hash."},
+                "surface_id": {"type": "string", "description": "Canonical coverage surface ID."},
+                "source_revision": {"type": "string", "description": "Source revision examined."},
+                "source_state": {"type": "string", "description": "Source/environment state examined."},
+                "command": {"type": "string", "description": "Command recorded at issuance."},
+                "claim": {"type": "string", "description": "One claim proved by the receipt."},
+                "result": {"type": "string", "description": "Observed result recorded at issuance."},
+            }, ["reference", "surface_id", "source_revision", "source_state", "command", "claim", "result"]),
+            "annotations": read_only_annotations("Issue Verifier Receipt"),
+            "outputSchema": {"type": "object", "description": "Verifier receipt using schema checkyourself-receipt/1."},
+        },
+        {
             "name": "score",
             "title": "Score Findings",
             "description": description(
@@ -3509,6 +3753,17 @@ def call_mcp_tool(name: str, arguments: dict) -> dict:
         return coverage_emit(str(arguments.get("project") or ""))
     if name == "coverage_check":
         return coverage_check(arguments.get("coverage") or {}, mcp_scan_root())
+    if name == "receipt_issue":
+        return issue_receipt(
+            str(arguments.get("reference") or ""),
+            mcp_scan_root(),
+            surface_id=str(arguments.get("surface_id") or ""),
+            source_revision=str(arguments.get("source_revision") or ""),
+            source_state=str(arguments.get("source_state") or ""),
+            command=str(arguments.get("command") or ""),
+            claim=str(arguments.get("claim") or ""),
+            result=str(arguments.get("result") or ""),
+        )
     if name == "score":
         findings = arguments.get("findings") or {}
         if "coverage" in arguments:
@@ -3698,6 +3953,19 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--format", choices=("text", "json"), default="text")
     p.set_defaults(func=command_coverage)
 
+    p = sub.add_parser("receipt", help="Issue one verifier-hashed, surface-bound evidence receipt.")
+    p.add_argument("--reference", required=True, help="In-root artifact path to hash.")
+    p.add_argument("--surface-id", required=True, choices=[sid for sid, _surface, _category in COVERAGE_SURFACES], help="Canonical coverage surface this receipt proves.")
+    p.add_argument("--source-revision", required=True, help="Source revision examined when the receipt was issued.")
+    p.add_argument("--source-state", required=True, help="Source/environment state examined when the receipt was issued.")
+    p.add_argument("--command", required=True, help="Command recorded at issuance.")
+    p.add_argument("--claim", required=True, help="One claim proved by this receipt.")
+    p.add_argument("--result", required=True, help="Observed result recorded at issuance.")
+    p.add_argument("--root", default=".", help="Evidence root containing the referenced artifact (default: current directory).")
+    p.add_argument("--out", help="Write the receipt JSON to this path.")
+    p.add_argument("--format", choices=("text", "json"), default="text")
+    p.set_defaults(func=command_receipt)
+
     p = sub.add_parser("score", help="Compute deterministic Production Reality Score.")
     p.add_argument("--findings", required=True, help="JSON file containing findings, scan output, or report.")
     p.add_argument("--coverage", help="Optional coverage JSON file.")
@@ -3756,7 +4024,7 @@ def legacy_scan_main(argv: Sequence[str]) -> int:
 
 def main(argv: Optional[List[str]] = None) -> int:
     raw = list(sys.argv[1:] if argv is None else argv)
-    commands = {"describe", "scan", "diagnostic", "schema", "coverage", "score", "backlog", "next", "diff", "validate", "init", "mcp"}
+    commands = {"describe", "scan", "diagnostic", "schema", "coverage", "receipt", "score", "backlog", "next", "diff", "validate", "init", "mcp"}
     try:
         if raw and raw[0] in {"-h", "--help"}:
             build_parser().print_help()
