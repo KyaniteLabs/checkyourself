@@ -2,10 +2,10 @@
 
 A CheckYourself diagnostic is not allowed to stop after a few obvious issues. The reviewer must sweep every relevant production surface below and mark each one as one of:
 
-- **Pass** — evidence shows the control exists and is credible.
+- **Pass** — reviewer assertions are backed by verifier-captured, non-empty artifact receipts with matching content hashes and provenance.
 - **Finding** — evidence shows a gap or risky implementation.
 - **Unknown** — the reviewer cannot tell from available evidence. Unknowns in critical areas should become questions or temporary risks.
-- **Not applicable** — the app genuinely does not use this surface.
+- **Not applicable** — the app genuinely does not use this surface and a verifier-captured delegation receipt shows where responsibility lives.
 
 The goal is maximum practical coverage, not fake certainty. If the AI cannot inspect enough of the project, it must say what it cannot verify.
 

@@ -19,7 +19,14 @@ It is not a moral judgment and not a guarantee. It is an evidence-based estimate
 | Frontend UX, accessibility, and client safety | 8 |
 | AI/RAG/agent governance, if applicable | 6 |
 
-If a category does not apply, mark it `NotApplicable` and provide an explicit `not_applicable_reason`. Its weight slot is not redistributed; the CLI awards the full weight for that category automatically when a valid reason is present. Do not adjust other category weights. Hand-scored totals must treat a NotApplicable category as if it received full credit for that weight, matching the behavior of `score --findings --coverage`.
+If a category does not apply, mark it `NotApplicable`, provide an explicit
+`not_applicable_reason`, and attach a verifier-captured `delegation_receipts`
+artifact showing where the responsibility lives. A reason alone is Unknown.
+Its weight slot is not redistributed; the CLI awards the full weight only when
+the delegation receipt is non-empty, in-root, hash-matched, and records
+provenance. Do not adjust other category weights. Hand-scored totals must treat
+a verified NotApplicable category as if it received full credit for that
+weight, matching `score --findings --coverage`.
 
 In prose, write **Not applicable**. In coverage JSON, use the exact enum
 `NotApplicable`; both spellings describe the same state.
@@ -47,7 +54,10 @@ The CLI computes the base score and caps deterministically:
    evidence)`.
 5. `final_score = min(base_score, minimum_cap)`.
 
-`NotApplicable` with a concrete reason retains the category's full weight. The
+`NotApplicable` with a concrete reason and verified delegation receipt retains
+the category's full weight. `accepted-risk`, `deferred`, and `suppressed` are
+workflow dispositions, not residual-risk closure; their finding penalties and
+caps remain until the exposure is fixed or proven not applicable. The
 executable reference is [`docs/cli.md#scoring`](../docs/cli.md#scoring), backed
 by [`tools/checkyourself.py`](../tools/checkyourself.py).
 

@@ -1,13 +1,13 @@
 ---
 name: checkyourself
-description: Production-readiness diagnostics and guided remediation for AI-built apps using CheckYourself. Use when the user asks for a pre-launch audit, production readiness score, evidence-backed findings register, safest first fix batch, learning plan, optional dashboard, or a read-only reality check before shipping a repository, app, website, agent, MCP server, or AI-generated project.
+description: Reviewable completion-evidence diagnostics and guided remediation for AI-built apps using CheckYourself. Use when the user asks for a pre-launch audit, bounded production score, evidence-backed findings register, safest first fix batch, learning plan, optional dashboard, or a read-only reality check before shipping a repository, app, website, agent, MCP server, or AI-generated project.
 ---
 
 # CheckYourself
 
 ## Overview
 
-Use CheckYourself to turn an AI assistant into a calm, evidence-first production reviewer. Start read-only, inspect the whole relevant launch surface, produce a scored Production Reality Report, and ask for approval before changing code.
+Use CheckYourself to turn an AI assistant into a calm, evidence-first completion reviewer. Start read-only, inspect the whole relevant launch surface, distinguish observed, inferred, and untested claims, produce a bounded Production Reality Report, and ask for approval before changing code. Local receipts and semantic checks improve reviewability; they do not prove production safety or execute an independent challenge runner.
 
 ## Workflow
 
@@ -33,7 +33,7 @@ python3 tools/checkyourself.py next --findings scan.json --format json
 python3 tools/checkyourself.py diff --old baseline.json --new current.json --ci   # regression gate
 ```
 
-   - Treat scanner findings as confirmed evidence. Do not invent a separate
+   - Treat scanner findings as deterministic local observations. Do not invent a separate
      scoring or backlog path. If Python is unavailable, sweep manually and say
      the score is hand-computed.
 
@@ -59,10 +59,12 @@ renumber this registry for one report.
 
 Every manual finding must include: the registry ID; severity and category; an
 exact file, command output, or owner-provided artifact with date/scope; the
-plain-English risk; and a status. A `Pass` needs direct evidence, a `Finding`
-needs evidence of the gap and its harm, `Unknown` needs an explicit missing-
-evidence request, and `Not applicable` needs a concrete reason. If no artifact
-can be inspected, label the result as a low-confidence hand-computed estimate.
+plain-English risk; and a status. A `Pass` needs reviewer assertions plus a
+verifier-captured, non-empty artifact receipt with a matching content hash and
+provenance. A `Finding` needs evidence of the gap and its harm, `Unknown` needs
+an explicit missing-evidence request, and `Not applicable` needs a concrete
+reason plus a verifier-captured delegation receipt. If no artifact can be
+inspected, label the result as a low-confidence hand-computed estimate.
 
 ### Deterministic score contract
 
@@ -71,8 +73,11 @@ The executable score is `final_score = min(base_score, minimum_cap)`, where
 and unresolved-finding penalties. The cap is the minimum of 100, 49 for an
 unresolved P0, 74 for an unresolved P1, 84 for a missing critical-evidence
 category, and 90 for a missing high-score launch-gate category. `NotApplicable`
-with a concrete reason retains its category weight. See the [CLI scoring
-contract](../../docs/cli.md#scoring) and [executable implementation](../../tools/checkyourself.py).
+with a concrete reason and verified delegation receipt retains its category
+weight. Accepted or deferred workflow dispositions do not close residual risk,
+and `--claim` records an accepted completion claim without running an
+independent challenge. See the [CLI scoring contract](../../docs/cli.md#scoring)
+and [executable implementation](../../tools/checkyourself.py).
 
 3. Sweep the production surface.
    Cover product purpose, frontend UX, accessibility, backend/API behavior, auth, data storage, migrations, secrets, runtime config, tests, CI/CD, dependencies, deploy/rollback, observability, performance, privacy, compliance, and AI/RAG/agent governance when relevant.
@@ -99,7 +104,7 @@ contract](../../docs/cli.md#scoring) and [executable implementation](../../tools
    For each backlog item include finding ID, severity, fix summary, impact or blast radius, why it matters, likely files/systems touched, verification, rollback idea, learning value, and status. Do not modify files until the user approves a specific fix or batch.
 
 6. After approval, run the guided fix loop.
-   Make the smallest reversible change, verify it, update finding status, rescore when evidence changes, and continue until findings are fixed, accepted as risk, deferred with a reason, suppressed with evidence, or proven not applicable.
+   Make the smallest reversible change, verify it, update finding status, and rescore when evidence changes. Fixed or verified not-applicable findings can close; accepted-risk, deferred, and suppressed dispositions remain visible residual risk with owner and trigger context.
 
 7. Create the learning plan.
    Tie lessons to the real findings and fixes. Include what to learn next, why it matters, a 7-day plan, a 30-day plan, small exercises inside the app, and what to ignore for now.

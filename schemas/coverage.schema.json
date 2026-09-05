@@ -30,8 +30,40 @@
             "enum": ["Pass", "Finding", "Unknown", "NotApplicable", null]
           },
           "evidence_reviewed": { "type": "array", "items": { "type": "string" } },
+          "evidence_receipts": {
+            "type": "array",
+            "description": "Verifier-captured receipts. Reviewer assertions in evidence_reviewed do not earn Pass credit without these.",
+            "items": {
+              "type": "object",
+              "required": ["reference", "sha256", "origin", "source_state", "result"],
+              "properties": {
+                "reference": { "type": "string" },
+                "sha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
+                "origin": { "type": "string", "minLength": 1 },
+                "source_state": { "type": "string", "minLength": 1 },
+                "result": { "type": "string", "minLength": 1 }
+              }
+            }
+          },
           "missing_evidence": { "type": "array", "items": { "type": "string" } },
-          "not_applicable_reason": { "type": "string" }
+          "not_applicable_reason": { "type": "string" },
+          "delegation_receipts": {
+            "type": "array",
+            "description": "Verifier-captured artifacts proving delegated responsibility for NotApplicable.",
+            "items": {
+              "type": "object",
+              "required": ["reference", "sha256", "origin", "source_state", "result"],
+              "properties": {
+                "reference": { "type": "string" },
+                "sha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
+                "origin": { "type": "string", "minLength": 1 },
+                "source_state": { "type": "string", "minLength": 1 },
+                "result": { "type": "string", "minLength": 1 }
+              }
+            }
+          },
+          "claim_bound_evidence": { "type": "array", "items": { "type": "string" } },
+          "finding_ids": { "type": "array", "items": { "type": "string" } }
         }
       }
     }

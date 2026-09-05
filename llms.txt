@@ -1,6 +1,6 @@
 # CheckYourself
 
-> Local-first production-readiness audit for AI-built apps: read-only checks, 0–100 score, stable rule IDs, guided fixes.
+> Local-first completion-evidence review for AI-built apps: verifier-checked local receipts, bounded 0–100 scoring, stable rule IDs, and guided fixes. It does not prove production safety or independently challenge the original completion claim.
 
 ## Getting Started
 
@@ -24,7 +24,7 @@ The `schemas/` directory contains JSON schema contracts for every structured out
 - [schemas/diff.schema.json](schemas/diff.schema.json) — diff output (added/resolved/regressed findings)
 - [schemas/score-result.schema.json](schemas/score-result.schema.json) — scored report with severity caps
 - [schemas/checkyourself-report.schema.json](schemas/checkyourself-report.schema.json) — full diagnostic report
-- [schemas/coverage.schema.json](schemas/coverage.schema.json) — coverage evidence structure
+- [schemas/coverage.schema.json](schemas/coverage.schema.json) — reviewer assertions, verifier-captured receipts, delegation evidence, and claim bindings
 - [schemas/backlog.schema.json](schemas/backlog.schema.json) — ranked fix backlog
 - [schemas/next-batch.schema.json](schemas/next-batch.schema.json) — next highest-severity batch; safety analysis remains with the diagnostic and reviewer
 

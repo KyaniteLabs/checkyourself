@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import datetime as _dt
 import fnmatch
+import hashlib
 import json
 import math
 import os
@@ -198,7 +199,10 @@ RISK_PATH_HINTS = [
 
 ENV_EXAMPLE_NAMES = {".env.example", ".env.sample", ".env.template", "env.example"}
 SEVERITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
-RESOLVED_STATUSES = {"fixed", "accepted-risk", "deferred", "not-applicable", "suppressed"}
+# Workflow disposition and residual risk are deliberately separate.  A ticket
+# can be deferred or accepted while the underlying exposure remains open.
+WORKFLOW_DISPOSITIONS = {"fixed", "accepted-risk", "deferred", "not-applicable", "suppressed"}
+RESOLVED_STATUSES = {"fixed", "not-applicable"}
 
 COVERAGE_SURFACES = [
     ("S01", "Product purpose, users, and harm model", "context"),
@@ -241,6 +245,9 @@ CRITICAL_CATEGORIES = {"C1", "C2", "C3"}
 HIGH_SCORE_GATE_CATEGORIES = {"C1", "C2", "C3", "C5", "C6", "C7"}
 VALID_COVERAGE_STATUSES = {"Pass", "Finding", "Unknown", "NotApplicable"}
 _NO_COVERAGE = object()
+EVIDENCE_PATH_RE = re.compile(
+    r"(?<![A-Za-z0-9_])(?P<path>(?:[A-Za-z0-9_./~\\-]+/)?[A-Za-z0-9_.~-]+\.[A-Za-z0-9_-]+)(?::\d+(?::\d+)?)?"
+)
 
 
 class CliError(Exception):
@@ -1466,12 +1473,137 @@ def coverage_emit(project: str = "") -> dict:
                 "category": category,
                 "status": None,
                 "evidence_reviewed": [],
+                "evidence_receipts": [],
                 "missing_evidence": [],
                 "not_applicable_reason": "",
+                "delegation_receipts": [],
+                "claim_bound_evidence": [],
+                "finding_ids": [],
             }
             for sid, surface, category in COVERAGE_SURFACES
         ],
     }
+
+
+def _evidence_reference(value: Any) -> Optional[str]:
+    """Extract a conservative relative file reference from an assertion."""
+    if not isinstance(value, str):
+        return None
+    matches = list(EVIDENCE_PATH_RE.finditer(value))
+    if not matches:
+        return None
+    return matches[-1].group("path").replace("\\", "/")
+
+
+def _evidence_root(root: Optional[Path]) -> Path:
+    return (root or Path.cwd()).resolve()
+
+
+def _resolve_evidence_reference(reference: Any, root: Optional[Path]) -> Tuple[Optional[Path], str]:
+    extracted = _evidence_reference(reference)
+    if not extracted:
+        return None, "reference does not contain a file path"
+    base = _evidence_root(root)
+    candidate = Path(extracted)
+    if not candidate.is_absolute():
+        candidate = base / candidate
+    try:
+        resolved = candidate.resolve()
+        resolved.relative_to(base)
+    except (OSError, RuntimeError, ValueError):
+        return None, f"reference is outside evidence root {base}"
+    if not resolved.is_file():
+        return None, "referenced artifact does not exist"
+    try:
+        content = resolved.read_bytes()
+    except (OSError, UnicodeError) as exc:
+        return None, f"referenced artifact could not be read: {exc}"
+    if not content:
+        return None, "referenced artifact is empty"
+    return resolved, ""
+
+
+def _verify_receipts(
+    receipts: Any,
+    root: Optional[Path],
+    *,
+    require_provenance: bool = True,
+) -> Tuple[List[str], List[str]]:
+    """Verify receipt artifacts without treating reviewer prose as proof."""
+    if not isinstance(receipts, list) or not receipts:
+        return [], ["no verifier-captured receipts supplied"]
+    verified: List[str] = []
+    errors: List[str] = []
+    for index, receipt in enumerate(receipts):
+        prefix = f"receipt {index}"
+        if not isinstance(receipt, dict):
+            errors.append(f"{prefix} is not an object")
+            continue
+        reference = receipt.get("reference")
+        resolved, reason = _resolve_evidence_reference(reference, root)
+        if resolved is None:
+            errors.append(f"{prefix}: {reason}")
+            continue
+        expected_hash = receipt.get("sha256")
+        if not isinstance(expected_hash, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", expected_hash):
+            errors.append(f"{prefix}: sha256 must be a 64-character hexadecimal content hash")
+            continue
+        try:
+            actual_hash = hashlib.sha256(resolved.read_bytes()).hexdigest()
+        except OSError as exc:
+            errors.append(f"{prefix}: could not hash referenced artifact: {exc}")
+            continue
+        if actual_hash.lower() != expected_hash.lower():
+            errors.append(f"{prefix}: content hash does not match referenced artifact")
+            continue
+        if require_provenance:
+            missing = [field for field in ("origin", "source_state", "result") if not str(receipt.get(field) or "").strip()]
+            if missing:
+                errors.append(f"{prefix}: missing provenance fields: {', '.join(missing)}")
+                continue
+        try:
+            relative = resolved.relative_to(_evidence_root(root)).as_posix()
+        except ValueError:
+            relative = str(resolved)
+        verified.append(relative)
+    return sorted(set(verified)), errors
+
+
+def _coverage_evidence_state(item: dict, evidence_root: Optional[Path]) -> dict:
+    status = item.get("status")
+    result = {
+        "status": status,
+        "verified_evidence": [],
+        "verified_delegation": [],
+        "warnings": [],
+    }
+    if status == "Pass":
+        if not item.get("evidence_reviewed"):
+            result["warnings"].append("Pass requires reviewer assertions in evidence_reviewed")
+        verified, errors = _verify_receipts(item.get("evidence_receipts"), evidence_root)
+        asserted: List[str] = []
+        for assertion in item.get("evidence_reviewed") or []:
+            resolved, _reason = _resolve_evidence_reference(assertion, evidence_root)
+            if resolved is not None:
+                try:
+                    asserted.append(resolved.relative_to(_evidence_root(evidence_root)).as_posix())
+                except ValueError:
+                    asserted.append(str(resolved))
+        result["verified_evidence"] = sorted(set(verified).intersection(asserted))
+        result["warnings"].extend(f"evidence receipt: {error}" for error in errors)
+        if verified and not result["verified_evidence"]:
+            result["warnings"].append("verifier receipt is not bound to an evidence_reviewed artifact reference")
+        if not result["verified_evidence"]:
+            result["status"] = "Unknown"
+    elif status == "NotApplicable":
+        if not str(item.get("not_applicable_reason") or "").strip():
+            result["warnings"].append("NotApplicable requires a concrete reason")
+        verified, errors = _verify_receipts(item.get("delegation_receipts"), evidence_root)
+        result["verified_delegation"] = verified
+        result["warnings"].extend(f"delegation receipt: {error}" for error in errors)
+        if not verified:
+            result["status"] = "Unknown"
+    return result
 
 
 def _coverage_surfaces(data: Any) -> Tuple[List[Any], List[str]]:
@@ -1563,18 +1695,24 @@ def _coverage_validation_errors(data: Any) -> List[str]:
         elif not isinstance(item.get("status"), str) or item.get("status") not in VALID_COVERAGE_STATUSES:
             errors.append(f"{prefix} has invalid status: {item.get('status')!r}")
 
-        for field in ("evidence_reviewed", "missing_evidence"):
+        for field in ("evidence_reviewed", "missing_evidence", "claim_bound_evidence", "finding_ids"):
             if field in item:
                 value = item.get(field)
                 if not isinstance(value, list) or not all(isinstance(entry, str) for entry in value):
                     errors.append(f"{prefix} has an invalid {field} array")
         if "not_applicable_reason" in item and not isinstance(item.get("not_applicable_reason"), str):
             errors.append(f"{prefix} has an invalid not_applicable_reason")
+        for field in ("evidence_receipts", "delegation_receipts"):
+            if field in item and (
+                not isinstance(item.get(field), list)
+                or not all(isinstance(entry, dict) for entry in item.get(field))
+            ):
+                errors.append(f"{prefix} has an invalid {field} array")
 
     return list(dict.fromkeys(errors))
 
 
-def coverage_check(data: Any) -> dict:
+def coverage_check(data: Any, evidence_root: Optional[Path] = None) -> dict:
     errors = _coverage_validation_errors(data)
     warnings: List[str] = []
     surfaces, shape_errors = _coverage_surfaces(data)
@@ -1595,6 +1733,7 @@ def coverage_check(data: Any) -> dict:
     by_name = {str(item.get("surface")): item for item in surfaces if isinstance(item, dict) and item.get("surface")}
     valid_statuses = VALID_COVERAGE_STATUSES
     pathlike_re = re.compile(r"[\w./\\-]+\.\w+|:\d+")
+    verification_gap = False
 
     for sid, surface, _category in COVERAGE_SURFACES:
         item = by_id.get(sid) or by_name.get(surface)
@@ -1611,15 +1750,21 @@ def coverage_check(data: Any) -> dict:
             errors.append(f"{sid} is Pass but has no evidence_reviewed")
         if status == "Pass" and evidence and not any(pathlike_re.search(str(e)) for e in evidence):
             warnings.append(f"{sid} Pass evidence has no file or file:line reference; prefer concrete receipts")
+        evidence_state = _coverage_evidence_state(item, evidence_root)
+        for warning in evidence_state["warnings"]:
+            warnings.append(f"{sid} {warning}")
         if status == "Unknown" and not missing:
             warnings.append(f"{sid} is Unknown but missing_evidence is empty")
         if status == "NotApplicable" and not item.get("not_applicable_reason"):
             errors.append(f"{sid} is NotApplicable but has no not_applicable_reason")
+        if status in {"Pass", "NotApplicable"} and evidence_state["status"] == "Unknown":
+            verification_gap = True
+            warnings.append(f"{sid} is treated as Unknown until its verifier-captured evidence resolves")
 
     return {
         "tool": TOOL_NAME,
         "schema": "checkyourself-coverage-check/1",
-        "complete": not errors,
+        "complete": not errors and not verification_gap,
         "surface_count": len(surfaces),
         "required_surface_count": len(COVERAGE_SURFACES),
         "errors": errors,
@@ -1737,20 +1882,28 @@ def default_fix_for(title: str, category: str) -> str:
     return f"Make the smallest reversible fix for: {title}"
 
 
-def category_coverage(coverage_data: Optional[dict]) -> Tuple[Dict[str, dict], bool]:
+def category_coverage(
+    coverage_data: Optional[dict], evidence_root: Optional[Path] = None
+) -> Tuple[Dict[str, dict], bool]:
     """Fold surface-level coverage into per-category scoring state.
 
     Anti-gaming rules: a surface omitted from the artifact counts as Unknown
     (never as full credit), Pass without evidence downgrades to Unknown, and
     NotApplicable without a reason downgrades to Unknown. Omitting or
     hand-waving a surface must never score better than honestly reporting it.
+    Evidence gaps are tracked independently from Finding rows so a Finding
+    cannot erase a critical Unknown.
     """
     category_state: Dict[str, dict] = {
         cid: {
             "status": "MissingCoverage",
             "evidence_reviewed": [],
+            "verified_evidence": [],
+            "claim_bound_evidence": [],
             "missing_evidence": ["coverage artifact was not supplied"],
             "surfaces": [],
+            "has_unknown": True,
+            "coverage_findings": [],
         }
         for cid in SCORE_CATEGORIES
     }
@@ -1766,7 +1919,16 @@ def category_coverage(coverage_data: Optional[dict]) -> Tuple[Dict[str, dict], b
     scored_surface_ids = {sid for sid, _surface, category in COVERAGE_SURFACES if category in SCORE_CATEGORIES}
 
     category_state = {
-        cid: {"status": None, "evidence_reviewed": [], "missing_evidence": [], "surfaces": []}
+        cid: {
+            "status": None,
+            "evidence_reviewed": [],
+            "verified_evidence": [],
+            "claim_bound_evidence": [],
+            "missing_evidence": [],
+            "surfaces": [],
+            "has_unknown": False,
+            "coverage_findings": [],
+        }
         for cid in SCORE_CATEGORIES
     }
     status_rank = {"Finding": 4, "Unknown": 3, "Pass": 2, "NotApplicable": 1}
@@ -1786,21 +1948,43 @@ def category_coverage(coverage_data: Optional[dict]) -> Tuple[Dict[str, dict], b
         state = category_state[category]
         status = item.get("status") or "Unknown"
         evidence = [str(x) for x in item.get("evidence_reviewed") or []]
+        evidence_state = _coverage_evidence_state(item, evidence_root)
         if status == "Pass" and not evidence:
             status = "Unknown"
             state["missing_evidence"].append(f"{sid or 'surface'} marked Pass without evidence_reviewed")
         if status == "NotApplicable" and not str(item.get("not_applicable_reason") or "").strip():
             status = "Unknown"
             state["missing_evidence"].append(f"{sid or 'surface'} marked NotApplicable without a reason")
+        if evidence_state["status"] == "Unknown" and status in {"Pass", "NotApplicable"}:
+            status = "Unknown"
+            state["missing_evidence"].extend(
+                f"{sid or 'surface'}: {warning}" for warning in evidence_state["warnings"]
+            )
+        if status == "Unknown":
+            state["has_unknown"] = True
+        if status == "Finding":
+            state["coverage_findings"].append({
+                "id": f"CY-COVERAGE-{sid or category}",
+                "finding_id": f"CY-COVERAGE-{sid or category}",
+                "severity": "P2",
+                "category": category,
+                "finding": f"Coverage finding requires review: {sid or category}",
+                "plain_english_risk": "The coverage reviewer recorded a gap on this production surface.",
+                "status": "open",
+                "linked_finding_ids": [str(x) for x in item.get("finding_ids") or []],
+            })
         if state["status"] is None or status_rank.get(status, 3) > status_rank.get(state["status"], 0):
             state["status"] = status
         state["surfaces"].append(sid or str(item.get("surface") or category))
         state["evidence_reviewed"].extend(evidence)
+        state["verified_evidence"].extend(evidence_state["verified_evidence"])
+        state["claim_bound_evidence"].extend(str(x) for x in item.get("claim_bound_evidence") or [])
         state["missing_evidence"].extend(str(x) for x in item.get("missing_evidence") or [])
 
     for sid in sorted(scored_surface_ids - present_ids):
         category = id_to_category[sid]
         state = category_state[category]
+        state["has_unknown"] = True
         state["missing_evidence"].append(f"surface {sid} missing from coverage artifact")
         if state["status"] is None or status_rank.get("Unknown", 3) > status_rank.get(state["status"], 0):
             state["status"] = "Unknown"
@@ -1808,8 +1992,11 @@ def category_coverage(coverage_data: Optional[dict]) -> Tuple[Dict[str, dict], b
     for state in category_state.values():
         if state["status"] is None:
             state["status"] = "MissingCoverage"
+            state["has_unknown"] = True
             state["missing_evidence"].append("no coverage entries supplied for this category")
         state["evidence_reviewed"] = sorted(set(state["evidence_reviewed"]))
+        state["verified_evidence"] = sorted(set(state["verified_evidence"]))
+        state["claim_bound_evidence"] = sorted(set(state["claim_bound_evidence"]))
         state["missing_evidence"] = sorted(set(state["missing_evidence"]))
 
     required_ids = {sid for sid, _surface, _category in COVERAGE_SURFACES}
@@ -1821,7 +2008,7 @@ def missing_manual_evidence(coverage_by_category: Dict[str, dict]) -> List[dict]
     needed: List[dict] = []
     for cid, (name, _weight) in SCORE_CATEGORIES.items():
         state = coverage_by_category[cid]
-        if state["status"] in {"MissingCoverage", "Unknown"}:
+        if state.get("has_unknown") or state["status"] == "MissingCoverage":
             needed.append({
                 "category": cid,
                 "surface": name,
@@ -1891,7 +2078,12 @@ def inferred_coverage_from_scan(scan_data: dict, findings: List[dict]) -> Dict[s
     return category_state
 
 
-def score_from_inputs(findings_data: Any, coverage_data: Any = _NO_COVERAGE) -> dict:
+def score_from_inputs(
+    findings_data: Any,
+    coverage_data: Any = _NO_COVERAGE,
+    evidence_root: Optional[Path] = None,
+    claim: Optional[str] = None,
+) -> dict:
     require_findings_artifact(findings_data)
     findings = normalize_findings(findings_data)
     counts = {sev: 0 for sev in ("P0", "P1", "P2", "P3")}
@@ -1906,7 +2098,7 @@ def score_from_inputs(findings_data: Any, coverage_data: Any = _NO_COVERAGE) -> 
                 "invalid coverage artifact: " + "; ".join(coverage_errors)
                 + "; fill coverage.json with evidence, then re-run score"
             )
-        coverage_by_category, coverage_complete = category_coverage(coverage_data)
+        coverage_by_category, coverage_complete = category_coverage(coverage_data, evidence_root)
         score_mode = "coverage-backed"
     elif isinstance(findings_data, dict) and findings_data.get("schema") == SCAN_SCHEMA_ID:
         coverage_by_category = inferred_coverage_from_scan(findings_data, findings)
@@ -1917,6 +2109,7 @@ def score_from_inputs(findings_data: Any, coverage_data: Any = _NO_COVERAGE) -> 
         score_mode = "finding-only-estimate"
     per_category: List[dict] = []
     raw_total = 0.0
+    coverage_findings_scored: List[str] = []
 
     for cid, (name, weight) in SCORE_CATEGORIES.items():
         if (
@@ -1927,12 +2120,18 @@ def score_from_inputs(findings_data: Any, coverage_data: Any = _NO_COVERAGE) -> 
         ):
             raise CliError(f"invalid scoring weight for {cid}: {weight!r}")
         category_findings = [f for f in unresolved if f.get("category") == cid]
+        registered_ids = {f.get("id") for f in findings}
+        for coverage_finding in coverage_by_category[cid].get("coverage_findings", []):
+            linked = set(coverage_finding.get("linked_finding_ids") or [])
+            if not linked.intersection(registered_ids):
+                category_findings.append(coverage_finding)
+                coverage_findings_scored.append(coverage_finding["id"])
         coverage_state = coverage_by_category[cid]
         penalties: List[dict] = []
         awarded = float(weight)
 
         status = coverage_state["status"]
-        if status == "Unknown":
+        if coverage_state.get("has_unknown") or status == "Unknown":
             missing = coverage_state["missing_evidence"] or ["evidence missing for this category"]
             if cid in CRITICAL_CATEGORIES:
                 awarded = 0.0
@@ -1970,6 +2169,8 @@ def score_from_inputs(findings_data: Any, coverage_data: Any = _NO_COVERAGE) -> 
             "weight": weight,
             "coverage_status": status,
             "evidence_reviewed": coverage_state["evidence_reviewed"],
+            "verified_evidence": coverage_state.get("verified_evidence", []),
+            "claim_bound_evidence": coverage_state.get("claim_bound_evidence", []),
             "missing_evidence": coverage_state["missing_evidence"],
             "penalties": penalties,
             "awarded": round(awarded, 2),
@@ -1990,9 +2191,9 @@ def score_from_inputs(findings_data: Any, coverage_data: Any = _NO_COVERAGE) -> 
     # Evidence caps apply in every score mode: an estimate without coverage
     # evidence must never report a launch-ready number.
     for cid, state in coverage_by_category.items():
-        if state["status"] in {"Unknown", "MissingCoverage"} and cid in CRITICAL_CATEGORIES:
+        if (state.get("has_unknown") or state["status"] == "MissingCoverage") and cid in CRITICAL_CATEGORIES:
             critical_gap = True
-        if state["status"] in {"Unknown", "MissingCoverage"} and cid in HIGH_SCORE_GATE_CATEGORIES:
+        if (state.get("has_unknown") or state["status"] == "MissingCoverage") and cid in HIGH_SCORE_GATE_CATEGORIES:
             high_score_gap = True
     if critical_gap:
         cap_value = min(cap_value, 84)
@@ -2003,7 +2204,7 @@ def score_from_inputs(findings_data: Any, coverage_data: Any = _NO_COVERAGE) -> 
 
     score = min(raw_score, cap_value)
     any_gap = any(
-        state["status"] in {"Unknown", "MissingCoverage"}
+        state.get("has_unknown") or state["status"] in {"Unknown", "MissingCoverage"}
         for state in coverage_by_category.values()
     )
     if score_mode != "coverage-backed":
@@ -2015,7 +2216,7 @@ def score_from_inputs(findings_data: Any, coverage_data: Any = _NO_COVERAGE) -> 
     else:
         confidence = "low"
 
-    return {
+    result = {
         "tool": TOOL_NAME,
         "schema": SCORE_SCHEMA_ID,
         "generated_at": now_iso(),
@@ -2026,10 +2227,36 @@ def score_from_inputs(findings_data: Any, coverage_data: Any = _NO_COVERAGE) -> 
         "counts": counts,
         "caps_applied": caps,
         "per_category": per_category,
-        "findings_scored": [f["id"] for f in unresolved],
+        "findings_scored": sorted(set([f["id"] for f in unresolved] + coverage_findings_scored)),
         "coverage_complete": coverage_complete,
         "manual_evidence_needed": missing_manual_evidence(coverage_by_category),
+        "workflow_dispositions": [
+            {
+                "finding_id": finding["id"],
+                "status": finding["status"],
+                "residual_risk": "closed" if finding["status"] in RESOLVED_STATUSES else "open",
+            }
+            for finding in findings
+            if finding.get("status") in WORKFLOW_DISPOSITIONS
+        ],
     }
+    if claim is not None:
+        claim_text = str(claim).strip()
+        if not claim_text:
+            raise CliError("--claim must not be empty")
+        result["claim"] = claim_text
+        for category in result["per_category"]:
+            bound = set(category.get("claim_bound_evidence") or [])
+            all_evidence = sorted(set(category.get("evidence_reviewed") or []) | set(category.get("verified_evidence") or []))
+            category["claim_binding"] = [
+                {
+                    "evidence": evidence,
+                    "claim_bound": evidence in bound,
+                    "basis": "explicit coverage claim_bound_evidence entry" if evidence in bound else "no explicit claim binding; challenge runner not executed",
+                }
+                for evidence in all_evidence
+            ]
+    return result
 
 
 def backlog_from_findings(findings_data: Any) -> dict:
@@ -2273,7 +2500,7 @@ def describe_capabilities() -> dict:
         ("diagnostic", "Alias for scan; use it when docs or agents ask to run a diagnostic.", {"project": "path", "deep": "optional boolean"}, SCAN_SCHEMA_ID),
         ("coverage --emit", "Write the 20-surface coverage skeleton by default, or print JSON with --format json.", {"project": "optional string"}, COVERAGE_SCHEMA_ID),
         ("coverage --check", "Validate coverage completeness.", {"file": "coverage json path"}, "checkyourself-coverage-check/1"),
-        ("score", "Compute a deterministic Production Reality Score from findings and optional coverage, with score history.", {"findings": "json path", "coverage": "optional json path", "history": "optional path"}, SCORE_SCHEMA_ID),
+        ("score", "Compute a deterministic Production Reality Score from findings and optional verifier-checked coverage; optionally record a completion claim without executing a challenge runner.", {"findings": "json path", "coverage": "optional json path", "claim": "optional accepted completion claim", "history": "optional path"}, SCORE_SCHEMA_ID),
         ("backlog", "Rank remediation backlog and return a highest-severity batch; safety analysis is not performed.", {"findings": "json path"}, "checkyourself-backlog/1"),
         ("next", "Return the next highest-severity unresolved approval batch; safety analysis is not performed.", {"findings": "json path"}, "checkyourself-next-batch/1"),
         ("diff", "Compare two findings artifacts, report identity-aware transitions, and gate newly open, reopened, or escalated P0/P1 findings.", {"old": "json path", "new": "json path"}, "checkyourself-diff/1"),
@@ -2600,14 +2827,85 @@ def validate_json_schema(
 
 def validate_artifact(kind: str, data: Any) -> dict:
     schema = load_schema(kind)
-    errors = validate_json_schema(data, schema)
+    schema_errors = validate_json_schema(data, schema)
+    semantic_errors: List[str] = []
+    if kind == "report" and not schema_errors:
+        semantic_errors = semantic_report_errors(data)
+    errors = schema_errors + semantic_errors
     return {
         "tool": TOOL_NAME,
         "schema": "checkyourself-validation/1",
         "kind": kind,
+        "schema_valid": not schema_errors,
+        "semantic_valid": not semantic_errors,
         "valid": not errors,
         "errors": errors,
+        "semantic_errors": semantic_errors,
     }
+
+
+def _report_cap_values(caps: Any) -> set[int]:
+    values: set[int] = set()
+    if not isinstance(caps, list):
+        return values
+    for cap in caps:
+        if isinstance(cap, dict) and isinstance(cap.get("cap"), (int, float)) and not isinstance(cap.get("cap"), bool):
+            values.add(int(cap["cap"]))
+        elif isinstance(cap, str):
+            for value in re.findall(r"\b(49|74|84|90)\b", cap):
+                values.add(int(value))
+    return values
+
+
+def semantic_report_errors(report: dict) -> List[str]:
+    """Check report conclusions against their own findings and evidence state."""
+    errors: List[str] = []
+    findings = normalize_findings({"findings": report.get("findings", [])})
+    unresolved = [finding for finding in findings if finding.get("status") not in RESOLVED_STATUSES]
+    score = report.get("score")
+    caps = _report_cap_values(report.get("score_caps"))
+    if isinstance(score, int) and not isinstance(score, bool):
+        if any(finding.get("severity") == "P0" for finding in unresolved) and score > 49:
+            errors.append("report score exceeds the unresolved P0 cap of 49")
+        if any(finding.get("severity") == "P1" for finding in unresolved) and score > 74:
+            errors.append("report score exceeds the unresolved P1 cap of 74")
+    if any(finding.get("severity") == "P0" for finding in unresolved) and 49 not in caps:
+        errors.append("report score_caps does not retain the unresolved P0 cap")
+    if any(finding.get("severity") == "P1" for finding in unresolved) and 74 not in caps:
+        errors.append("report score_caps does not retain the unresolved P1 cap")
+
+    coverage = report.get("coverage") if isinstance(report.get("coverage"), list) else []
+    coverage_unknown = False
+    for index, row in enumerate(coverage):
+        if not isinstance(row, dict):
+            continue
+        missing = row.get("missing_evidence") or []
+        if row.get("checked") is False or missing:
+            coverage_unknown = True
+        if row.get("checked") is True and not row.get("evidence_reviewed"):
+            coverage_unknown = True
+    if report.get("confidence") == "high" and (coverage_unknown or len(coverage) < len(SCORE_CATEGORIES)):
+        errors.append("high confidence requires complete, checked report coverage with no missing evidence")
+
+    breakdown = report.get("score_breakdown")
+    if isinstance(breakdown, list) and breakdown and all(
+        isinstance(item, dict) and isinstance(item.get("awarded"), (int, float))
+        for item in breakdown
+    ):
+        ids = {str(item.get("id")) for item in breakdown if item.get("id")}
+        if ids >= set(SCORE_CATEGORIES):
+            recomputed = round(sum(float(item["awarded"]) for item in breakdown))
+            cap = min(caps) if caps else 100
+            expected = min(recomputed, cap)
+            if isinstance(score, int) and score != expected:
+                errors.append(f"report score {score} does not match score_breakdown/caps recomputation {expected}")
+
+    backlog = report.get("remediation_backlog") if isinstance(report.get("remediation_backlog"), list) else []
+    backlog_ids = {str(item.get("finding_id")) for item in backlog if isinstance(item, dict) and item.get("finding_id")}
+    missing_backlog = sorted(str(finding["id"]) for finding in findings if finding["id"] not in backlog_ids)
+    if missing_backlog:
+        errors.append("report backlog is missing findings: " + ", ".join(missing_backlog))
+    return errors
 
 
 def parse_report(body: str) -> dict:
@@ -2621,6 +2919,9 @@ def parse_report(body: str) -> dict:
     errors = validate_json_schema(report, load_schema("report"))
     if errors:
         raise CliError("invalid report artifact: " + "; ".join(errors))
+    semantic_errors = semantic_report_errors(report)
+    if semantic_errors:
+        raise CliError("invalid report semantics: " + "; ".join(semantic_errors))
     return report
 
 
@@ -2631,6 +2932,9 @@ def regenerate_report(report: dict) -> str:
     errors = validate_json_schema(report, load_schema("report"))
     if errors:
         raise CliError("invalid report artifact: " + "; ".join(errors))
+    semantic_errors = semantic_report_errors(report)
+    if semantic_errors:
+        raise CliError("invalid report semantics: " + "; ".join(semantic_errors))
     try:
         return json.dumps(report, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
     except (TypeError, ValueError) as exc:
@@ -2835,7 +3139,8 @@ def command_schema(args: argparse.Namespace) -> int:
 def command_coverage(args: argparse.Namespace) -> int:
     if args.check:
         data = load_json_arg(args.check)
-        result = coverage_check(data)
+        evidence_root = Path.cwd() if args.check == "-" else Path(args.check).resolve().parent
+        result = coverage_check(data, evidence_root)
         if args.format == "json":
             write_json(result)
         else:
@@ -2862,9 +3167,15 @@ def command_coverage(args: argparse.Namespace) -> int:
 def command_score(args: argparse.Namespace) -> int:
     findings_data = load_json_arg(args.findings)
     if args.coverage is not None:
-        result = score_from_inputs(findings_data, load_json_arg(args.coverage))
+        coverage_root = Path.cwd() if args.coverage == "-" else Path(args.coverage).resolve().parent
+        result = score_from_inputs(
+            findings_data,
+            load_json_arg(args.coverage),
+            evidence_root=coverage_root,
+            claim=args.claim,
+        )
     else:
-        result = score_from_inputs(findings_data)
+        result = score_from_inputs(findings_data, claim=args.claim)
     history_path = resolve_history_path(args.findings, args.history)
     append_score_history(history_path, result, args.note)
     if args.format == "json":
@@ -3064,6 +3375,10 @@ def mcp_tools() -> List[dict]:
                     "type": ["object", "null"],
                     "description": "Optional filled coverage object. Provide this for coverage-backed scoring; omit for scan-derived or finding-only estimates.",
                 },
+                "claim": {
+                    "type": "string",
+                    "description": "Optional accepted completion claim. This records the claim but does not execute an independent challenge runner.",
+                },
             }, ["findings"]),
             "annotations": read_only_annotations("Score Findings"),
             "outputSchema": {"type": "object", "description": "Score result using schema checkyourself-score/1."},
@@ -3193,12 +3508,17 @@ def call_mcp_tool(name: str, arguments: dict) -> dict:
     if name == "coverage_emit":
         return coverage_emit(str(arguments.get("project") or ""))
     if name == "coverage_check":
-        return coverage_check(arguments.get("coverage") or {})
+        return coverage_check(arguments.get("coverage") or {}, mcp_scan_root())
     if name == "score":
         findings = arguments.get("findings") or {}
         if "coverage" in arguments:
-            return score_from_inputs(findings, arguments["coverage"])
-        return score_from_inputs(findings)
+            return score_from_inputs(
+                findings,
+                arguments["coverage"],
+                evidence_root=mcp_scan_root(),
+                claim=arguments.get("claim"),
+            )
+        return score_from_inputs(findings, claim=arguments.get("claim"))
     if name == "backlog":
         return backlog_from_findings(arguments.get("findings") or {})
     if name == "next":
@@ -3386,6 +3706,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-history", dest="history", action="store_const", const="none",
                    help="Do not append score history.")
     p.add_argument("--note", default="", help="Optional note stored with the score history entry.")
+    p.add_argument("--claim", help="Optional accepted completion claim to record; evidence remains unbound unless coverage marks it explicitly.")
     p.add_argument("--format", choices=("text", "json"), default="text")
     p.set_defaults(func=command_score)
 

@@ -417,7 +417,10 @@ def validate_markdown_links(root: Path, errors: list[str]) -> None:
             link = urllib.parse.unquote(unescape_destination(link)).strip()
             if not link or re.match(r"^[a-z]+:", link) or link.startswith("mailto:"):
                 continue
-            target = (path.parent / link).resolve()
+            # Review artifacts commonly use absolute file:line citations. The
+            # line suffix is metadata, not part of the filesystem path.
+            target_link = re.sub(r":\d+(?::\d+)?$", "", link)
+            target = (path.parent / target_link).resolve()
             try:
                 target.relative_to(root.resolve())
             except ValueError:

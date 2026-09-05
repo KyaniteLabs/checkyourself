@@ -4,9 +4,13 @@ This sample is intentionally generic. It shows the shape of a useful CheckYourse
 
 ## 1. Executive Summary
 
-This app appears to be a client portal where users can log in and view account-specific records.
+**Observed:** The repository contains client-portal routes and account-record UI language.
 
-The UI appears functional, but the production-readiness risk is high because the diagnostic found evidence of protected frontend routes without enough evidence of server-side ownership checks. That means the app may hide records in the browser while still allowing direct API access if a user changes an ID.
+**Inferred:** The app is intended to let authenticated users view account-specific records.
+
+**Untested:** The available sample evidence does not establish which server, database, or deployment currently enforces ownership.
+
+The UI appears functional, but the production risk is high because the diagnostic found protected frontend routes without a verifier-captured receipt for server-side ownership checks. That means the app may hide records in the browser while still allowing direct API access if a user changes an ID.
 
 ## 2. Detected stack
 
@@ -22,15 +26,15 @@ The UI appears functional, but the production-readiness risk is high because the
 ## 3. Production Reality Score
 
 **Score:** 42 / 100
-**Confidence:** Medium
+**Confidence:** Low
 
-The unresolved P0 (unverified server-side ownership checks) caps the ceiling at 49. Per-category penalties for the missing ownership check, absent tests, no rollback plan, and no error monitoring brought the score down to 42.
+The unresolved P0 (unverified server-side ownership checks) caps the ceiling at 49. The score is a bounded estimate because the sample has not established the deployment target or captured verifier-owned receipts.
 
 ## 4. P0 findings
 
 | ID | Finding | Plain-English risk | Evidence | Recommended first fix |
 |---|---|---|---|---|
-| P0-001 | Missing proof of object-level authorization | A logged-in user might access another user’s record by changing an ID. | Protected UI route, API path accepting IDs, no negative test found. | Add server-side user/tenant ownership check and a negative test. |
+| P0-001 | Missing proof of object-level authorization | A logged-in user might access another user’s record by changing an ID. | **Observed:** protected UI route and API path accepting IDs. **Untested:** no negative authorization receipt. | First run a tenant-A-to-tenant-B access challenge against the captured revision; change code only if it fails. |
 
 ## 5. P1 findings
 
@@ -50,7 +54,7 @@ The unresolved P0 (unverified server-side ownership checks) caps the ceiling at 
 
 ## 7. Safest first approval batch
 
-Start with the server-side ownership check and negative test because they address the highest-risk data exposure path. The rollback checklist and monitoring work remain in the backlog; they are not ignored.
+Start with a decisive check: run a tenant-A-to-tenant-B access attempt against the captured revision and record the result. If it fails, add the smallest server-side ownership fix and negative test; if it passes, update the finding with the receipt instead. The rollback checklist and monitoring work remain in the backlog; they are not ignored.
 
 ## 8. Learning-plan seeds
 
