@@ -35,10 +35,11 @@
             "description": "Verifier-captured receipts. Reviewer assertions in evidence_reviewed do not earn Pass credit without these.",
             "items": {
               "type": "object",
-              "required": ["reference", "sha256", "surface_id", "source_revision", "command", "claim", "origin", "source_state", "result", "issuer", "issued_at", "receipt_sha256"],
+              "required": ["reference", "sha256", "subject_digest", "surface_id", "source_revision", "command", "claim", "origin", "source_state", "result", "issuer", "issued_at", "receipt_sha256"],
               "properties": {
                 "reference": { "type": "string" },
                 "sha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
+                "subject_digest": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
                 "surface_id": { "type": "string", "pattern": "^S(0[1-9]|1[0-9]|20)$" },
                 "source_revision": { "type": "string", "minLength": 1 },
                 "command": { "type": "string", "minLength": 1 },
@@ -59,10 +60,11 @@
             "description": "Verifier-captured artifacts proving delegated responsibility for NotApplicable.",
             "items": {
               "type": "object",
-              "required": ["reference", "sha256", "surface_id", "source_revision", "command", "claim", "origin", "source_state", "result", "issuer", "issued_at", "receipt_sha256"],
+              "required": ["reference", "sha256", "subject_digest", "surface_id", "source_revision", "command", "claim", "origin", "source_state", "result", "issuer", "issued_at", "receipt_sha256"],
               "properties": {
                 "reference": { "type": "string" },
                 "sha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
+                "subject_digest": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
                 "surface_id": { "type": "string", "pattern": "^S(0[1-9]|1[0-9]|20)$" },
                 "source_revision": { "type": "string", "minLength": 1 },
                 "command": { "type": "string", "minLength": 1 },

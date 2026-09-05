@@ -249,6 +249,7 @@ VALID_COVERAGE_STATUSES = {"Pass", "Finding", "Unknown", "NotApplicable"}
 RECEIPT_BINDING_FIELDS = (
     "reference",
     "sha256",
+    "subject_digest",
     "surface_id",
     "source_revision",
     "command",
@@ -1557,6 +1558,7 @@ def _receipt_text_fields(receipt: dict) -> List[str]:
         field
         for field in (
             "reference",
+            "subject_digest",
             "surface_id",
             "source_revision",
             "command",
@@ -1581,14 +1583,22 @@ def issue_receipt(
     claim: str,
     result: str,
     source_state: str,
+    subject_digest: Optional[str] = None,
 ) -> dict:
-    """Issue one receipt whose content and claim binding are verifier-hashed."""
+    """Issue one receipt bound to the verifier-captured verification artifact."""
     canonical_surfaces = {sid for sid, _surface, _category in COVERAGE_SURFACES}
     if surface_id not in canonical_surfaces:
         raise CliError(f"receipt surface_id must be one canonical coverage surface: {surface_id!r}")
     resolved, reason = _resolve_evidence_reference(reference, root)
     if resolved is None:
         raise CliError(f"receipt reference is invalid: {reason}")
+    artifact_digest = hashlib.sha256(resolved.read_bytes()).hexdigest()
+    if subject_digest is not None:
+        if not isinstance(subject_digest, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", subject_digest):
+            raise CliError("receipt subject_digest must be a 64-character hexadecimal content hash")
+        if subject_digest.lower() != artifact_digest.lower():
+            raise CliError("receipt subject_digest must match the registered verification artifact")
+    subject_digest = artifact_digest
     missing = {
         "source_revision": source_revision,
         "command": command,
@@ -1605,7 +1615,8 @@ def issue_receipt(
         relative = str(resolved)
     receipt = {
         "reference": relative,
-        "sha256": hashlib.sha256(resolved.read_bytes()).hexdigest(),
+        "sha256": artifact_digest,
+        "subject_digest": subject_digest,
         "surface_id": surface_id,
         "source_revision": str(source_revision).strip(),
         "command": str(command).strip(),
@@ -1677,6 +1688,13 @@ def _verify_receipts(
         if not isinstance(expected_hash, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", expected_hash):
             errors.append(f"{prefix}: sha256 must be a 64-character hexadecimal content hash")
             continue
+        subject_digest = receipt.get("subject_digest")
+        if not isinstance(subject_digest, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", subject_digest):
+            errors.append(f"{prefix}: subject_digest must be a 64-character hexadecimal content hash")
+            continue
+        if subject_digest.lower() != expected_hash.lower():
+            errors.append(f"{prefix}: subject_digest does not match the registered verification artifact")
+            continue
         try:
             actual_hash = hashlib.sha256(resolved.read_bytes()).hexdigest()
         except OSError as exc:
@@ -1684,6 +1702,11 @@ def _verify_receipts(
             continue
         if actual_hash.lower() != expected_hash.lower():
             errors.append(f"{prefix}: content hash does not match referenced artifact")
+            continue
+        subject_key = f"subject:{subject_digest.lower()}"
+        reference_key = f"artifact:{receipt.get('reference')}:{subject_digest.lower()}"
+        if subject_key in seen_receipt_ids or reference_key in seen_receipt_ids:
+            errors.append(f"{prefix}: receipt subject reuse is not allowed across surfaces or claims")
             continue
         if require_provenance:
             missing = [field for field in ("origin", "source_state", "result") if not str(receipt.get(field) or "").strip()]
@@ -1696,6 +1719,8 @@ def _verify_receipts(
             relative = str(resolved)
         verified.append(relative)
         seen_receipt_ids.add(receipt_id.lower())
+        seen_receipt_ids.add(subject_key)
+        seen_receipt_ids.add(reference_key)
     return sorted(set(verified)), errors
 
 
@@ -2098,6 +2123,7 @@ def category_coverage(
     status_rank = {"Finding": 4, "Unknown": 3, "Pass": 2, "NotApplicable": 1}
     present_ids = set()
     used_receipt_ids: set[str] = set()
+    unscored_verification_gaps: List[str] = []
 
     for item in surfaces:
         if not isinstance(item, dict):
@@ -2107,6 +2133,16 @@ def category_coverage(
         if category not in SCORE_CATEGORIES:
             if sid:
                 present_ids.add(sid)
+            if item.get("status") in {"Pass", "NotApplicable"}:
+                evidence_state = _coverage_evidence_state(
+                    item,
+                    evidence_root,
+                    used_receipt_ids=used_receipt_ids,
+                )
+                if evidence_state["status"] == "Unknown":
+                    unscored_verification_gaps.extend(
+                        f"{sid or 'surface'}: {warning}" for warning in evidence_state["warnings"]
+                    )
             continue
         if sid:
             present_ids.add(sid)
@@ -2149,6 +2185,14 @@ def category_coverage(
         state["verified_evidence"].extend(evidence_state["verified_evidence"])
         state["claim_bound_evidence"].extend(str(x) for x in item.get("claim_bound_evidence") or [])
         state["missing_evidence"].extend(str(x) for x in item.get("missing_evidence") or [])
+
+    if unscored_verification_gaps:
+        # Context and learning surfaces do not own score weight, but a broken
+        # verifier receipt anywhere in the canonical matrix must still prevent
+        # a launch-ready score from hiding that gap.
+        critical_state = category_state["C1"]
+        critical_state["has_unknown"] = True
+        critical_state["missing_evidence"].extend(unscored_verification_gaps)
 
     for sid in sorted(scored_surface_ids - present_ids):
         category = id_to_category[sid]
@@ -2675,7 +2719,7 @@ def describe_capabilities() -> dict:
         ("diagnostic", "Alias for scan; use it when docs or agents ask to run a diagnostic.", {"project": "path", "deep": "optional boolean"}, SCAN_SCHEMA_ID),
         ("coverage --emit", "Write the 20-surface coverage skeleton by default, or print JSON with --format json.", {"project": "optional string"}, COVERAGE_SCHEMA_ID),
         ("coverage --check", "Validate coverage completeness.", {"file": "coverage json path"}, "checkyourself-coverage-check/1"),
-        ("receipt", "Issue one verifier-hashed, surface-bound receipt for an existing artifact.", {"reference": "artifact path", "surface_id": "canonical surface ID", "source_revision": "revision", "command": "command recorded at issuance", "claim": "claim", "result": "observed result", "source_state": "source/environment state"}, RECEIPT_SCHEMA_ID),
+        ("receipt", "Issue one verifier-hashed receipt with a subject digest bound to the surface verification artifact.", {"reference": "artifact path", "surface_id": "canonical surface ID", "source_revision": "revision", "command": "command recorded at issuance", "claim": "claim", "result": "observed result", "source_state": "source/environment state", "subject_digest": "optional content hash assertion"}, RECEIPT_SCHEMA_ID),
         ("score", "Compute a deterministic Production Reality Score from findings and optional verifier-checked coverage; optionally record a completion claim without executing a challenge runner.", {"findings": "json path", "coverage": "optional json path", "claim": "optional accepted completion claim", "history": "optional path"}, SCORE_SCHEMA_ID),
         ("backlog", "Rank remediation backlog and return a highest-severity batch; safety analysis is not performed.", {"findings": "json path"}, "checkyourself-backlog/1"),
         ("next", "Return the next highest-severity unresolved approval batch; safety analysis is not performed.", {"findings": "json path"}, "checkyourself-next-batch/1"),
@@ -3016,6 +3060,16 @@ def semantic_receipt_errors(receipt: Any) -> List[str]:
     if isinstance(receipt_hash, str) and re.fullmatch(r"[0-9a-fA-F]{64}", receipt_hash):
         if receipt_hash.lower() != _receipt_binding_digest(receipt).lower():
             errors.append("receipt_sha256 does not cover the bound fields")
+    sha256 = receipt.get("sha256")
+    subject_digest = receipt.get("subject_digest")
+    if (
+        isinstance(sha256, str)
+        and re.fullmatch(r"[0-9a-fA-F]{64}", sha256)
+        and isinstance(subject_digest, str)
+        and re.fullmatch(r"[0-9a-fA-F]{64}", subject_digest)
+        and sha256.lower() != subject_digest.lower()
+    ):
+        errors.append("subject_digest must match the registered verification artifact")
     return errors
 
 
@@ -3373,6 +3427,7 @@ def command_receipt(args: argparse.Namespace) -> int:
         claim=args.claim,
         result=args.result,
         source_state=args.source_state,
+        subject_digest=args.subject_digest,
     )
     if args.out:
         out = Path(args.out)
@@ -3590,7 +3645,7 @@ def mcp_tools() -> List[dict]:
             "name": "receipt_issue",
             "title": "Issue Verifier Receipt",
             "description": description(
-                "Issue one verifier-hashed, surface-bound receipt for an existing artifact under the configured MCP scan root. "
+                "Issue one verifier-hashed receipt for an existing verification artifact under the configured MCP scan root. "
                 "The result is returned inline and is not written to disk."
             ),
             "inputSchema": object_schema({
@@ -3601,6 +3656,7 @@ def mcp_tools() -> List[dict]:
                 "command": {"type": "string", "description": "Command recorded at issuance."},
                 "claim": {"type": "string", "description": "One claim proved by the receipt."},
                 "result": {"type": "string", "description": "Observed result recorded at issuance."},
+                "subject_digest": {"type": "string", "description": "Optional content hash assertion for the registered verification artifact."},
             }, ["reference", "surface_id", "source_revision", "source_state", "command", "claim", "result"]),
             "annotations": read_only_annotations("Issue Verifier Receipt"),
             "outputSchema": {"type": "object", "description": "Verifier receipt using schema checkyourself-receipt/1."},
@@ -3763,6 +3819,7 @@ def call_mcp_tool(name: str, arguments: dict) -> dict:
             command=str(arguments.get("command") or ""),
             claim=str(arguments.get("claim") or ""),
             result=str(arguments.get("result") or ""),
+            subject_digest=arguments.get("subject_digest"),
         )
     if name == "score":
         findings = arguments.get("findings") or {}
@@ -3961,6 +4018,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--command", required=True, help="Command recorded at issuance.")
     p.add_argument("--claim", required=True, help="One claim proved by this receipt.")
     p.add_argument("--result", required=True, help="Observed result recorded at issuance.")
+    p.add_argument("--subject-digest", help="Optional content hash assertion for the registered verification artifact.")
     p.add_argument("--root", default=".", help="Evidence root containing the referenced artifact (default: current directory).")
     p.add_argument("--out", help="Write the receipt JSON to this path.")
     p.add_argument("--format", choices=("text", "json"), default="text")
