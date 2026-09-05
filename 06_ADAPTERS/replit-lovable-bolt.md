@@ -1,16 +1,14 @@
 # Replit / Lovable / Bolt Adapter
 
-Start with [`native-cli-mcp.md`](native-cli-mcp.md) when an exported project or
-local shell is available. This file only adds limited-inspection guidance for
-hosted builders.
+Start with [`native-cli-mcp.md`](native-cli-mcp.md) when an export/local shell
+is available. This file covers hosted builders with limited inspection.
 
-For tools where direct repo inspection may be limited:
+When repo inspection is limited:
 
-1. Export/download the code if possible.
-2. Load the CheckYourself bootstrap (`PASTE_THIS_INTO_YOUR_AI.md`) or upload key files.
-3. Provide the app profile template.
-4. Ask the AI to identify the stack and unknowns before scoring.
-5. Do not ask the tool to auto-fix everything at once.
+1. Export/download code if possible; load `PASTE_THIS_INTO_YOUR_AI.md` or share
+   key files; provide the app profile template.
+2. Ask the AI to identify stack/unknowns before scoring.
+3. Do not ask it to auto-fix everything at once.
 
 Good first prompt:
 
