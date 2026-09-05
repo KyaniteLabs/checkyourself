@@ -57,8 +57,8 @@ DEFAULT_COVERAGE_PATH = "CHECKYOURSELF_COVERAGE.generated.json"
 DEFAULT_SCORE_HISTORY_PATH = ".checkyourself-score-history.json"
 DEFAULT_CHALLENGES_PATH = ".checkyourself/challenges.json"
 DEFAULT_CHALLENGE_OUTPUT_DIR = ".checkyourself/challenge-runs"
-DEFAULT_CHALLENGE_KEY_PATH = ".checkyourself/challenge-runner.key"
-CHALLENGE_KEY_BYTES = 32
+DEFAULT_LOCAL_INTEGRITY_BINDING_PATH = ".checkyourself/local-integrity-binding.key"
+LOCAL_INTEGRITY_KEY_BYTES = 32
 CONFIG_NAMES = (".checkyourself.yml", ".checkyourself.yaml", ".checkyourself.json")
 
 IGNORED_DIRS = {
@@ -238,6 +238,50 @@ COVERAGE_SURFACES = [
     ("S19", "AI/RAG/agent governance", "C10"),
     ("S20", "Learning needs and remediation history", "learning"),
 ]
+
+# These contracts are verifier-owned. A project can choose the command and the
+# expected values, but it cannot remove the minimum substance needed for an
+# executed challenge to count as evidence. Keep the contract shape explicit for
+# every canonical surface so a new surface cannot silently fall back to
+# exit-zero-only credit.
+CHALLENGE_SEMANTIC_CONTRACTS = {
+    "S01": {"minimum_output_tokens": 3},
+    "S02": {"minimum_output_tokens": 3},
+    "S03": {"minimum_output_tokens": 3},
+    "S04": {"minimum_output_tokens": 3},
+    "S05": {"minimum_output_tokens": 3},
+    "S06": {"minimum_output_tokens": 3},
+    "S07": {"minimum_output_tokens": 3},
+    "S08": {"minimum_output_tokens": 3},
+    "S09": {"minimum_output_tokens": 3},
+    "S10": {"minimum_output_tokens": 3},
+    "S11": {
+        "minimum_output_tokens": 3,
+        "requires_test_runner": True,
+        "requires_test_count": True,
+    },
+    "S12": {"minimum_output_tokens": 3, "requires_artifact": True},
+    "S13": {"minimum_output_tokens": 3, "requires_artifact": True},
+    "S14": {"minimum_output_tokens": 3, "requires_artifact": True},
+    "S15": {"minimum_output_tokens": 3},
+    "S16": {"minimum_output_tokens": 3},
+    "S17": {"minimum_output_tokens": 3},
+    "S18": {"minimum_output_tokens": 3},
+    "S19": {
+        "minimum_output_tokens": 3,
+        "required_output_kind": "json",
+        "required_json_fields": ("status", "findings"),
+    },
+    "S20": {"minimum_output_tokens": 3},
+}
+
+TEST_RUNNER_MARKERS = (
+    "pytest", "unittest", "jest", "vitest", "mocha", "ava", "go test",
+    "cargo test", "rspec", "phpunit", "dotnet test", "mvn test", "gradle test",
+)
+TEST_COUNT_RE = re.compile(r"(?im)\b\d+\s+(?:passed|failed|skipped|xfailed|xpassed|tests?)\b")
+VACUOUS_REGEX_FIXTURES = ("", "echo", "echo-only", "ok", "success")
+LOCAL_INTEGRITY_HMAC_FIELD = "local_integrity_hmac"
 
 # A receipt's cryptographic subject must also be a verifier artifact that is
 # relevant to the surface it claims to prove.  Keep the default contract
@@ -695,6 +739,127 @@ def _challenge_surface_map(data: Any) -> Optional[dict]:
     return None
 
 
+def _challenge_patterns(value: Any) -> List[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        return [pattern for pattern in value if isinstance(pattern, str)]
+    return []
+
+
+def _challenge_artifact_paths(value: Any) -> List[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        return [path for path in value if isinstance(path, str)]
+    return []
+
+
+def _regex_matches_vacuous_fixture(pattern: str) -> bool:
+    try:
+        compiled = re.compile(pattern)
+    except re.error:
+        return False
+    return any(compiled.search(fixture) is not None for fixture in VACUOUS_REGEX_FIXTURES)
+
+
+def _challenge_semantic_contract_errors(definition: dict, surface_id: str) -> List[str]:
+    """Reject challenge definitions that cannot produce probative evidence."""
+    contract = CHALLENGE_SEMANTIC_CONTRACTS.get(surface_id)
+    if contract is None or not isinstance(definition.get("command"), list):
+        return []
+
+    command = definition["command"]
+    if not command or not all(isinstance(part, str) for part in command):
+        return []
+    errors: List[str] = []
+    executable = Path(command[0]).name.lower()
+    command_text = " ".join(command).lower()
+    if executable in {"true", "false", "echo", "printf", ":"}:
+        errors.append(f"{surface_id} challenge command is a vacuous {executable!r} command")
+    for index, part in enumerate(command[:-1]):
+        if part == "-c" and re.fullmatch(r"\s*(?:echo|printf)\b.*", command[index + 1], re.I | re.S):
+            errors.append(f"{surface_id} challenge command is echo-only and cannot establish evidence")
+            break
+    for index, part in enumerate(command[:-1]):
+        if part == "-c" and re.fullmatch(
+            r"\s*(?:print|puts|console\.log)\s*\(?.*?\)?\s*;?\s*", command[index + 1], re.I | re.S
+        ):
+            errors.append(f"{surface_id} challenge command is print-only and cannot establish evidence")
+            break
+
+    success = definition.get("success")
+    if not isinstance(success, dict):
+        return errors
+    json_assertions = _json_field_assertions(success.get("json_field"))
+    if any(not path.strip() for path, _expected in json_assertions):
+        errors.append(f"{surface_id} challenge JSON assertions must name non-empty fields")
+    regex_matches = _challenge_patterns(success.get("regex_match"))
+    if not json_assertions and not regex_matches:
+        errors.append(
+            f"{surface_id} challenge needs a positive output assertion; exit_zero-only evidence is not allowed"
+        )
+    for pattern in regex_matches:
+        if _regex_matches_vacuous_fixture(pattern):
+            errors.append(
+                f"{surface_id} challenge regex_match {pattern!r} is vacuous against empty/echo fixtures"
+            )
+
+    required_kind = contract.get("required_output_kind")
+    if required_kind and definition.get("output_kind", "text") != required_kind:
+        errors.append(f"{surface_id} challenge must use {required_kind} output for structured findings")
+    required_fields = set(contract.get("required_json_fields") or ())
+    if required_fields:
+        asserted_fields = {path.split(".", 1)[0] for path, _expected in json_assertions}
+        missing = sorted(required_fields - asserted_fields)
+        if missing:
+            errors.append(
+                f"{surface_id} challenge JSON assertions must include structured fields: {', '.join(missing)}"
+            )
+
+    if contract.get("requires_test_runner") and not any(marker in command_text for marker in TEST_RUNNER_MARKERS):
+        errors.append(f"{surface_id} challenge command must reference a test runner")
+    if contract.get("requires_test_count") and not any(
+        _pattern_matches_test_count(pattern) for pattern in regex_matches
+    ):
+        errors.append(f"{surface_id} challenge assertions must include a test pass-count output")
+
+    artifact_paths = _challenge_artifact_paths(success.get("artifact"))
+    if contract.get("requires_artifact") and not artifact_paths:
+        errors.append(f"{surface_id} challenge must assert a non-empty output artifact")
+    for artifact_path in artifact_paths:
+        candidate = Path(artifact_path)
+        if candidate.is_absolute() or ".." in candidate.parts or not artifact_path.strip():
+            errors.append(f"{surface_id} challenge artifact path must stay inside the project root")
+    return errors
+
+
+def _pattern_matches_test_count(pattern: str) -> bool:
+    try:
+        return TEST_COUNT_RE.search(pattern) is not None or any(
+            re.search(pattern, fixture) is not None
+            for fixture in ("1 passed", "2 failed", "3 skipped")
+        )
+    except re.error:
+        return False
+
+
+def semantic_challenge_errors(data: Any) -> List[str]:
+    """Validate verifier-owned semantic contracts for a challenge artifact."""
+    surface_map = _challenge_surface_map(data)
+    if surface_map is None:
+        return []
+    if not isinstance(surface_map, dict):
+        return ["challenge registry must be an object"]
+    canonical_ids = {sid for sid, _surface, _category in COVERAGE_SURFACES}
+    errors: List[str] = []
+    for surface_id, definition in surface_map.items():
+        if surface_id not in canonical_ids or not isinstance(definition, dict):
+            continue
+        errors.extend(_challenge_semantic_contract_errors(definition, surface_id))
+    return list(dict.fromkeys(errors))
+
+
 def _challenge_definition_errors(definition: Any, surface_id: str) -> List[str]:
     if not isinstance(definition, dict):
         return [f"{surface_id} challenge must be an object"]
@@ -743,6 +908,26 @@ def _challenge_definition_errors(definition: Any, surface_id: str) -> List[str]:
                     re.compile(pattern)
                 except re.error as exc:
                     errors.append(f"{surface_id} success.regex_not_match has invalid regex: {exc}")
+        regex_match = success.get("regex_match", [])
+        if isinstance(regex_match, str):
+            regex_match = [regex_match]
+        if not isinstance(regex_match, list) or not all(isinstance(pattern, str) for pattern in regex_match):
+            errors.append(f"{surface_id} success.regex_match must be a string array")
+        else:
+            for pattern in regex_match:
+                try:
+                    re.compile(pattern)
+                except re.error as exc:
+                    errors.append(f"{surface_id} success.regex_match has invalid regex: {exc}")
+        artifact = success.get("artifact")
+        if artifact is not None:
+            artifact_paths = _challenge_artifact_paths(artifact)
+            if not artifact_paths or len(artifact_paths) != (1 if isinstance(artifact, str) else len(artifact) if isinstance(artifact, list) else 0):
+                errors.append(f"{surface_id} success.artifact must be a string or string array")
+            elif not all(path.strip() for path in artifact_paths):
+                errors.append(f"{surface_id} success.artifact paths must be non-empty strings")
+    if not errors:
+        errors.extend(_challenge_semantic_contract_errors(definition, surface_id))
     return errors
 
 
@@ -814,7 +999,7 @@ def _challenge_tree_excluded(relative: Path) -> bool:
         return True
     if parts[:2] == (".checkyourself", "challenge-runs"):
         return True
-    if relative.as_posix() == DEFAULT_CHALLENGE_KEY_PATH:
+    if relative.as_posix() == DEFAULT_LOCAL_INTEGRITY_BINDING_PATH:
         return True
     if parts and parts[0].startswith("_retrofit-"):
         return True
@@ -887,11 +1072,13 @@ def _json_field_assertions(value: Any) -> List[Tuple[str, Any]]:
 def _challenge_result(
     definition: dict,
     *,
+    surface_id: Optional[str] = None,
     exit_code: Optional[int],
     stdout: str,
     stderr: str,
     timed_out: bool,
     execution_error: str,
+    root: Optional[Path] = None,
 ) -> Tuple[str, List[str]]:
     """Evaluate committed assertions against verifier-captured subprocess output."""
     success = definition.get("success") or {"exit_zero": True}
@@ -905,6 +1092,14 @@ def _challenge_result(
         reasons.append(f"exit code was {exit_code!r}, expected zero")
     if not expected_zero and exit_code == 0:
         reasons.append("exit code was zero, expected a non-zero result")
+    contract = CHALLENGE_SEMANTIC_CONTRACTS.get(str(surface_id or definition.get("surface_id") or ""), {})
+    combined = stdout + ("\n" if stdout and stderr else "") + stderr
+    minimum_tokens = int(contract.get("minimum_output_tokens", 0) or 0)
+    output_tokens = re.findall(r"[A-Za-z0-9][A-Za-z0-9_.:/+\-]*", combined)
+    if len(output_tokens) < minimum_tokens:
+        reasons.append(
+            f"captured output has {len(output_tokens)} semantic tokens; minimum is {minimum_tokens}"
+        )
     output_kind = definition.get("output_kind", "text")
     parsed: Any = None
     if output_kind == "json" or success.get("json_field") is not None:
@@ -916,30 +1111,60 @@ def _challenge_result(
         found, actual = _json_path_value(parsed, path)
         if not found or actual != expected:
             reasons.append(f"JSON field {path!r} did not equal the configured expected value")
-    combined = stdout + ("\n" if stdout and stderr else "") + stderr
+    for pattern in _challenge_patterns(success.get("regex_match")):
+        if not re.search(pattern, combined):
+            reasons.append(f"captured output did not match required regex {pattern!r}")
     patterns = success.get("regex_not_match", [])
     if isinstance(patterns, str):
         patterns = [patterns]
     for pattern in patterns or []:
         if re.search(pattern, combined):
             reasons.append(f"captured output matched forbidden regex {pattern!r}")
+    if contract.get("requires_test_count") and not TEST_COUNT_RE.search(combined):
+        reasons.append("captured output did not include a test pass-count result")
+    artifact_paths = _challenge_artifact_paths(success.get("artifact"))
+    if artifact_paths:
+        if root is None:
+            reasons.append("artifact assertion cannot be verified without a project root")
+        else:
+            root = root.resolve()
+            for artifact_path in artifact_paths:
+                candidate = root / artifact_path
+                try:
+                    candidate.relative_to(root)
+                except ValueError:
+                    reasons.append(f"artifact path escapes the project root: {artifact_path!r}")
+                    continue
+                if candidate.is_symlink() or not candidate.is_file():
+                    reasons.append(f"required artifact was not produced: {artifact_path}")
+                else:
+                    try:
+                        if candidate.stat().st_size <= 0:
+                            reasons.append(f"required artifact is empty: {artifact_path}")
+                    except OSError as exc:
+                        reasons.append(f"required artifact could not be inspected: {artifact_path}: {exc}")
     return ("PASS" if not reasons else "FAIL"), reasons
 
 
-def _challenge_key_path(root: Path) -> Path:
-    return root.resolve() / DEFAULT_CHALLENGE_KEY_PATH
+def _local_integrity_binding_path(root: Path) -> Path:
+    return root.resolve() / DEFAULT_LOCAL_INTEGRITY_BINDING_PATH
 
 
-def _load_challenge_key(root: Path, *, create: bool) -> bytes:
-    """Load the runner-only signing key, creating it with mode 0600 once."""
-    path = _challenge_key_path(root)
+def _load_local_integrity_binding_key(root: Path, *, create: bool) -> bytes:
+    """Load the local integrity binding key, creating it with mode 0600 once.
+
+    The key makes project-local receipt edits detectable. It does not prove
+    independent issuance or operator identity because it lives in the project
+    being inspected.
+    """
+    path = _local_integrity_binding_path(root)
     parent = path.parent
     if parent.is_symlink():
-        raise CliError(f"challenge runner key directory must not be a symlink: {parent}")
+        raise CliError(f"local integrity binding key directory must not be a symlink: {parent}")
     if create:
         parent.mkdir(parents=True, exist_ok=True)
         if parent.is_symlink():
-            raise CliError(f"challenge runner key directory must not be a symlink: {parent}")
+            raise CliError(f"local integrity binding key directory must not be a symlink: {parent}")
         if not path.exists():
             try:
                 fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -948,7 +1173,7 @@ def _load_challenge_key(root: Path, *, create: bool) -> bytes:
             else:
                 try:
                     with os.fdopen(fd, "wb") as handle:
-                        handle.write(secrets.token_bytes(CHALLENGE_KEY_BYTES))
+                        handle.write(secrets.token_bytes(LOCAL_INTEGRITY_KEY_BYTES))
                 except Exception:
                     try:
                         path.unlink()
@@ -956,19 +1181,19 @@ def _load_challenge_key(root: Path, *, create: bool) -> bytes:
                         pass
                     raise
     if path.is_symlink() or not path.is_file():
-        raise CliError(f"challenge runner key is missing or not a regular file: {path}")
+        raise CliError(f"local integrity binding key is missing or not a regular file: {path}")
     try:
         mode = stat.S_IMODE(path.stat().st_mode)
     except OSError as exc:
-        raise CliError(f"challenge runner key could not be inspected: {exc}") from exc
+        raise CliError(f"local integrity binding key could not be inspected: {exc}") from exc
     if mode != 0o600:
-        raise CliError(f"challenge runner key must have mode 0600: {path}")
+        raise CliError(f"local integrity binding key must have mode 0600: {path}")
     try:
         key = path.read_bytes()
     except OSError as exc:
-        raise CliError(f"challenge runner key could not be read: {exc}") from exc
-    if len(key) != CHALLENGE_KEY_BYTES:
-        raise CliError(f"challenge runner key must contain {CHALLENGE_KEY_BYTES} bytes: {path}")
+        raise CliError(f"local integrity binding key could not be read: {exc}") from exc
+    if len(key) != LOCAL_INTEGRITY_KEY_BYTES:
+        raise CliError(f"local integrity binding key must contain {LOCAL_INTEGRITY_KEY_BYTES} bytes: {path}")
     return key
 
 
@@ -987,10 +1212,10 @@ def _executed_receipt_binding_digest(receipt: dict) -> str:
     return hashlib.sha256(_executed_receipt_binding_bytes(receipt)).hexdigest()
 
 
-def _executed_receipt_hmac(receipt: dict, runner_key: bytes) -> str:
+def _executed_receipt_hmac(receipt: dict, binding_key: bytes) -> str:
     run_id = str(receipt.get("run_id") or "")
     run_key = hmac.new(
-        runner_key,
+        binding_key,
         (RECEIPT_ISSUER + ":" + run_id).encode("utf-8"),
         hashlib.sha256,
     ).digest()
@@ -1001,7 +1226,13 @@ def _captured_output_payload(stdout: str, stderr: str) -> str:
     return json.dumps({"stdout": stdout, "stderr": stderr}, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
 
 
-def _run_challenge(root: Path, definition: dict, *, initial_error: str = "") -> dict:
+def _run_challenge(
+    root: Path,
+    definition: dict,
+    *,
+    initial_error: str = "",
+    surface_id: Optional[str] = None,
+) -> dict:
     stdout = ""
     stderr = ""
     exit_code: Optional[int] = None
@@ -1027,11 +1258,13 @@ def _run_challenge(root: Path, definition: dict, *, initial_error: str = "") -> 
             exit_code = completed.returncode
             status, reasons = _challenge_result(
                 definition,
+                surface_id=surface_id,
                 exit_code=exit_code,
                 stdout=stdout,
                 stderr=stderr,
                 timed_out=False,
                 execution_error="",
+                root=root,
             )
         except subprocess.TimeoutExpired as exc:
             timed_out = True
@@ -1043,21 +1276,25 @@ def _run_challenge(root: Path, definition: dict, *, initial_error: str = "") -> 
                 stderr = stderr.decode("utf-8", "replace")
             status, reasons = _challenge_result(
                 definition,
+                surface_id=surface_id,
                 exit_code=None,
                 stdout=stdout,
                 stderr=stderr,
                 timed_out=True,
                 execution_error="",
+                root=root,
             )
         except (OSError, ValueError, CliError) as exc:
             execution_error = str(exc)
             status, reasons = _challenge_result(
                 definition,
+                surface_id=surface_id,
                 exit_code=None,
                 stdout=stdout,
                 stderr=stderr,
                 timed_out=False,
                 execution_error=execution_error,
+                root=root,
             )
     else:
         if not execution_error:
@@ -1108,7 +1345,7 @@ def _make_challenge_receipt(
     }
     receipt["receipt_sha256"] = _executed_receipt_binding_digest(receipt)
     if signing_key is not None and run_id:
-        receipt["receipt_hmac"] = _executed_receipt_hmac(receipt, signing_key)
+        receipt[LOCAL_INTEGRITY_HMAC_FIELD] = _executed_receipt_hmac(receipt, signing_key)
     return receipt
 
 
@@ -1145,7 +1382,7 @@ def challenge_from_root(root: Path, surface_id: Optional[str] = None, output_dir
         raise CliError("challenge output directory must stay inside the project root") from exc
     destination.mkdir(parents=True, exist_ok=True)
     try:
-        signing_key = _load_challenge_key(root, create=True)
+        signing_key = _load_local_integrity_binding_key(root, create=True)
         key_error = ""
     except CliError as exc:
         signing_key = None
@@ -1161,6 +1398,7 @@ def challenge_from_root(root: Path, surface_id: Optional[str] = None, output_dir
             root,
             definition if isinstance(definition, dict) else {},
             initial_error=config_error or key_error,
+            surface_id=sid,
         )
         stdout = execution["stdout"]
         stderr = execution["stderr"]
@@ -2370,15 +2608,15 @@ def _verify_executed_receipt(
     run_id = receipt.get("run_id")
     if not isinstance(run_id, str) or not re.fullmatch(r"[0-9a-fA-F]{32}", run_id):
         return None, None, f"{prefix}: run_id is missing or invalid"
-    receipt_hmac = receipt.get("receipt_hmac")
-    if not isinstance(receipt_hmac, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", receipt_hmac):
-        return None, None, f"{prefix}: runner HMAC is missing or invalid"
+    binding_hmac = receipt.get(LOCAL_INTEGRITY_HMAC_FIELD)
+    if not isinstance(binding_hmac, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", binding_hmac):
+        return None, None, f"{prefix}: local integrity binding HMAC is missing or invalid"
     try:
-        runner_key = _load_challenge_key(_evidence_root(root), create=False)
+        binding_key = _load_local_integrity_binding_key(_evidence_root(root), create=False)
     except CliError as exc:
-        return None, None, f"{prefix}: runner key unavailable: {exc}"
-    if not hmac.compare_digest(receipt_hmac.lower(), _executed_receipt_hmac(receipt, runner_key).lower()):
-        return None, None, f"{prefix}: runner HMAC does not cover executed fields"
+        return None, None, f"{prefix}: local integrity binding key unavailable: {exc}"
+    if not hmac.compare_digest(binding_hmac.lower(), _executed_receipt_hmac(receipt, binding_key).lower()):
+        return None, None, f"{prefix}: local integrity binding HMAC does not cover executed fields"
     if receipt.get("status") not in {"PASS", "FAIL"}:
         return None, None, f"{prefix}: status must be PASS or FAIL"
     if not isinstance(receipt.get("command"), list) or not all(isinstance(part, str) for part in receipt["command"]):
@@ -2423,7 +2661,7 @@ def _verify_executed_receipt(
     current_revision = current_tree_hash(base)
     if receipt.get("source_revision") != current_revision:
         return None, None, f"{prefix}: source revision no longer matches the current project tree"
-    fresh = _run_challenge(base, definition)
+    fresh = _run_challenge(base, definition, surface_id=expected_surface_id)
     fresh_capture = _captured_output_payload(fresh["stdout"], fresh["stderr"]).encode("utf-8")
     fresh_digest = hashlib.sha256(fresh_capture).hexdigest()
     if fresh_digest.lower() != expected_digest.lower():
@@ -2440,11 +2678,13 @@ def _verify_executed_receipt(
         return None, None, f"{prefix}: re-execution changed the current project tree"
     derived_status, reasons = _challenge_result(
         definition,
+        surface_id=expected_surface_id,
         exit_code=receipt.get("exit_code"),
         stdout=capture["stdout"],
         stderr=capture["stderr"],
         timed_out=receipt.get("timed_out", False),
         execution_error=str(receipt.get("execution_error") or ""),
+        root=base,
     )
     if derived_status != receipt.get("status"):
         return None, None, f"{prefix}: stored status does not match captured output and assertions"
@@ -4064,6 +4304,8 @@ def validate_artifact(kind: str, data: Any) -> dict:
         semantic_errors = semantic_report_errors(data)
     elif kind == "receipt" and not schema_errors:
         semantic_errors = semantic_receipt_errors(data)
+    elif kind == "challenges" and not schema_errors:
+        semantic_errors = semantic_challenge_errors(data)
     errors = schema_errors + semantic_errors
     return {
         "tool": TOOL_NAME,
