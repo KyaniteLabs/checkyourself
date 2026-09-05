@@ -15,10 +15,13 @@ import argparse
 import datetime as _dt
 import fnmatch
 import hashlib
+import hmac
 import json
 import math
 import os
 import re
+import secrets
+import stat
 import subprocess
 import sys
 import tempfile
@@ -54,6 +57,8 @@ DEFAULT_COVERAGE_PATH = "CHECKYOURSELF_COVERAGE.generated.json"
 DEFAULT_SCORE_HISTORY_PATH = ".checkyourself-score-history.json"
 DEFAULT_CHALLENGES_PATH = ".checkyourself/challenges.json"
 DEFAULT_CHALLENGE_OUTPUT_DIR = ".checkyourself/challenge-runs"
+DEFAULT_CHALLENGE_KEY_PATH = ".checkyourself/challenge-runner.key"
+CHALLENGE_KEY_BYTES = 32
 CONFIG_NAMES = (".checkyourself.yml", ".checkyourself.yaml", ".checkyourself.json")
 
 IGNORED_DIRS = {
@@ -298,6 +303,7 @@ EXECUTED_RECEIPT_BINDING_FIELDS = (
     "status",
     "execution_error",
     "challenge_config_digest",
+    "run_id",
 )
 _NO_COVERAGE = object()
 EVIDENCE_PATH_RE = re.compile(
@@ -808,6 +814,8 @@ def _challenge_tree_excluded(relative: Path) -> bool:
         return True
     if parts[:2] == (".checkyourself", "challenge-runs"):
         return True
+    if relative.as_posix() == DEFAULT_CHALLENGE_KEY_PATH:
+        return True
     if parts and parts[0].startswith("_retrofit-"):
         return True
     if relative.name.startswith("CHECKYOURSELF_") and relative.name.endswith(".generated.json"):
@@ -918,14 +926,152 @@ def _challenge_result(
     return ("PASS" if not reasons else "FAIL"), reasons
 
 
-def _executed_receipt_binding_digest(receipt: dict) -> str:
+def _challenge_key_path(root: Path) -> Path:
+    return root.resolve() / DEFAULT_CHALLENGE_KEY_PATH
+
+
+def _load_challenge_key(root: Path, *, create: bool) -> bytes:
+    """Load the runner-only signing key, creating it with mode 0600 once."""
+    path = _challenge_key_path(root)
+    parent = path.parent
+    if parent.is_symlink():
+        raise CliError(f"challenge runner key directory must not be a symlink: {parent}")
+    if create:
+        parent.mkdir(parents=True, exist_ok=True)
+        if parent.is_symlink():
+            raise CliError(f"challenge runner key directory must not be a symlink: {parent}")
+        if not path.exists():
+            try:
+                fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            except FileExistsError:
+                pass
+            else:
+                try:
+                    with os.fdopen(fd, "wb") as handle:
+                        handle.write(secrets.token_bytes(CHALLENGE_KEY_BYTES))
+                except Exception:
+                    try:
+                        path.unlink()
+                    except OSError:
+                        pass
+                    raise
+    if path.is_symlink() or not path.is_file():
+        raise CliError(f"challenge runner key is missing or not a regular file: {path}")
+    try:
+        mode = stat.S_IMODE(path.stat().st_mode)
+    except OSError as exc:
+        raise CliError(f"challenge runner key could not be inspected: {exc}") from exc
+    if mode != 0o600:
+        raise CliError(f"challenge runner key must have mode 0600: {path}")
+    try:
+        key = path.read_bytes()
+    except OSError as exc:
+        raise CliError(f"challenge runner key could not be read: {exc}") from exc
+    if len(key) != CHALLENGE_KEY_BYTES:
+        raise CliError(f"challenge runner key must contain {CHALLENGE_KEY_BYTES} bytes: {path}")
+    return key
+
+
+def _executed_receipt_binding_bytes(receipt: dict) -> bytes:
     binding = {field: receipt.get(field) for field in EXECUTED_RECEIPT_BINDING_FIELDS}
-    encoded = json.dumps(binding, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
+    return json.dumps(
+        binding,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+
+
+def _executed_receipt_binding_digest(receipt: dict) -> str:
+    return hashlib.sha256(_executed_receipt_binding_bytes(receipt)).hexdigest()
+
+
+def _executed_receipt_hmac(receipt: dict, runner_key: bytes) -> str:
+    run_id = str(receipt.get("run_id") or "")
+    run_key = hmac.new(
+        runner_key,
+        (RECEIPT_ISSUER + ":" + run_id).encode("utf-8"),
+        hashlib.sha256,
+    ).digest()
+    return hmac.new(run_key, _executed_receipt_binding_bytes(receipt), hashlib.sha256).hexdigest()
 
 
 def _captured_output_payload(stdout: str, stderr: str) -> str:
     return json.dumps({"stdout": stdout, "stderr": stderr}, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+
+
+def _run_challenge(root: Path, definition: dict, *, initial_error: str = "") -> dict:
+    stdout = ""
+    stderr = ""
+    exit_code: Optional[int] = None
+    timed_out = False
+    execution_error = initial_error
+    status = "FAIL"
+    reasons: List[str] = []
+    command = definition.get("command") if isinstance(definition, dict) else None
+    if not execution_error and isinstance(command, list) and command:
+        try:
+            cwd = _challenge_cwd(root, definition)
+            completed = subprocess.run(
+                command,
+                cwd=str(cwd),
+                shell=False,
+                capture_output=True,
+                text=True,
+                timeout=float(definition.get("timeout_s", 60)),
+                check=False,
+            )
+            stdout = completed.stdout or ""
+            stderr = completed.stderr or ""
+            exit_code = completed.returncode
+            status, reasons = _challenge_result(
+                definition,
+                exit_code=exit_code,
+                stdout=stdout,
+                stderr=stderr,
+                timed_out=False,
+                execution_error="",
+            )
+        except subprocess.TimeoutExpired as exc:
+            timed_out = True
+            stdout = exc.stdout or ""
+            stderr = exc.stderr or ""
+            if isinstance(stdout, bytes):
+                stdout = stdout.decode("utf-8", "replace")
+            if isinstance(stderr, bytes):
+                stderr = stderr.decode("utf-8", "replace")
+            status, reasons = _challenge_result(
+                definition,
+                exit_code=None,
+                stdout=stdout,
+                stderr=stderr,
+                timed_out=True,
+                execution_error="",
+            )
+        except (OSError, ValueError, CliError) as exc:
+            execution_error = str(exc)
+            status, reasons = _challenge_result(
+                definition,
+                exit_code=None,
+                stdout=stdout,
+                stderr=stderr,
+                timed_out=False,
+                execution_error=execution_error,
+            )
+    else:
+        if not execution_error:
+            execution_error = "challenge requires an explicit committed command; no command was configured"
+        reasons = [execution_error]
+    return {
+        "stdout": stdout,
+        "stderr": stderr,
+        "exit_code": exit_code,
+        "timed_out": timed_out,
+        "execution_error": execution_error,
+        "status": status,
+        "reasons": reasons,
+    }
 
 
 def _make_challenge_receipt(
@@ -939,6 +1085,8 @@ def _make_challenge_receipt(
     timed_out: bool,
     execution_error: str,
     source_revision: str,
+    run_id: Optional[str] = None,
+    signing_key: Optional[bytes] = None,
 ) -> dict:
     command = definition.get("command")
     argv = list(command) if isinstance(command, list) else []
@@ -956,8 +1104,11 @@ def _make_challenge_receipt(
         "status": status,
         "execution_error": execution_error,
         "challenge_config_digest": _challenge_config_digest(definition),
+        "run_id": run_id or "",
     }
     receipt["receipt_sha256"] = _executed_receipt_binding_digest(receipt)
+    if signing_key is not None and run_id:
+        receipt["receipt_hmac"] = _executed_receipt_hmac(receipt, signing_key)
     return receipt
 
 
@@ -993,73 +1144,31 @@ def challenge_from_root(root: Path, surface_id: Optional[str] = None, output_dir
     except ValueError as exc:
         raise CliError("challenge output directory must stay inside the project root") from exc
     destination.mkdir(parents=True, exist_ok=True)
+    try:
+        signing_key = _load_challenge_key(root, create=True)
+        key_error = ""
+    except CliError as exc:
+        signing_key = None
+        key_error = str(exc)
+    run_id = secrets.token_hex(16)
     source_revision = current_tree_hash(root)
     receipts: List[dict] = []
     findings: List[dict] = []
     surface_results: List[dict] = []
     for sid in selected:
         definition = definitions.get(sid, {})
-        stdout = ""
-        stderr = ""
-        exit_code: Optional[int] = None
-        timed_out = False
-        execution_error = config_error or ""
-        status = "FAIL"
-        reasons: List[str] = []
-        command = definition.get("command") if isinstance(definition, dict) else None
-        if not execution_error and isinstance(command, list) and command:
-            try:
-                cwd = _challenge_cwd(root, definition)
-                completed = subprocess.run(
-                    command,
-                    cwd=str(cwd),
-                    shell=False,
-                    capture_output=True,
-                    text=True,
-                    timeout=float(definition.get("timeout_s", 60)),
-                    check=False,
-                )
-                stdout = completed.stdout or ""
-                stderr = completed.stderr or ""
-                exit_code = completed.returncode
-                status, reasons = _challenge_result(
-                    definition,
-                    exit_code=exit_code,
-                    stdout=stdout,
-                    stderr=stderr,
-                    timed_out=False,
-                    execution_error="",
-                )
-            except subprocess.TimeoutExpired as exc:
-                timed_out = True
-                stdout = exc.stdout or ""
-                stderr = exc.stderr or ""
-                if isinstance(stdout, bytes):
-                    stdout = stdout.decode("utf-8", "replace")
-                if isinstance(stderr, bytes):
-                    stderr = stderr.decode("utf-8", "replace")
-                status, reasons = _challenge_result(
-                    definition,
-                    exit_code=None,
-                    stdout=stdout,
-                    stderr=stderr,
-                    timed_out=True,
-                    execution_error="",
-                )
-            except (OSError, ValueError, CliError) as exc:
-                execution_error = str(exc)
-                status, reasons = _challenge_result(
-                    definition,
-                    exit_code=None,
-                    stdout=stdout,
-                    stderr=stderr,
-                    timed_out=False,
-                    execution_error=execution_error,
-                )
-        else:
-            if not execution_error:
-                execution_error = f"{sid} requires an explicit committed command; no command was configured"
-            reasons = [execution_error]
+        execution = _run_challenge(
+            root,
+            definition if isinstance(definition, dict) else {},
+            initial_error=config_error or key_error,
+        )
+        stdout = execution["stdout"]
+        stderr = execution["stderr"]
+        exit_code = execution["exit_code"]
+        timed_out = execution["timed_out"]
+        execution_error = execution["execution_error"]
+        status = execution["status"]
+        reasons = execution["reasons"]
         output_path = destination / f"{sid}.capture.json"
         safe_write_text(output_path, _captured_output_payload(stdout, stderr))
         receipt = _make_challenge_receipt(
@@ -1072,6 +1181,8 @@ def challenge_from_root(root: Path, surface_id: Optional[str] = None, output_dir
             timed_out=timed_out,
             execution_error=execution_error,
             source_revision=source_revision,
+            run_id=run_id,
+            signing_key=signing_key,
         )
         receipt_path = destination / f"{sid}.receipt.json"
         safe_write_text(receipt_path, json.dumps(receipt, indent=2, sort_keys=True, allow_nan=False) + "\n")
@@ -2247,7 +2358,7 @@ def _verify_executed_receipt(
     *,
     expected_surface_id: Optional[str],
 ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
-    """Verify an executed receipt from its stored capture, never caller prose."""
+    """Verify an executed receipt by re-running its committed challenge."""
     prefix = "executed receipt"
     if expected_surface_id is None or receipt.get("surface_id") != expected_surface_id:
         return None, None, f"{prefix}: surface binding does not match the coverage surface"
@@ -2256,6 +2367,18 @@ def _verify_executed_receipt(
         return None, None, f"{prefix}: receipt_sha256 must be a 64-character hexadecimal binding hash"
     if receipt_id.lower() != _executed_receipt_binding_digest(receipt).lower():
         return None, None, f"{prefix}: receipt_sha256 does not cover executed fields"
+    run_id = receipt.get("run_id")
+    if not isinstance(run_id, str) or not re.fullmatch(r"[0-9a-fA-F]{32}", run_id):
+        return None, None, f"{prefix}: run_id is missing or invalid"
+    receipt_hmac = receipt.get("receipt_hmac")
+    if not isinstance(receipt_hmac, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", receipt_hmac):
+        return None, None, f"{prefix}: runner HMAC is missing or invalid"
+    try:
+        runner_key = _load_challenge_key(_evidence_root(root), create=False)
+    except CliError as exc:
+        return None, None, f"{prefix}: runner key unavailable: {exc}"
+    if not hmac.compare_digest(receipt_hmac.lower(), _executed_receipt_hmac(receipt, runner_key).lower()):
+        return None, None, f"{prefix}: runner HMAC does not cover executed fields"
     if receipt.get("status") not in {"PASS", "FAIL"}:
         return None, None, f"{prefix}: status must be PASS or FAIL"
     if not isinstance(receipt.get("command"), list) or not all(isinstance(part, str) for part in receipt["command"]):
@@ -2300,6 +2423,21 @@ def _verify_executed_receipt(
     current_revision = current_tree_hash(base)
     if receipt.get("source_revision") != current_revision:
         return None, None, f"{prefix}: source revision no longer matches the current project tree"
+    fresh = _run_challenge(base, definition)
+    fresh_capture = _captured_output_payload(fresh["stdout"], fresh["stderr"]).encode("utf-8")
+    fresh_digest = hashlib.sha256(fresh_capture).hexdigest()
+    if fresh_digest.lower() != expected_digest.lower():
+        return None, None, f"{prefix}: re-executed output digest does not match the receipt"
+    if fresh["exit_code"] != receipt.get("exit_code"):
+        return None, None, f"{prefix}: re-executed exit code does not match the receipt"
+    if fresh["timed_out"] != receipt.get("timed_out"):
+        return None, None, f"{prefix}: re-executed timeout state does not match the receipt"
+    if fresh["execution_error"] != str(receipt.get("execution_error") or ""):
+        return None, None, f"{prefix}: re-executed error state does not match the receipt"
+    if fresh["status"] != receipt.get("status"):
+        return None, None, f"{prefix}: re-executed challenge status does not match the receipt"
+    if current_tree_hash(base) != current_revision:
+        return None, None, f"{prefix}: re-execution changed the current project tree"
     derived_status, reasons = _challenge_result(
         definition,
         exit_code=receipt.get("exit_code"),

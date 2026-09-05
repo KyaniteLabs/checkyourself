@@ -2682,6 +2682,29 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             "challenges": definitions,
         }), encoding="utf-8")
 
+    def _score_challenge_receipt(self, project: Path, receipt: dict) -> dict:
+        coverage = {
+            "schema": "checkyourself-coverage/1",
+            "surfaces": [{
+                "id": "S11",
+                "surface": "Tests, quality gates, and regression coverage",
+                "category": "C5",
+                "status": "Pass",
+                "evidence_reviewed": [receipt["captured_output"]],
+                "evidence_receipts": [receipt],
+            }],
+        }
+        findings_path = project / "findings.json"
+        coverage_path = project / "coverage.json"
+        findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
+        coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
+        score = self.run_cli(
+            "score", "--findings", str(findings_path), "--coverage", str(coverage_path),
+            "--no-history", "--format", "json",
+        )
+        self.assertEqual(score.returncode, 0, score.stderr)
+        return json.loads(score.stdout)
+
     def test_executed_challenge_receipt_is_the_only_full_credit_class(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
@@ -2726,6 +2749,94 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             c5 = next(item for item in json.loads(score.stdout)["per_category"] if item["id"] == "C5")
             self.assertEqual(c5["coverage_status"], "Pass")
             self.assertEqual(c5["verified_evidence"], [receipt["captured_output"]])
+
+    def test_probe_e1_forged_merged_definition_receipt_is_unknown_without_hmac(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            self._write_challenges(project, {
+                "S11": {
+                    "command": [sys.executable, "-c", "print('challenge ok')"],
+                    "timeout_s": 10,
+                    "success": {"exit_zero": True},
+                    "output_kind": "text",
+                },
+            })
+            challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
+            self.assertEqual(challenge.returncode, 0, challenge.stderr)
+            forged = json.loads(challenge.stdout)["receipts"][0]
+            forged.pop("receipt_hmac")
+            score = self._score_challenge_receipt(project, forged)
+            c5 = next(item for item in score["per_category"] if item["id"] == "C5")
+            self.assertEqual(c5["coverage_status"], "Unknown")
+            self.assertIn(90, [cap["cap"] for cap in score["caps_applied"]])
+            self.assertTrue(any("runner HMAC" in needed for item in score["manual_evidence_needed"] for needed in item["needed"]))
+
+    def test_executed_receipt_with_invalid_hmac_is_unknown(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            self._write_challenges(project, {
+                "S11": {
+                    "command": [sys.executable, "-c", "print('challenge ok')"],
+                    "timeout_s": 10,
+                    "success": {"exit_zero": True},
+                    "output_kind": "text",
+                },
+            })
+            challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
+            self.assertEqual(challenge.returncode, 0, challenge.stderr)
+            invalid = json.loads(challenge.stdout)["receipts"][0]
+            invalid["receipt_hmac"] = "0" * 64
+            score = self._score_challenge_receipt(project, invalid)
+            c5 = next(item for item in score["per_category"] if item["id"] == "C5")
+            self.assertEqual(c5["coverage_status"], "Unknown")
+            self.assertIn(90, [cap["cap"] for cap in score["caps_applied"]])
+
+    def test_executed_receipt_is_unknown_when_capture_is_edited(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            self._write_challenges(project, {
+                "S11": {
+                    "command": [sys.executable, "-c", "print('challenge ok')"],
+                    "timeout_s": 10,
+                    "success": {"exit_zero": True},
+                    "output_kind": "text",
+                },
+            })
+            challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
+            self.assertEqual(challenge.returncode, 0, challenge.stderr)
+            receipt = json.loads(challenge.stdout)["receipts"][0]
+            capture_path = project / receipt["captured_output"]
+            capture_path.write_text('{"stdout":"forged\\n","stderr":""}\n', encoding="utf-8")
+            score = self._score_challenge_receipt(project, receipt)
+            c5 = next(item for item in score["per_category"] if item["id"] == "C5")
+            self.assertEqual(c5["coverage_status"], "Unknown")
+
+    def test_score_reexecutes_and_rejects_changed_excluded_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            state_path = project / ".checkyourself" / "challenge-runs" / "input.txt"
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            state_path.write_text("before\n", encoding="utf-8")
+            self._write_challenges(project, {
+                "S11": {
+                    "command": [
+                        sys.executable,
+                        "-c",
+                        "from pathlib import Path; print(Path('.checkyourself/challenge-runs/input.txt').read_text(), end='')",
+                    ],
+                    "timeout_s": 10,
+                    "success": {"exit_zero": True},
+                    "output_kind": "text",
+                },
+            })
+            challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
+            self.assertEqual(challenge.returncode, 0, challenge.stderr)
+            receipt = json.loads(challenge.stdout)["receipts"][0]
+            state_path.write_text("after\n", encoding="utf-8")
+            score = self._score_challenge_receipt(project, receipt)
+            c5 = next(item for item in score["per_category"] if item["id"] == "C5")
+            self.assertEqual(c5["coverage_status"], "Unknown")
+            self.assertTrue(any("re-executed output digest" in needed for item in score["manual_evidence_needed"] for needed in item["needed"]))
 
     def test_caller_issued_receipt_is_explicitly_unverified(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

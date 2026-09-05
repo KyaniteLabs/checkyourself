@@ -13,7 +13,7 @@
     "S09": { "requires_explicit_config": true, "description": "Provide the project's security and threat-model checks." },
     "S10": { "requires_explicit_config": true, "description": "Provide the project's privacy and compliance checks." },
     "S11": {
-      "command": ["python3", "-m", "pytest", "tests/", "-q"],
+      "command": ["python3", "-c", "import re, subprocess, sys; result = subprocess.run([sys.executable, '-m', 'pytest', 'tests/', '-q'], capture_output=True, text=True); sys.stdout.write(re.sub(r'(?m)( in )\\d+(?:\\.\\d+)?s$', r'\\1<stable>s', result.stdout)); sys.stderr.write(result.stderr); raise SystemExit(result.returncode)"],
       "cwd": ".",
       "timeout_s": 120,
       "success": { "exit_zero": true },
