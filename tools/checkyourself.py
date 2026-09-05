@@ -2379,6 +2379,11 @@ def strict_json_loads(body: str) -> Any:
     def reject_constant(token: str) -> None:
         raise ValueError(f"non-finite number {token} is not valid JSON")
 
+    # A UTF-8 BOM is metadata about the byte stream, not part of the JSON
+    # document. Accept it at the boundary so receipts from BOM-aware editors
+    # remain usable; a BOM anywhere else is still invalid JSON.
+    if body.startswith("\ufeff"):
+        body = body[1:]
     value = json.loads(body, parse_constant=reject_constant)
     _ensure_finite_json(value)
     return value
@@ -2603,6 +2608,33 @@ def validate_artifact(kind: str, data: Any) -> dict:
         "valid": not errors,
         "errors": errors,
     }
+
+
+def parse_report(body: str) -> dict:
+    """Parse and validate one complete Production Reality Report."""
+    try:
+        report = strict_json_loads(body)
+    except (ValueError, UnicodeError) as exc:
+        raise CliError(f"invalid report JSON: {exc}") from exc
+    if not isinstance(report, dict):
+        raise CliError("invalid report artifact: report must be a JSON object")
+    errors = validate_json_schema(report, load_schema("report"))
+    if errors:
+        raise CliError("invalid report artifact: " + "; ".join(errors))
+    return report
+
+
+def regenerate_report(report: dict) -> str:
+    """Validate and render a report in canonical, byte-stable JSON form."""
+    if not isinstance(report, dict):
+        raise CliError("invalid report artifact: report must be a JSON object")
+    errors = validate_json_schema(report, load_schema("report"))
+    if errors:
+        raise CliError("invalid report artifact: " + "; ".join(errors))
+    try:
+        return json.dumps(report, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
+    except (TypeError, ValueError) as exc:
+        raise CliError(f"could not regenerate report: {exc}") from exc
 
 
 def init_project(project: Path, force: bool = False) -> dict:

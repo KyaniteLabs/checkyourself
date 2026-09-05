@@ -1,5 +1,8 @@
 # Claude / Project Knowledge Adapter
 
+Start with [`native-cli-mcp.md`](native-cli-mcp.md); this file only adds Claude
+Project Knowledge loading steps.
+
 This adapter is provided for users who use Claude or Claude-like project knowledge systems. CheckYourself is not Claude-specific.
 
 ## Path

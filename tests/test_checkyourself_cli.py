@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 from copy import deepcopy
+import signal
 import subprocess
 import sys
 import tempfile
@@ -326,6 +328,14 @@ class CheckYourselfCliTests(unittest.TestCase):
         self.assertEqual(json.loads(result.stdout)["code"], 2)
         self.assertIn("non-finite", result.stderr)
 
+        with tempfile.TemporaryDirectory() as tmp:
+            overflow = Path(tmp) / "overflow.json"
+            overflow.write_text('{"score": 1e309}', encoding="utf-8")
+            result = self.run_cli("validate", "--kind", "score", str(overflow), "--format", "json")
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(json.loads(result.stdout)["code"], 2)
+        self.assertIn("non-finite", result.stderr)
+
     def test_malformed_json_fails_closed_for_cli_artifact_consumers(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
@@ -428,6 +438,128 @@ class CheckYourselfCliTests(unittest.TestCase):
                     self.assertEqual(target.read_text(encoding="utf-8"), "old receipt\n")
                     self.assertEqual(list(project.glob(f".{target.name}.*.tmp")), [])
 
+    def test_atomic_generated_write_survives_process_termination(self) -> None:
+        child = """
+import importlib.util
+import os
+import signal
+import sys
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("cy", sys.argv[1])
+cy = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(cy)
+
+def terminate_before_replace(*_args):
+    os.kill(os.getpid(), signal.SIGKILL)
+
+cy.os.replace = terminate_before_replace
+cy.safe_write_text(Path(sys.argv[2]), "new receipt\\n")
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            target = project / "generated.json"
+            target.write_text("old receipt\n", encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, "-c", child, str(CLI), str(target)],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, -signal.SIGKILL, result.stderr)
+            self.assertEqual(target.read_text(encoding="utf-8"), "old receipt\n")
+            self.assertEqual(len(list(project.glob(f".{target.name}.*.tmp"))), 1)
+
+    def test_atomic_generated_write_reports_permission_denial_without_touching_destination(self) -> None:
+        if hasattr(os, "geteuid") and os.geteuid() == 0:
+            self.skipTest("root can bypass directory permission denial")
+        child = """
+import importlib.util
+import sys
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("cy", sys.argv[1])
+cy = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(cy)
+cy.safe_write_text(Path(sys.argv[2]), "new receipt\\n")
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            target = project / "generated.json"
+            target.write_text("old receipt\n", encoding="utf-8")
+            original_mode = project.stat().st_mode & 0o777
+            project.chmod(0o500)
+            try:
+                result = subprocess.run(
+                    [sys.executable, "-c", child, str(CLI), str(target)],
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+            finally:
+                project.chmod(original_mode)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("PermissionError", result.stderr)
+            self.assertEqual(target.read_text(encoding="utf-8"), "old receipt\n")
+
+    def test_interrupted_score_history_recovery_preserves_corrupt_backup(self) -> None:
+        child = """
+import importlib.util
+import os
+import signal
+import sys
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("cy", sys.argv[1])
+cy = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(cy)
+
+original_replace = os.replace
+replace_calls = 0
+
+def terminate_during_recovery_replace(*args):
+    global replace_calls
+    replace_calls += 1
+    if replace_calls == 2:
+        os.kill(os.getpid(), signal.SIGKILL)
+    return original_replace(*args)
+
+cy.os.replace = terminate_during_recovery_replace
+cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}))
+"""
+        corrupted = "{ this is not valid json\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            history = project / "history.json"
+            history.write_text(corrupted, encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, "-c", child, str(CLI), str(history)],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, -signal.SIGKILL, result.stderr)
+            self.assertFalse(history.exists())
+            self.assertEqual(
+                (project / "history.json.corrupt.bak").read_text(encoding="utf-8"),
+                corrupted,
+            )
+            self.assertEqual(len(list(project.glob(".history.json.*.tmp"))), 1)
+
+    def test_report_parser_and_regenerator_are_byte_stable(self) -> None:
+        from importlib import util as _util
+        spec = _util.spec_from_file_location("cy", CLI)
+        cy = _util.module_from_spec(spec)
+        spec.loader.exec_module(cy)
+
+        generated = cy.regenerate_report(GOLDEN_REPORT)
+        parsed = cy.parse_report(generated)
+        regenerated = cy.regenerate_report(parsed)
+
+        self.assertEqual(parsed, GOLDEN_REPORT)
+        self.assertEqual(regenerated.encode("utf-8"), generated.encode("utf-8"))
+        self.assertTrue(generated.endswith("\n"))
+
     def test_score_to_report_round_trip_and_invalid_mutations_fail_schema(self) -> None:
         findings = {
             "findings": [{
@@ -519,6 +651,17 @@ class CheckYourselfCliTests(unittest.TestCase):
             no_change_data = json.loads(no_change.stdout)
             self.assertFalse(no_change_data["regression"])
             self.assertEqual(no_change_data["unchanged"], ["CY-LINE-001"])
+
+            new_path.write_bytes(
+                ("\ufeff" + json.dumps(old, indent=2) + "\n \t").encode("utf-8")
+            )
+            bom_trailing = self.run_cli(
+                "diff", "--old", str(old_path), "--new", str(new_path), "--ci", "--format", "json",
+            )
+            self.assertEqual(bom_trailing.returncode, 0, bom_trailing.stderr)
+            bom_trailing_data = json.loads(bom_trailing.stdout)
+            self.assertFalse(bom_trailing_data["regression"])
+            self.assertEqual(bom_trailing_data["unchanged"], ["CY-LINE-001"])
 
             new_path.write_bytes(ending_variant(json.dumps(added, indent=2), "mixed").encode("utf-8"))
             changed = self.run_cli(

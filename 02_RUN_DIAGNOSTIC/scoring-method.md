@@ -21,12 +21,35 @@ It is not a moral judgment and not a guarantee. It is an evidence-based estimate
 
 If a category does not apply, mark it `NotApplicable` and provide an explicit `not_applicable_reason`. Its weight slot is not redistributed; the CLI awards the full weight for that category automatically when a valid reason is present. Do not adjust other category weights. Hand-scored totals must treat a NotApplicable category as if it received full credit for that weight, matching the behavior of `score --findings --coverage`.
 
+In prose, write **Not applicable**. In coverage JSON, use the exact enum
+`NotApplicable`; both spellings describe the same state.
+
 ## Caps
 
 - Any unresolved P0 caps the final score at 49.
 - Any unresolved P1 caps the final score at 74.
 - Missing evidence in a critical category caps the final score at 84. This cap applies in every score mode, including estimates.
 - A score above 90 requires credible evidence for tests, secrets handling, deployment/rollback, observability, auth, and data boundaries. This cap applies in every score mode, including estimates.
+
+## Executable scoring contract
+
+The CLI computes the base score and caps deterministically:
+
+1. For each category, start with its weight.
+2. Subtract the evidence penalty for an `Unknown` category (`100%` of the
+   weight for critical categories C1/C2/C3, otherwise `50%`). Subtract each
+   unresolved finding penalty using `P0 = 100%`, `P1 = 60%`, `P2 = 25%`, or
+   `P3 = 10%` of that category's weight. Clamp each category award to
+   `[0, weight]`.
+3. `base_score = round(sum(category_award))`.
+4. `minimum_cap = min(100, 49 if unresolved P0, 74 if unresolved P1, 84 if
+   critical evidence is missing, 90 if a high-score launch-gate category lacks
+   evidence)`.
+5. `final_score = min(base_score, minimum_cap)`.
+
+`NotApplicable` with a concrete reason retains the category's full weight. The
+executable reference is [`docs/cli.md#scoring`](../docs/cli.md#scoring), backed
+by [`tools/checkyourself.py`](../tools/checkyourself.py).
 
 ## Confidence labels
 

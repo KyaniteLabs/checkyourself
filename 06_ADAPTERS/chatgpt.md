@@ -1,5 +1,8 @@
 # ChatGPT Adapter
 
+Start with [`native-cli-mcp.md`](native-cli-mcp.md) when a local shell or MCP
+client is available. This file only covers ChatGPT's chat/file-sharing setup.
+
 ## Best path
 
 1. Upload the project files you can share, or paste key files and app context.
