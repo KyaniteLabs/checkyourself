@@ -1,6 +1,6 @@
 # CheckYourself
 
-> Local-first completion-evidence review for AI-built apps: verifier-checked local receipts, bounded 0–100 scoring, stable rule IDs, and guided fixes. It does not prove production safety or independently challenge the original completion claim.
+> Local-first completion-evidence review for AI-built apps: verifier-owned challenges, verifier-checked receipts, bounded 0–100 scoring, stable rule IDs, and guided fixes. It does not prove production safety or provide independent external custody.
 
 ## Getting Started
 
@@ -12,7 +12,7 @@
 ## Core Reference
 
 - [rules.md](rules.md) — review, safety, evidence, and workflow rules for the diagnostic
-- [docs/cli.md](docs/cli.md) — canonical detector-rule registry and CLI command reference (scan, diagnostic, diff, score, coverage, backlog, next)
+- [docs/cli.md](docs/cli.md) — canonical detector-rule registry and CLI command reference (scan, diagnostic, diff, score, coverage, challenge, validate, backlog, next)
 - [docs/mcp.md](docs/mcp.md) — MCP server setup, tool list, scan-root confinement, expected agent flow
 - [CHANGELOG.md](CHANGELOG.md) — version history including the v1.7.0 diff command and stable rule IDs
 
@@ -39,3 +39,27 @@ The `schemas/` directory contains JSON schema contracts for every structured out
 ## Agent Skill
 
 - [skills/checkyourself/SKILL.md](skills/checkyourself/SKILL.md) — installable skill for Claude Code and Codex skill aggregators
+
+## Verified capabilities
+
+- `challenge` executes committed `.checkyourself/challenges.json` definitions with argv-only commands and bounded timeouts. A failed or timed-out challenge fails closed.
+- Verifier-executed `EXECUTED` receipts are the only full-credit evidence class. Caller-issued receipts are labeled `UNVERIFIED` and receive capped credit.
+- Score-time re-execution runs a fresh verifier check and requires matching exit state, assertions, source/challenge bindings, and a semantic output digest. Volatile durations, timestamps, and paths are normalized; raw capture hashing remains tamper evidence.
+- Verifier-owned per-surface minimum contracts reject or cap semantic vacuity: no-op commands, echo/print-only output, hollow test-runner output, and trivial regexes do not earn full credit.
+- The local integrity HMAC detects project-local receipt tampering. It is not proof of independent issuance or operator identity; externally controlled custody is future work.
+- `--claim` records the accepted completion claim and labels evidence as claim-bound or unbound.
+- Report validation labels schema validity separately from semantic verdict consistency and recomputes verdicts.
+- The ASTRA adversarial review found eight findings; the retrofit closed them. See [`_retrofit-2026-09-04/ASTRA-REVIEW.md`](_retrofit-2026-09-04/ASTRA-REVIEW.md) and [`_retrofit-2026-09-04/ASTRA-FIX-REPORT.md`](_retrofit-2026-09-04/ASTRA-FIX-REPORT.md).
+
+## Current repository facts
+
+- 20 canonical coverage surfaces across 10 scored categories.
+- `python3 -m pytest tests/ -q`: 150 tests passed and 88 subtests passed.
+- `python3 tools/validate_public.py .`: passed.
+- Apache License 2.0 is the license of record; see [`LICENSE`](LICENSE).
+
+## Boundaries
+
+- Local-first means the verifier runs in the inspected project. The score is bounded evidence, not a production-safety guarantee.
+- The HMAC is local tamper evidence, not independent issuance or external attestation.
+- Challenge definitions test the accepted completion claim but do not replace production tests, expert review, or owner approval.

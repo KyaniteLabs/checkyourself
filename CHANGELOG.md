@@ -2,51 +2,66 @@
 
 ## Unreleased
 
-The current maintenance pass makes the local diagnostic contracts explicit and
-keeps user-facing proof aligned with the shipped behavior.
+The 2026-09-04/05 retrofit brought the local evidence contract through the
+gauntlet, an ASTRA adversarial review, verifier-owned challenges, hardening, and
+two independent final reviews. The documented boundary remains local evidence,
+not production-safety certification or independent external custody.
 
-### Trustworthy evidence and scoring
+### 2026-09-04 — Gauntlet waves 1–10
 
-- Scores now fail closed when coverage evidence is invalid, incomplete,
-  duplicated, unknown, or mismatched. Missing evidence cannot be disguised as
-  a `Pass`, and high confidence requires all 20 surfaces with real evidence.
-- Bundled JSON Schema validation now executes every validation keyword used by
-  the repository's contracts, including combinators, array constraints, and
-  closed-object checks; unsupported schema keywords are reported instead of
-  being ignored.
-- The report contract now requires the complete Production Reality Report
-  sections, so a partial artifact cannot certify a complete diagnostic.
-- The skill documents a canonical manual rule-ID registry and evidence rubric,
-  plus the executable `final_score = min(base_score, minimum_cap)` formula for
-  readers who cannot run the CLI.
+- Waves 1–7 hardened score trust, schema enforcement, scanner completeness and
+  safe writes, backlog/diff semantics, malformed-input handling, proven versus
+  merely detected evidence, and public validation. See [`WAVE1-REPORT.md`](_retrofit-2026-09-04/WAVE1-REPORT.md)
+  through [`WAVE7-REPORT.md`](_retrofit-2026-09-04/WAVE7-REPORT.md).
+- Waves 8–10 aligned public truth, current dogfood proof, and Apache-2.0
+  license surfaces. See [`WAVE8-REPORT.md`](_retrofit-2026-09-04/WAVE8-REPORT.md),
+  [`WAVE9-REPORT.md`](_retrofit-2026-09-04/WAVE9-REPORT.md), and [`WAVE10-REPORT.md`](_retrofit-2026-09-04/WAVE10-REPORT.md).
 
-### Safer local automation
+### 2026-09-04 — ASTRA adversarial review
 
-- Scans disclose unreadable, skipped, and truncated files, recognize relevant
-  extensionless configuration files, and avoid misclassifying ordinary names
-  as tests. Generated output uses read-only-by-default and symlink-safe write
-  boundaries.
-- Backlog and `next` output now calls its deterministic slice
-  `highest_severity_batch`; it is an ordering result, not an analysis of
-  safety, dependencies, coupling, or blast radius. `diff` reports identity,
-  status, and severity transitions and its CI gate catches newly opened,
-  reopened, escalated, and count-increasing P0/P1 risk.
+- ASTRA found eight findings, including fabricated evidence credit, blanket
+  non-applicability, residual-risk laundering, unknown/finding folding,
+  unsupported report verdicts, broad discovery claims, and missing claim
+  binding. The findings and executable repros are recorded in
+  [`ASTRA-REVIEW.md`](_retrofit-2026-09-04/ASTRA-REVIEW.md).
 
-### Clearer agent and dashboard interfaces
+### 2026-09-04 — ASTRA fixes and claim binding
 
-- The local CLI is documented as the canonical engine, with the stdio MCP
-  wrapper using the same functions and schemas. The agent-access plan is now a
-  current decision record rather than a future-tense implementation plan.
-- The optional dashboard has a documented `dashboard inline` Markdown mode in
-  addition to the opt-in self-contained HTML/CSS mode.
+- Closed the eight ASTRA findings with verifier-captured evidence, delegation
+  receipts, residual-risk separation, independent unknown tracking, semantic
+  report validation, and `--claim` evidence binding. Schema validity is now
+  distinct from recomputed verdict consistency. See [`ASTRA-FIX-REPORT.md`](_retrofit-2026-09-04/ASTRA-FIX-REPORT.md).
 
-### Public and release documentation
+### 2026-09-04 — Verifier-owned challenge runner
 
-- Public license claims are aligned to Apache-2.0 across the README, manifest,
-  LICENSE, and NOTICE surfaces.
-- Security support documentation identifies the supported tagged `1.7.x`
-  release line, the supported public `main` branch, and the unsupported older
-  tags.
+- Added the `challenge` verb and committed `.checkyourself/challenges.json`.
+  Definitions use argv-only commands and bounded timeouts; failed and timed-out
+  runs fail closed. Only successful verifier-executed `EXECUTED` receipts can
+  receive full credit; caller-issued receipts are explicitly `UNVERIFIED` and
+  capped. See [`CHALLENGE-RUNNER-REPORT.md`](_retrofit-2026-09-04/CHALLENGE-RUNNER-REPORT.md).
+
+### 2026-09-05 — Runner hardening and semantic vacuity
+
+- Score-time verification now re-executes stored receipts, binds each run with
+  a project-local HMAC, and checks source, capture, exit, timeout, execution,
+  and semantic output state. The HMAC is tamper evidence, not proof of
+  independent issuance; external custody remains future work. See
+  [`RUNNER-HARDEN-REPORT.md`](_retrofit-2026-09-04/RUNNER-HARDEN-REPORT.md).
+- Verifier-owned per-surface minimum contracts reject or cap no-op, echo,
+  print-only, hollow-runner, and trivial-regex challenges. See [`VACUITY-REPORT.md`](_retrofit-2026-09-04/VACUITY-REPORT.md).
+
+### 2026-09-05 — Semantic re-execution normalization
+
+- Fresh challenge runs now compare a semantic output digest that normalizes
+  volatile durations, timestamps, and absolute paths while retaining raw capture
+  hashing for tamper evidence. The final repository proof records 150 tests and
+  88 subtests passed. See [`REEXEC-NORM-REPORT.md`](_retrofit-2026-09-04/REEXEC-NORM-REPORT.md).
+
+### 2026-09-05 — Final independent green pair at `cd9cf85`
+
+- Grok and Sol independently reviewed pinned `cd9cf85`; both reported fully
+  green after ASTRA, challenge-runner, hardening, and normalization work. The
+  receipts are [`FINAL-grok.md`](_retrofit-2026-09-04/FINAL-grok.md) and [`FINAL-sol.md`](_retrofit-2026-09-04/FINAL-sol.md).
 
 ## 1.7.0 — 2026-06-12
 
