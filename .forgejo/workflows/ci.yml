@@ -16,7 +16,7 @@ jobs:
 
       - name: Lint
         run: |
-          pip install --break-system-packages -q ruff
+          pip install --break-system-packages -q ruff==0.15.8
           ruff check tools/ tests/
 
       - name: Compile Python tools

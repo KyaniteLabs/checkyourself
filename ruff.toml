@@ -1,0 +1,7 @@
+# Ruff config of record (FJ CI + local must agree — rule drift between runner
+# versions caused 258 phantom errors on 2026-09-06; pin select+version in-repo)
+line-length = 120
+target-version = "py311"
+
+[lint]
+select = ["E4", "E7", "E9", "F"]
