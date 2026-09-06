@@ -124,4 +124,3 @@ Each wave assumes a clean committed baseline and produces its own commit. No wav
 - **Rows:** MR-026, MR-034.
 - **Acceptance:** `python3 tools/validate_public.py && python3 -m pytest tests/ -q` exits 0; adapter smoke review covers native CLI/MCP discovery and write boundaries; SECURITY names supported releases/main unambiguously.
 - **Rollback:** Revert the wave commit; existing runtime interfaces remain unchanged.
-
