@@ -8,6 +8,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -2794,6 +2795,29 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             self.assertEqual(challenge.returncode, 0, challenge.stderr)
             self.assertEqual(json.loads(challenge.stdout)["surfaces"][0]["status"], "PASS")
 
+    def test_artifact_assertion_rejects_symlinked_parent_outside_project(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            external = Path(tmp) / "external"
+            root.mkdir()
+            external.mkdir()
+            (external / "proof.txt").write_text("proof\n", encoding="utf-8")
+            (root / "linked").symlink_to(external, target_is_directory=True)
+
+            status, reasons = cy._challenge_result(
+                {"success": {"exit_zero": True, "artifact": "linked/proof.txt"}},
+                surface_id="S13",
+                exit_code=0,
+                stdout="release status ready checks 1\n",
+                stderr="",
+                timed_out=False,
+                execution_error="",
+                root=root,
+            )
+
+            self.assertEqual(status, "FAIL")
+            self.assertTrue(any("artifact path escapes the project root" in reason for reason in reasons))
+
     def test_analysis_surface_requires_structured_findings_fields(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
@@ -2833,7 +2857,9 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             self.assertTrue((project / receipt["captured_output"]).exists())
 
             coverage = {
+                "tool": "checkyourself-cli",
                 "schema": "checkyourself-coverage/1",
+                "generated_at": "2026-09-05T00:00:00Z",
                 "surfaces": [{
                     "id": "S11",
                     "surface": "Tests, quality gates, and regression coverage",
@@ -2841,12 +2867,19 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                     "status": "Pass",
                     "evidence_reviewed": [receipt["captured_output"]],
                     "evidence_receipts": [receipt],
+                    "missing_evidence": [],
+                    "not_applicable_reason": "",
                 }],
             }
             findings_path = project / "findings.json"
             coverage_path = project / "coverage.json"
             findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
             coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
+            validation = self.run_cli(
+                "validate", "--kind", "coverage", str(coverage_path), "--format", "json",
+            )
+            self.assertEqual(validation.returncode, 0, validation.stderr)
+            self.assertTrue(json.loads(validation.stdout)["valid"])
             score = self.run_cli(
                 "score", "--findings", str(findings_path), "--coverage", str(coverage_path),
                 "--no-history", "--format", "json",
@@ -3174,6 +3207,55 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             data = json.loads(result.stdout)
             self.assertTrue(data["receipts"][0]["timed_out"])
             self.assertEqual(data["receipts"][0]["status"], "FAIL")
+
+    def test_timeout_terminates_child_and_grandchild_processes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            started = project / "grandchild-started.txt"
+            survived = project / "grandchild-survived.txt"
+            process_group_leader = project / "process-group-leader.txt"
+            grandchild_code = (
+                "from pathlib import Path; import os, time; "
+                f"Path({str(started)!r}).write_text(str(os.getpid())); "
+                "time.sleep(1.5); "
+                f"Path({str(survived)!r}).write_text('alive'); time.sleep(10)"
+            )
+            child_code = (
+                "import subprocess, sys, time; "
+                f"subprocess.Popen([sys.executable, '-c', {grandchild_code!r}], "
+                "stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); "
+                "time.sleep(10)"
+            )
+            command_code = (
+                "# pytest\nimport subprocess, sys, time, os; "
+                f"Path = __import__('pathlib').Path; Path({str(process_group_leader)!r}).write_text(str(os.getpid())); "
+                f"subprocess.Popen([sys.executable, '-c', {child_code!r}], "
+                "stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); time.sleep(10)"
+            )
+            self._write_challenges(project, {
+                "S11": {
+                    "command": [sys.executable, "-c", command_code],
+                    "timeout_s": 1.0,
+                    "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
+                    "output_kind": "text",
+                },
+            })
+            try:
+                result = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertTrue(json.loads(result.stdout)["receipts"][0]["timed_out"])
+                deadline = time.monotonic() + 2
+                while not started.exists() and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                self.assertTrue(started.exists(), "grandchild did not start before timeout")
+                time.sleep(1)
+                self.assertFalse(survived.exists(), "grandchild survived the challenge timeout")
+            finally:
+                if process_group_leader.exists():
+                    try:
+                        os.killpg(int(process_group_leader.read_text()), signal.SIGKILL)
+                    except (OSError, ValueError):
+                        pass
 
     def test_executed_receipt_is_invalid_after_source_tree_change(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
