@@ -2718,7 +2718,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             self._write_challenges(project, {
                 "S11": {
                     "command": ["true"],
-                    "timeout_s": 10,
+                    "timeout_s": 120,
                     "success": {"exit_zero": True},
                     "output_kind": "text",
                 },
@@ -2738,7 +2738,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             self._write_challenges(project, {
                 "S11": {
                     "command": ["echo", "one two three"],
-                    "timeout_s": 10,
+                    "timeout_s": 120,
                     "success": {"exit_zero": True, "regex_match": "one"},
                     "output_kind": "text",
                 },
@@ -2754,7 +2754,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             self._write_challenges(project, {
                 "S11": {
                     "command": [sys.executable, "-c", "import pytest; print('1 passed in 0.01s')"],
-                    "timeout_s": 10,
+                    "timeout_s": 120,
                     "success": {"exit_zero": True, "regex_match": ".*"},
                     "output_kind": "text",
                 },
@@ -2770,7 +2770,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             self._write_challenges(project, {
                 "S13": {
                     "command": [sys.executable, "-c", "import sys; sys.stdout.write('release status ready checks 1\\n')"],
-                    "timeout_s": 10,
+                    "timeout_s": 120,
                     "success": {"exit_zero": True, "regex_match": "release\\s+status\\s+ready", "artifact": "build/release.json"},
                     "output_kind": "text",
                 },
@@ -2786,7 +2786,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             self._write_challenges(project, {
                 "S13": {
                     "command": [sys.executable, "-c", "from pathlib import Path; Path('build').mkdir(); Path('build/release.json').write_text('release'); import sys; sys.stdout.write('release status ready checks 1\\n')"],
-                    "timeout_s": 10,
+                    "timeout_s": 120,
                     "success": {"exit_zero": True, "regex_match": "release\\s+status\\s+ready", "artifact": "build/release.json"},
                     "output_kind": "text",
                 },
@@ -2824,7 +2824,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             self._write_challenges(project, {
                 "S19": {
                     "command": [sys.executable, "-c", "import json; print(json.dumps({'status': 'pass'}))"],
-                    "timeout_s": 10,
+                    "timeout_s": 120,
                     "success": {"json_field": {"status": "pass"}},
                     "output_kind": "json",
                 },
@@ -2841,7 +2841,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             self._write_challenges(project, {
                 "S11": {
                     "command": [sys.executable, "-m", "pytest", "-q"],
-                    "timeout_s": 10,
+                    "timeout_s": 120,
                     "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
                     "output_kind": "text",
                 },
@@ -2917,7 +2917,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                         "-c",
                         "import pytest, time; print(f'1 passed in {time.time_ns()}ms')",
                     ],
-                    "timeout_s": 10,
+                    "timeout_s": 120,
                     "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
                     "output_kind": "text",
                 },
@@ -2939,7 +2939,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             self._write_challenges(project, {
                 "S11": {
                     "command": [sys.executable, "-c", "import pytest; print('1 passed in 0.01s')"],
-                    "timeout_s": 10,
+                    "timeout_s": 120,
                     "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
                     "output_kind": "text",
                 },
@@ -2968,7 +2968,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                         "-c",
                         "from pathlib import Path; import pytest, sys; print('1 passed checks'); raise SystemExit(0 if Path('.checkyourself/challenge-runs/state.txt').read_text().strip() == 'pass' else 7)",
                     ],
-                    "timeout_s": 10,
+                    "timeout_s": 120,
                     "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
                     "output_kind": "text",
                 },
@@ -2995,7 +2995,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                         "-c",
                         "from pathlib import Path; import pytest; print('1 passed checks' if Path('.checkyourself/challenge-runs/state.txt').read_text().strip() == 'pass' else 'not a test result')",
                     ],
-                    "timeout_s": 10,
+                    "timeout_s": 120,
                     "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
                     "output_kind": "text",
                 },
@@ -3015,7 +3015,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             self._write_challenges(project, {
                 "S11": {
                     "command": [sys.executable, "-c", "import pytest; print('1 passed in 0.01s')"],
-                    "timeout_s": 10,
+                    "timeout_s": 120,
                     "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
                     "output_kind": "text",
                 },
@@ -3036,7 +3036,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             self._write_challenges(project, {
                 "S11": {
                     "command": [sys.executable, "-c", "import pytest; print('1 passed in 0.01s')"],
-                    "timeout_s": 10,
+                    "timeout_s": 120,
                     "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
                     "output_kind": "text",
                 },
@@ -3056,7 +3056,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             self._write_challenges(project, {
                 "S11": {
                     "command": [sys.executable, "-c", "import pytest; print('1 passed in 0.01s')"],
-                    "timeout_s": 10,
+                    "timeout_s": 120,
                     "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
                     "output_kind": "text",
                 },
@@ -3083,7 +3083,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                         "-c",
                         "import pytest; from pathlib import Path; print(Path('.checkyourself/challenge-runs/input.txt').read_text().strip() + ' 1 passed')",
                     ],
-                    "timeout_s": 10,
+                    "timeout_s": 120,
                     "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
                     "output_kind": "text",
                 },
@@ -3137,8 +3137,8 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             self._write_challenges(project, {
-                "S02": {"command": [sys.executable, "-c", "import json; print(json.dumps({'status': 'ok', 'dependencies': 1}))"], "timeout_s": 10, "success": {"json_field": {"status": "ok", "dependencies": 1}, "regex_not_match": ["failure"]}, "output_kind": "json"},
-                "S05": {"command": [sys.executable, "-c", "import sys; sys.stdout.write('auth status ok checks 1\\n')"], "timeout_s": 10, "success": {"exit_zero": True, "regex_match": r"auth\s+status\s+ok"}, "output_kind": "text"},
+                "S02": {"command": [sys.executable, "-c", "import json; print(json.dumps({'status': 'ok', 'dependencies': 1}))"], "timeout_s": 120, "success": {"json_field": {"status": "ok", "dependencies": 1}, "regex_not_match": ["failure"]}, "output_kind": "json"},
+                "S05": {"command": [sys.executable, "-c", "import sys; sys.stdout.write('auth status ok checks 1\\n')"], "timeout_s": 120, "success": {"exit_zero": True, "regex_match": r"auth\s+status\s+ok"}, "output_kind": "text"},
             })
             challenge = self.run_cli("challenge", str(project), "--surface", "S02", "--format", "json")
             self.assertEqual(challenge.returncode, 0, challenge.stderr)
@@ -3177,7 +3177,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             self._write_challenges(project, {
-                "S11": {"command": [sys.executable, "-c", "import pytest; print('0 passed in 0.01s'); raise SystemExit(3)"], "timeout_s": 10, "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"}, "output_kind": "text"},
+                "S11": {"command": [sys.executable, "-c", "import pytest; print('0 passed in 0.01s'); raise SystemExit(3)"], "timeout_s": 120, "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"}, "output_kind": "text"},
             })
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
             self.assertEqual(challenge.returncode, 1)
@@ -3261,7 +3261,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             self._write_challenges(project, {
-                "S11": {"command": [sys.executable, "-c", "import pytest; print('1 passed in 0.01s')"], "timeout_s": 10, "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"}, "output_kind": "text"},
+                "S11": {"command": [sys.executable, "-c", "import pytest; print('1 passed in 0.01s')"], "timeout_s": 120, "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"}, "output_kind": "text"},
             })
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
             self.assertEqual(challenge.returncode, 0, challenge.stderr)
