@@ -21,6 +21,9 @@ jobs:
         with:
           python-version: "3.x"
 
+      - name: Install test runner (S11 challenge contracts exercise pytest)
+        run: python -m pip install pytest
+
       - name: Validate public repository shape
         run: python tools/validate_public.py
 
