@@ -2792,7 +2792,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                 },
             })
             challenge = self.run_cli("challenge", str(project), "--surface", "S13", "--format", "json")
-            self.assertEqual(challenge.returncode, 0, challenge.stderr)
+            self.assertEqual(challenge.returncode, 0, challenge.stderr or ("STDOUT:" + challenge.stdout[-1500:]))
             self.assertEqual(json.loads(challenge.stdout)["surfaces"][0]["status"], "PASS")
 
     def test_artifact_assertion_rejects_symlinked_parent_outside_project(self) -> None:
@@ -2847,7 +2847,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                 },
             })
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
-            self.assertEqual(challenge.returncode, 0, challenge.stderr)
+            self.assertEqual(challenge.returncode, 0, challenge.stderr or ("STDOUT:" + challenge.stdout[-1500:]))
             result = json.loads(challenge.stdout)
             receipt = result["receipts"][0]
             self.assertEqual(receipt["receipt_type"], "EXECUTED")
@@ -2923,7 +2923,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                 },
             })
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
-            self.assertEqual(challenge.returncode, 0, challenge.stderr)
+            self.assertEqual(challenge.returncode, 0, challenge.stderr or ("STDOUT:" + challenge.stdout[-1500:]))
             receipt = json.loads(challenge.stdout)["receipts"][0]
             self.assertRegex(receipt["semantic_output_digest"], r"^[0-9a-f]{64}$")
             first_score = self._score_challenge_receipt(project, receipt)
@@ -2945,7 +2945,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                 },
             })
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
-            self.assertEqual(challenge.returncode, 0, challenge.stderr)
+            self.assertEqual(challenge.returncode, 0, challenge.stderr or ("STDOUT:" + challenge.stdout[-1500:]))
             legacy = json.loads(challenge.stdout)["receipts"][0]
             legacy.pop("semantic_output_digest")
             legacy["receipt_sha256"] = cy._executed_receipt_binding_digest(legacy)
@@ -2974,7 +2974,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                 },
             })
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
-            self.assertEqual(challenge.returncode, 0, challenge.stderr)
+            self.assertEqual(challenge.returncode, 0, challenge.stderr or ("STDOUT:" + challenge.stdout[-1500:]))
             receipt = json.loads(challenge.stdout)["receipts"][0]
             state_path.write_text("fail\n", encoding="utf-8")
             score = self._score_challenge_receipt(project, receipt)
@@ -3001,7 +3001,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                 },
             })
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
-            self.assertEqual(challenge.returncode, 0, challenge.stderr)
+            self.assertEqual(challenge.returncode, 0, challenge.stderr or ("STDOUT:" + challenge.stdout[-1500:]))
             receipt = json.loads(challenge.stdout)["receipts"][0]
             state_path.write_text("fail\n", encoding="utf-8")
             score = self._score_challenge_receipt(project, receipt)
@@ -3021,7 +3021,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                 },
             })
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
-            self.assertEqual(challenge.returncode, 0, challenge.stderr)
+            self.assertEqual(challenge.returncode, 0, challenge.stderr or ("STDOUT:" + challenge.stdout[-1500:]))
             forged = json.loads(challenge.stdout)["receipts"][0]
             forged.pop("local_integrity_hmac")
             score = self._score_challenge_receipt(project, forged)
@@ -3042,7 +3042,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                 },
             })
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
-            self.assertEqual(challenge.returncode, 0, challenge.stderr)
+            self.assertEqual(challenge.returncode, 0, challenge.stderr or ("STDOUT:" + challenge.stdout[-1500:]))
             invalid = json.loads(challenge.stdout)["receipts"][0]
             invalid["local_integrity_hmac"] = "0" * 64
             score = self._score_challenge_receipt(project, invalid)
@@ -3062,7 +3062,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                 },
             })
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
-            self.assertEqual(challenge.returncode, 0, challenge.stderr)
+            self.assertEqual(challenge.returncode, 0, challenge.stderr or ("STDOUT:" + challenge.stdout[-1500:]))
             receipt = json.loads(challenge.stdout)["receipts"][0]
             capture_path = project / receipt["captured_output"]
             capture_path.write_text('{"stdout":"forged\\n","stderr":""}\n', encoding="utf-8")
@@ -3089,7 +3089,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                 },
             })
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
-            self.assertEqual(challenge.returncode, 0, challenge.stderr)
+            self.assertEqual(challenge.returncode, 0, challenge.stderr or ("STDOUT:" + challenge.stdout[-1500:]))
             receipt = json.loads(challenge.stdout)["receipts"][0]
             state_path.write_text("after\n", encoding="utf-8")
             score = self._score_challenge_receipt(project, receipt)
@@ -3141,7 +3141,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                 "S05": {"command": [sys.executable, "-c", "import sys; sys.stdout.write('auth status ok checks 1\\n')"], "timeout_s": 120, "success": {"exit_zero": True, "regex_match": r"auth\s+status\s+ok"}, "output_kind": "text"},
             })
             challenge = self.run_cli("challenge", str(project), "--surface", "S02", "--format", "json")
-            self.assertEqual(challenge.returncode, 0, challenge.stderr)
+            self.assertEqual(challenge.returncode, 0, challenge.stderr or ("STDOUT:" + challenge.stdout[-1500:]))
             receipt = json.loads(challenge.stdout)["receipts"][0]
             self.assertEqual(receipt["surface_id"], "S02")
             self.assertEqual(receipt["status"], "PASS")
@@ -3264,7 +3264,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                 "S11": {"command": [sys.executable, "-c", "import pytest; print('1 passed in 0.01s')"], "timeout_s": 120, "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"}, "output_kind": "text"},
             })
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
-            self.assertEqual(challenge.returncode, 0, challenge.stderr)
+            self.assertEqual(challenge.returncode, 0, challenge.stderr or ("STDOUT:" + challenge.stdout[-1500:]))
             receipt = json.loads(challenge.stdout)["receipts"][0]
             (project / "app.py").write_text("print('changed')\n", encoding="utf-8")
             coverage = {"schema": "checkyourself-coverage/1", "surfaces": [{
