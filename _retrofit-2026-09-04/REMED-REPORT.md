@@ -24,7 +24,7 @@ Status: DONE
 
 ```text
 OK: public CheckYourself validation passed
-Path: /Users/simongonzalezdecruz/workspaces/checkyourself
+Path: 
 ```
 
 `python3 -m pytest tests/ -q`

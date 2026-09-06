@@ -7,7 +7,7 @@ Verdict: `RETROFIT-NEEDED yes` — public documentation, machine contracts, and 
 ### CYR-LUNA-B-001 — P1 — License claims conflict
 
 - Evidence:
-  - `README.md:7` — `[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)`
+  - `README.md:7` — `[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](../LICENSE)`
   - `README.md:268` — `Released under the MIT License.`
   - `checkyourself.manifest.json:5` — `"license": "Apache-2.0"`
   - `LICENSE:1` — `Apache License`

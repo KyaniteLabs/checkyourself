@@ -76,7 +76,7 @@ All commands returned exit code 0 and emitted the listed schema:
 ### Liminal spot-check
 
 Command: `python3 tools/checkyourself.py scan
-/Users/simongonzalezdecruz/workspaces/liminal --format json --no-write`
+/path/to/your/project --format json --no-write`
 
 - Exit code: 0; 4,954 files scanned.
 - `config_error`: null; the reviewed multiline suppression config is now
