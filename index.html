@@ -1,0 +1,649 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="CheckYourself turns an AI-built app's done claim into completion evidence you can inspect before launch.">
+    <title>CheckYourself — make done prove itself</title>
+    <script>
+      try {
+        const savedTheme = localStorage.getItem("checkyourself-theme");
+        if (["dark", "light", "contrast"].includes(savedTheme)) {
+          document.documentElement.dataset.theme = savedTheme;
+        }
+      } catch (error) {
+        /* The authored dark theme remains the safe fallback when storage is unavailable. */
+      }
+    </script>
+    <style>
+      /* Primitive tokens: color-system's OKLCH ramps, plus sRGB fallbacks below. */
+      :root {
+        --brand-50: oklch(0.97 0.025 152);
+        --brand-100: oklch(0.93 0.05 152);
+        --brand-200: oklch(0.88 0.09 152);
+        --brand-300: oklch(0.83 0.13 152);
+        --brand-400: oklch(0.79 0.16 152);
+        --brand-500: oklch(0.75 0.18 152);
+        --brand-600: oklch(0.68 0.17 152);
+        --brand-700: oklch(0.57 0.14 152);
+        --brand-800: oklch(0.45 0.1 152);
+        --brand-900: oklch(0.33 0.06 152);
+        --neutral-50: oklch(0.98 0.012 105);
+        --neutral-100: oklch(0.94 0.014 160);
+        --neutral-200: oklch(0.87 0.018 160);
+        --neutral-300: oklch(0.76 0.022 160);
+        --neutral-400: oklch(0.65 0.024 160);
+        --neutral-500: oklch(0.55 0.025 160);
+        --neutral-600: oklch(0.45 0.026 160);
+        --neutral-700: oklch(0.36 0.026 160);
+        --neutral-800: oklch(0.27 0.025 160);
+        --neutral-900: oklch(0.2 0.022 160);
+        --neutral-950: oklch(0.14 0.018 160);
+        --accent-300: oklch(0.84 0.09 205);
+        --accent-400: oklch(0.79 0.12 205);
+        --accent-500: oklch(0.72 0.15 205);
+        --accent-600: oklch(0.63 0.14 205);
+        --accent-700: oklch(0.53 0.11 205);
+
+        --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+        --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        --step--2: clamp(0.72rem, 0.7rem + 0.08vw, 0.78rem);
+        --step--1: clamp(0.82rem, 0.78rem + 0.14vw, 0.92rem);
+        --step-0: clamp(0.98rem, 0.94rem + 0.18vw, 1.08rem);
+        --step-1: clamp(1.18rem, 1.08rem + 0.5vw, 1.46rem);
+        --step-2: clamp(1.45rem, 1.23rem + 1.1vw, 2.06rem);
+        --step-3: clamp(2rem, 1.55rem + 2.2vw, 3.24rem);
+        --step-4: clamp(2.6rem, 1.9rem + 3.6vw, 4.75rem);
+        --step-5: clamp(3.3rem, 2.35rem + 5.5vw, 6.35rem);
+        --measure: 66ch;
+
+        --space-1: 0.25rem;
+        --space-2: 0.5rem;
+        --space-3: 0.75rem;
+        --space-4: 1rem;
+        --space-5: 1.5rem;
+        --space-6: 2rem;
+        --space-7: 3rem;
+        --space-8: 4rem;
+        --space-9: 6rem;
+        --space-section: clamp(3.5rem, 2rem + 5vw, 7rem);
+
+        --radius-control: 0.5rem;
+        --radius-card: 1.25rem;
+        --radius-pill: 9999px;
+        --shadow-card: 0 1.5rem 4rem rgb(0 0 0 / 0.2);
+        --shadow-float: 0 1rem 2rem rgb(0 0 0 / 0.24);
+        --dur-fast: 140ms;
+        --dur-base: 220ms;
+        --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+
+        /* Dark-first semantic map. Components use semantic tokens only. */
+        --color-bg: var(--neutral-950);
+        --color-surface-1: oklch(0.19 0.022 160);
+        --color-surface-2: oklch(0.24 0.026 160);
+        --color-surface-3: oklch(0.3 0.03 160);
+        --color-text: var(--neutral-50);
+        --color-text-muted: oklch(0.840 0.024 160);
+        --color-border: oklch(0.48 0.028 160);
+        --color-primary: var(--brand-500);
+        --color-primary-hover: var(--brand-400);
+        --color-primary-ink: oklch(0.16 0.025 160);
+        --color-accent: var(--accent-400);
+        --color-accent-ink: oklch(0.16 0.025 160);
+        --color-focus: var(--brand-400);
+        --color-success: oklch(0.76 0.14 150);
+        --color-error: oklch(0.76 0.14 25);
+        --color-warning: oklch(0.82 0.13 82);
+        --color-info: oklch(0.78 0.1 230);
+        --grid-line: rgb(239 245 229 / 0.13);
+        --hero-glow: rgb(178 222 82 / 0.09);
+        color-scheme: dark;
+      }
+
+      :root[data-theme="light"] {
+        --color-bg: oklch(0.975 0.014 105);
+        --color-surface-1: oklch(0.945 0.018 105);
+        --color-surface-2: oklch(0.9 0.022 105);
+        --color-surface-3: oklch(0.84 0.028 105);
+        --color-text: oklch(0.2 0.022 160);
+        --color-text-muted: oklch(0.39 0.03 160);
+        --color-border: oklch(0.6 0.03 160);
+        --color-primary: oklch(0.43 0.13 130);
+        --color-primary-hover: oklch(0.35 0.12 130);
+        --color-primary-ink: oklch(0.98 0.012 105);
+        --color-accent: oklch(0.43 0.12 205);
+        --color-accent-ink: oklch(0.98 0.012 105);
+        --color-focus: oklch(0.38 0.14 130);
+        --color-success: oklch(0.44 0.12 150);
+        --color-error: oklch(0.48 0.15 25);
+        --color-warning: oklch(0.47 0.13 70);
+        --color-info: oklch(0.42 0.1 230);
+        --grid-line: rgb(23 45 39 / 0.16);
+        --hero-glow: rgb(72 111 31 / 0.08);
+        color-scheme: light;
+      }
+
+      :root[data-theme="contrast"] {
+        --color-bg: oklch(0.08 0.012 160);
+        --color-surface-1: oklch(0.12 0.016 160);
+        --color-surface-2: oklch(0.18 0.02 160);
+        --color-surface-3: oklch(0.26 0.025 160);
+        --color-text: oklch(0.99 0.006 105);
+        --color-text-muted: oklch(0.91 0.012 160);
+        --color-border: oklch(0.72 0.02 160);
+        --color-primary: oklch(0.86 0.17 152);
+        --color-primary-hover: oklch(0.93 0.13 152);
+        --color-primary-ink: oklch(0.08 0.012 160);
+        --color-accent: oklch(0.88 0.13 205);
+        --color-accent-ink: oklch(0.08 0.012 160);
+        --color-focus: oklch(0.94 0.13 152);
+        --color-success: oklch(0.86 0.14 150);
+        --color-error: oklch(0.86 0.14 25);
+        --color-warning: oklch(0.9 0.12 82);
+        --color-info: oklch(0.88 0.1 230);
+        --grid-line: rgb(255 255 255 / 0.36);
+        --hero-glow: rgb(217 255 103 / 0.13);
+        color-scheme: dark;
+      }
+
+      @supports not (color: oklch(0 0 0)) {
+        :root { --color-bg: #0d1513; --color-surface-1: #17221f; --color-surface-2: #22302b; --color-surface-3: #30423a; --color-text: #f5f7ed; --color-text-muted: #c3cdc0; --color-border: #76867b; --color-primary: #5fc98f; --color-primary-hover: #82dcae; --color-primary-ink: #0d1a13; --color-accent: #6fd3e8; --color-accent-ink: #0a1a20; --color-focus: #82dcae; }
+        :root[data-theme="light"] { --color-bg: #f7f7ef; --color-surface-1: #eeeeE2; --color-surface-2: #e0e5d8; --color-surface-3: #cdd7ca; --color-text: #172d27; --color-text-muted: #476158; --color-border: #5d7267; --color-primary: #356f47; --color-primary-hover: #265b38; --color-primary-ink: #ffffff; --color-accent: #76551c; --color-accent-ink: #ffffff; --color-focus: #2d6640; }
+        :root[data-theme="contrast"] { --color-bg: #080e0d; --color-surface-1: #111b18; --color-surface-2: #1e2b26; --color-surface-3: #3d5047; --color-text: #ffffff; --color-text-muted: #ecf4e8; --color-border: #b2c0b5; --color-primary: #ddff75; --color-primary-hover: #efffae; --color-primary-ink: #080e0d; --color-accent: #ffe08c; --color-accent-ink: #080e0d; --color-focus: #efffae; }
+      }
+
+      *, *::before, *::after { box-sizing: border-box; }
+      html { background: var(--color-bg); scroll-behavior: smooth; }
+      body {
+        min-width: 320px;
+        margin: 0;
+        overflow-x: clip;
+        background: var(--color-bg);
+        color: var(--color-text);
+        font-family: var(--font-body);
+        font-size: var(--step-0);
+        line-height: 1.55;
+        text-rendering: optimizeLegibility;
+      }
+      a { color: inherit; }
+      button, a { -webkit-tap-highlight-color: transparent; }
+      button { font: inherit; }
+      :focus-visible { outline: 3px solid var(--color-focus); outline-offset: 4px; }
+      ::selection { background: var(--color-primary); color: var(--color-primary-ink); }
+      .skip-link {
+        position: fixed;
+        z-index: 20;
+        top: var(--space-3);
+        left: var(--space-3);
+        transform: translateY(-180%);
+        padding: var(--space-2) var(--space-3);
+        border-radius: var(--radius-control);
+        background: var(--color-primary);
+        color: var(--color-primary-ink);
+        font-weight: 700;
+      }
+      .skip-link:focus { transform: translateY(0); }
+      .shell { width: min(100% - 2rem, 74rem); margin-inline: auto; }
+      .eyebrow, .mono-label {
+        color: var(--color-text-muted);
+        font-family: var(--font-mono);
+        font-size: var(--step--2);
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        line-height: 1.3;
+        text-transform: uppercase;
+      }
+      .eyebrow::before { content: "// "; color: var(--color-primary); }
+      .site-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 4.5rem;
+        border-bottom: 1px solid var(--color-border);
+      }
+      .wordmark {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        color: var(--color-text);
+        font-family: var(--font-mono);
+        font-size: var(--step--1);
+        font-weight: 800;
+        letter-spacing: 0.07em;
+        text-decoration: none;
+      }
+      .wordmark-mark {
+        display: grid;
+        width: 1.75rem;
+        height: 1.75rem;
+        place-items: center;
+        border: 2px solid var(--color-primary);
+        border-radius: 0.35rem;
+        color: var(--color-primary);
+        font-size: 0.85rem;
+        line-height: 1;
+      }
+      .nav-area { display: flex; align-items: center; gap: var(--space-7); }
+      .nav-links { display: flex; gap: var(--space-5); }
+      .nav-links a {
+        display: inline-flex;
+        min-height: 2rem;
+        align-items: center;
+        color: var(--color-text-muted);
+        font-size: var(--step--1);
+        text-decoration: none;
+      }
+      .nav-links a:hover { color: var(--color-text); }
+      .theme-switcher { display: flex; align-items: center; gap: var(--space-1); }
+      .theme-button {
+        display: grid;
+        width: 2.25rem;
+        height: 2.25rem;
+        padding: 0;
+        place-items: center;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-control);
+        background: transparent;
+        color: var(--color-text-muted);
+        cursor: pointer;
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+        font-weight: 800;
+      }
+      .theme-button:hover, .theme-button[aria-pressed="true"] { border-color: var(--color-primary); color: var(--color-primary); }
+      .theme-button[aria-pressed="true"]::after { content: ""; position: absolute; width: 0.25rem; height: 0.25rem; margin-top: 1.7rem; border-radius: 50%; background: currentColor; }
+
+      .hero {
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(0, 0.92fr) minmax(20rem, 1.08fr);
+        gap: clamp(2.5rem, 7vw, 7rem);
+        align-items: center;
+        min-height: 42rem;
+        padding-block: var(--space-section);
+      }
+      .hero::before {
+        position: absolute;
+        z-index: -1;
+        top: 7%;
+        left: -22%;
+        width: 56vw;
+        height: 56vw;
+        max-width: 44rem;
+        max-height: 44rem;
+        border-radius: 50%;
+        background: var(--hero-glow);
+        content: "";
+        filter: blur(2rem);
+        pointer-events: none;
+      }
+      .hero-copy { max-width: 38rem; }
+      .hero h1 {
+        max-width: 10.5ch;
+        margin: var(--space-5) 0 var(--space-5);
+        font-family: var(--font-display);
+        font-size: var(--step-5);
+        font-weight: 500;
+        letter-spacing: -0.055em;
+        line-height: 0.93;
+        text-wrap: balance;
+      }
+      .hero h1 em { color: var(--color-primary); font-style: normal; }
+      .hero-lede { max-width: 49ch; margin: 0; color: var(--color-text-muted); font-size: var(--step-1); }
+      .hero-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-7); }
+      .button {
+        display: inline-flex;
+        min-height: 3rem;
+        align-items: center;
+        justify-content: center;
+        padding: 0.65rem 1rem;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-control);
+        font-size: var(--step--1);
+        font-weight: 750;
+        text-decoration: none;
+        transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+      }
+      .button:hover { transform: translateY(-2px); }
+      .button:active { transform: translateY(0); }
+      .button-primary { border-color: var(--color-primary); background: var(--color-primary); color: var(--color-primary-ink); }
+      .button-primary:hover { border-color: var(--color-primary-hover); background: var(--color-primary-hover); }
+      .button-quiet { background: transparent; color: var(--color-text); }
+      .button-quiet:hover { border-color: var(--color-text); background: var(--color-surface-1); }
+      .proof-wrap { position: relative; min-width: 0; }
+      .proof-wrap::before, .proof-wrap::after { position: absolute; z-index: -1; width: 5rem; height: 5rem; border-color: var(--color-primary); content: ""; opacity: 0.75; }
+      .proof-wrap::before { top: -1.25rem; left: -1.25rem; border-top: 1px solid; border-left: 1px solid; }
+      .proof-wrap::after { right: -1.25rem; bottom: -1.25rem; border-right: 1px solid; border-bottom: 1px solid; }
+      .proof-console {
+        position: relative;
+        margin: 0;
+        overflow: hidden;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-card);
+        background: var(--color-surface-1);
+        box-shadow: var(--shadow-card);
+        transform: rotate(1.2deg);
+      }
+      .proof-console::before, .proof-console::after { position: absolute; inset: 0; background-image: linear-gradient(to right, var(--grid-line) 1px, transparent 1px), linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px); background-size: 2.25rem 2.25rem; content: ""; opacity: 0.28; pointer-events: none; }
+      .proof-console::after { background: linear-gradient(115deg, transparent 32%, var(--hero-glow) 52%, transparent 70%); opacity: 0.7; }
+      .console-content { position: relative; z-index: 1; padding: clamp(1.15rem, 3vw, 2rem); }
+      .console-top, .console-meta, .trace-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+      .console-top { padding-bottom: var(--space-5); border-bottom: 1px solid var(--color-border); }
+      .console-top .mono-label:last-child { color: var(--color-text-muted); font-weight: 500; letter-spacing: 0.04em; text-transform: none; }
+      .signal { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--color-primary); }
+      .signal-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 0.25rem color-mix(in oklch, currentColor 18%, transparent); }
+      .console-command { margin: var(--space-6) 0; padding: var(--space-4); border-left: 3px solid var(--color-primary); background: var(--color-bg); color: var(--color-text); font-family: var(--font-mono); font-size: var(--step--1); overflow-wrap: anywhere; }
+      .console-command .prompt { color: var(--color-primary); }
+      .console-meta { align-items: end; margin-bottom: var(--space-5); }
+      .console-meta strong { display: block; margin-top: var(--space-1); font-family: var(--font-display); font-size: var(--step-2); font-weight: 500; line-height: 1; }
+      .status-stamp { padding: var(--space-1) var(--space-2); border: 1px solid var(--color-primary); color: var(--color-primary); font-family: var(--font-mono); font-size: var(--step--2); font-weight: 800; letter-spacing: 0.08em; }
+      .trace { border-top: 1px solid var(--color-border); }
+      .trace-row { min-height: 3.55rem; border-bottom: 1px solid var(--color-border); font-family: var(--font-mono); font-size: var(--step--1); }
+      .trace-row > span:first-child { color: var(--color-text-muted); }
+      .trace-row > span:nth-child(2) { flex: 1; color: var(--color-text); }
+      .trace-state { color: var(--color-primary); font-size: var(--step--2); font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; }
+      .trace-state.unproven { color: var(--color-accent); }
+      .console-caption { display: block; margin-top: var(--space-4); color: var(--color-text-muted); font-size: var(--step--2); }
+
+      .signal-bar { border-block: 1px solid var(--color-border); }
+      .signal-bar-inner { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-4); padding-block: var(--space-4); }
+      .signal-bar p { margin: 0; color: var(--color-text-muted); font-family: var(--font-mono); font-size: var(--step--2); letter-spacing: 0.06em; text-transform: uppercase; }
+      .signal-bar p::before { content: "●"; margin-right: var(--space-2); color: var(--color-primary); }
+
+      .section { padding-block: var(--space-section); border-bottom: 1px solid var(--color-border); }
+      .section-heading { max-width: 43rem; margin-bottom: clamp(2.5rem, 6vw, 5rem); }
+      .section-heading h2 { max-width: 17ch; margin: var(--space-4) 0 0; font-family: var(--font-display); font-size: var(--step-3); font-weight: 500; letter-spacing: -0.045em; line-height: 0.99; text-wrap: balance; }
+      .section-heading p { max-width: 55ch; margin: var(--space-5) 0 0; color: var(--color-text-muted); }
+      .split-proof { display: grid; grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr); gap: clamp(2.5rem, 8vw, 8rem); align-items: start; }
+      .pull-quote { margin: 0; padding-left: var(--space-5); border-left: 3px solid var(--color-primary); font-family: var(--font-display); font-size: var(--step-2); letter-spacing: -0.025em; line-height: 1.08; }
+      .pull-quote cite { display: block; margin-top: var(--space-5); color: var(--color-text-muted); font-family: var(--font-mono); font-size: var(--step--2); font-style: normal; letter-spacing: 0.1em; text-transform: uppercase; }
+      .proof-copy p { max-width: 56ch; margin: 0; color: var(--color-text-muted); }
+      .proof-copy p + p { margin-top: var(--space-5); }
+      .proof-copy strong { color: var(--color-text); }
+
+      .process-layout { display: grid; grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr); gap: clamp(2rem, 7vw, 7rem); align-items: start; }
+      .process-intro { position: sticky; top: 2rem; }
+      .process-intro h3 { max-width: 12ch; margin: var(--space-4) 0 var(--space-5); font-family: var(--font-display); font-size: var(--step-2); font-weight: 500; letter-spacing: -0.035em; line-height: 1; }
+      .process-intro p { max-width: 34ch; margin: 0; color: var(--color-text-muted); }
+      .steps { border-top: 1px solid var(--color-border); }
+      .step { display: grid; grid-template-columns: 4.25rem minmax(0, 1fr); gap: var(--space-5); padding-block: var(--space-6); border-bottom: 1px solid var(--color-border); }
+      .step:nth-child(2) { padding-left: clamp(0rem, 3vw, 2.5rem); }
+      .step:nth-child(3) { padding-right: clamp(0rem, 3vw, 2.5rem); }
+      .step-number { color: var(--color-primary); font-family: var(--font-mono); font-size: var(--step--1); font-weight: 800; }
+      .step h3 { margin: 0 0 var(--space-2); font-size: var(--step-1); font-weight: 700; letter-spacing: -0.02em; }
+      .step p { max-width: 50ch; margin: 0; color: var(--color-text-muted); }
+      .step code { color: var(--color-text); font-family: var(--font-mono); font-size: 0.92em; }
+
+      .inside-layout { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: clamp(2rem, 7vw, 7rem); align-items: start; }
+      .inside-lead h3 { max-width: 13ch; margin: 0 0 var(--space-5); font-family: var(--font-display); font-size: var(--step-2); font-weight: 500; letter-spacing: -0.04em; line-height: 1; }
+      .inside-lead p { max-width: 43ch; margin: 0; color: var(--color-text-muted); }
+      .manifest { margin-top: var(--space-7); padding-top: var(--space-5); border-top: 1px solid var(--color-border); color: var(--color-text-muted); font-family: var(--font-mono); font-size: var(--step--1); line-height: 1.65; }
+      .manifest b { color: var(--color-primary); font-weight: 800; }
+      .coverage-panel { padding: clamp(1.25rem, 3vw, 2rem); border: 1px solid var(--color-border); border-radius: var(--radius-card); background: var(--color-surface-1); }
+      .coverage-panel-head { display: flex; justify-content: space-between; gap: var(--space-4); padding-bottom: var(--space-5); border-bottom: 1px solid var(--color-border); }
+      .coverage-panel-head strong { font-family: var(--font-display); font-size: var(--step-1); font-weight: 500; }
+      .coverage-panel-head span { align-self: center; color: var(--color-primary); font-family: var(--font-mono); font-size: var(--step--2); letter-spacing: 0.08em; text-transform: uppercase; }
+      .coverage-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--space-6); margin: 0; padding: 0; list-style: none; }
+      .coverage-list li { display: flex; gap: var(--space-2); align-items: baseline; padding-block: var(--space-4); border-bottom: 1px solid var(--color-border); color: var(--color-text-muted); font-family: var(--font-mono); font-size: var(--step--1); }
+      .coverage-list li::before { color: var(--color-primary); content: "✓"; font-weight: 800; }
+      .coverage-list li:last-child, .coverage-list li:nth-last-child(2) { border-bottom: 0; }
+      .tool-strip { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-6); }
+      .tool-strip span { padding: var(--space-1) var(--space-2); border: 1px solid var(--color-border); border-radius: var(--radius-pill); color: var(--color-text-muted); font-family: var(--font-mono); font-size: var(--step--2); }
+
+      .boundary { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: clamp(2rem, 8vw, 8rem); align-items: center; padding-block: var(--space-section); border-bottom: 1px solid var(--color-border); }
+      .boundary h2 { max-width: 11ch; margin: 0; font-family: var(--font-display); font-size: var(--step-3); font-weight: 500; letter-spacing: -0.045em; line-height: 0.98; }
+      .boundary-copy { padding: clamp(1.25rem, 3vw, 2rem); border-left: 3px solid var(--color-accent); background: var(--color-surface-1); }
+      .boundary-copy p { max-width: 56ch; margin: 0; color: var(--color-text-muted); }
+      .boundary-copy p + p { margin-top: var(--space-4); }
+      .boundary-copy strong { color: var(--color-text); }
+
+      .start { padding-block: var(--space-section); }
+      .start-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr); gap: clamp(2rem, 7vw, 7rem); align-items: center; }
+      .start h2 { max-width: 12ch; margin: var(--space-4) 0 var(--space-5); font-family: var(--font-display); font-size: var(--step-3); font-weight: 500; letter-spacing: -0.045em; line-height: 0.98; }
+      .start-copy { max-width: 43ch; margin: 0; color: var(--color-text-muted); }
+      .command-card { margin: 0; padding: clamp(1.25rem, 3vw, 2rem); border: 1px solid var(--color-border); border-radius: var(--radius-card); background: var(--color-surface-1); box-shadow: var(--shadow-float); }
+      .command-card code { display: block; margin-top: var(--space-4); color: var(--color-primary); font-family: var(--font-mono); font-size: var(--step--1); line-height: 1.7; overflow-wrap: anywhere; }
+      .command-card code::before { content: "$ "; color: var(--color-text-muted); }
+      .command-note { display: block; margin-top: var(--space-5); color: var(--color-text-muted); font-size: var(--step--1); }
+      .footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-4); padding-block: var(--space-6); color: var(--color-text-muted); font-family: var(--font-mono); font-size: var(--step--2); }
+      .footer p { margin: 0; }
+      .footer a { display: inline-flex; min-height: 2rem; align-items: center; }
+      .footer a:hover { color: var(--color-text); }
+
+      @media (max-width: 58rem) {
+        .nav-area { gap: var(--space-4); }
+        .nav-links { display: none; }
+        .hero { grid-template-columns: minmax(0, 1fr); min-height: auto; }
+        .hero-copy { max-width: 45rem; }
+        .proof-wrap { width: min(100%, 39rem); margin-left: auto; }
+        .process-intro { position: static; }
+      }
+      @media (max-width: 44rem) {
+        .shell { width: min(100% - 1.5rem, 74rem); }
+        .site-header { min-height: 4rem; }
+        .wordmark { font-size: 0.78rem; }
+        .hero { gap: var(--space-8); padding-top: clamp(3.5rem, 13vw, 5rem); }
+        .hero h1 { max-width: 9ch; }
+        .hero-actions .button { flex: 1 1 11rem; }
+        .split-proof, .process-layout, .inside-layout, .boundary, .start-layout { grid-template-columns: 1fr; gap: var(--space-7); }
+        .coverage-list { gap: 0 var(--space-3); }
+        .boundary h2, .start h2 { max-width: 14ch; }
+        .signal-bar-inner { display: grid; grid-template-columns: 1fr 1fr; }
+        .signal-bar p:last-child { grid-column: 1 / -1; }
+      }
+      @media (max-width: 24rem) {
+        .coverage-list { grid-template-columns: 1fr; }
+        .coverage-list li:nth-last-child(2) { border-bottom: 1px solid var(--color-border); }
+        .coverage-list li:last-child { border-bottom: 0; }
+        .console-top, .console-meta { align-items: flex-start; flex-direction: column; }
+        .trace-row { gap: var(--space-2); }
+        .trace-row > span:nth-child(2) { min-width: 0; }
+        .trace-state { font-size: 0.64rem; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+        .button:hover { transform: none; }
+        .proof-console { transform: none; }
+      }
+      @media (forced-colors: active) {
+        *, *::before, *::after { forced-color-adjust: auto; }
+        .button, .theme-button, .coverage-panel, .command-card, .proof-console { border: 1px solid ButtonText; box-shadow: none; }
+        .button-primary { background: ButtonFace; color: ButtonText; }
+        .signal-dot, .wordmark-mark { background: CanvasText; color: CanvasText; }
+        .boundary-copy { border-left-color: Highlight; }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
+    <header class="site-header shell" aria-label="Site header">
+      <a class="wordmark" href="#top" aria-label="CheckYourself home">
+        <span class="wordmark-mark" aria-hidden="true">✓</span>
+        <span>CHECKYOURSELF</span>
+      </a>
+      <div class="nav-area">
+        <nav class="nav-links" aria-label="Primary navigation">
+          <a href="#how-it-works">How it works</a>
+          <a href="#inside">What's inside</a>
+          <a href="#get-started">Get started</a>
+          <a href="https://github.com/KyaniteLabs/checkyourself" data-test="gh-header">GitHub ↗</a>
+        </nav>
+        <div class="theme-switcher" aria-label="Color theme" role="group">
+          <button class="theme-button" type="button" data-test="theme-dark" data-theme-choice="dark" aria-label="Use dark theme" aria-pressed="true">D</button>
+          <button class="theme-button" type="button" data-test="theme-light" data-theme-choice="light" aria-label="Use light theme" aria-pressed="false">L</button>
+          <button class="theme-button" type="button" data-test="theme-contrast" data-theme-choice="contrast" aria-label="Use high contrast theme" aria-pressed="false">C</button>
+        </div>
+      </div>
+    </header>
+
+    <main id="main-content">
+      <section class="hero shell" id="top" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow">completion evidence for AI-built apps</p>
+          <h1 id="hero-title">Your agent says it’s done. <em>CheckYourself</em> makes it prove it.</h1>
+          <p class="hero-lede">A read-only audit that runs the checks itself, shows what the project proves, and keeps what it could not check in plain sight.</p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#get-started">Run your first audit <span aria-hidden="true">→</span></a>
+            <a class="button button-quiet" href="#inside">See what gets checked</a>
+          </div>
+        </div>
+        <div class="proof-wrap">
+          <figure class="proof-console" aria-labelledby="proof-caption">
+            <div class="console-content">
+              <div class="console-top">
+                <span class="signal mono-label"><span class="signal-dot" aria-hidden="true"></span>audit ready</span>
+                <span class="mono-label">example output</span>
+              </div>
+              <div class="console-command"><span class="prompt" aria-hidden="true">$</span> checkyourself audit ./your-app</div>
+              <div class="console-meta">
+                <div><span class="mono-label">result</span><strong>evidence ledger</strong></div>
+                <span class="status-stamp">run complete</span>
+              </div>
+              <div class="trace" aria-label="Example audit trace">
+                <div class="trace-row"><span>01</span><span>read project signals</span><span class="trace-state">observed</span></div>
+                <div class="trace-row"><span>02</span><span>execute verifier checks</span><span class="trace-state">executed</span></div>
+                <div class="trace-row"><span>03</span><span>map coverage + score</span><span class="trace-state">scoped</span></div>
+                <div class="trace-row"><span>04</span><span>name what stays unproven</span><span class="trace-state unproven">visible</span></div>
+              </div>
+              <figcaption class="console-caption" id="proof-caption">Illustrative report shape. The score is evidence from this audit—not a guarantee.</figcaption>
+            </div>
+          </figure>
+        </div>
+      
+      <p class="get-source">Source and docs: <a href="https://github.com/KyaniteLabs/checkyourself">github.com/KyaniteLabs/checkyourself</a> — Apache-2.0, local-first, no account.</p>
+    </section>
+
+      <div class="signal-bar" aria-label="Product principles">
+        <div class="signal-bar-inner shell">
+          <p>read-only first</p>
+          <p>local-first</p>
+          <p>Apache-2.0 open source</p>
+        </div>
+      </div>
+
+      <section class="section shell" id="proof" aria-labelledby="proof-title">
+        <div class="section-heading">
+          <p class="eyebrow">the gap between “done” and ready</p>
+          <h2 id="proof-title">The happy path is not the whole app.</h2>
+        </div>
+        <div class="split-proof">
+          <blockquote class="pull-quote">“It works on my screen” is a starting point, not a receipt.<cite>CheckYourself, for the moment after your agent stops typing</cite></blockquote>
+          <div class="proof-copy">
+            <p>AI coding tools are excellent at momentum. They are less helpful when the missing piece is an auth edge case, a release check, or the thing nobody thought to test.</p>
+            <p><strong>CheckYourself turns completion into something you can inspect.</strong> It reads the project, runs verifier-owned challenges, maps the production surface, and gives you a bounded 0–100 score with the gaps attached.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section shell" id="how-it-works" aria-labelledby="how-title">
+        <div class="section-heading">
+          <p class="eyebrow">from claim to receipt</p>
+          <h2 id="how-title">Four moves. One calmer launch decision.</h2>
+        </div>
+        <div class="process-layout">
+          <div class="process-intro">
+            <p class="mono-label">the audit loop</p>
+            <h3>Make the unknowns legible.</h3>
+            <p>Every step keeps the evidence close to the action, so “not checked” cannot quietly turn into “safe.”</p>
+          </div>
+          <div class="steps">
+            <article class="step">
+              <span class="step-number">01 / ADD</span>
+              <div><h3>Install the context</h3><p>Put CheckYourself in or next to your project, or point your AI assistant at the folder as its operating context.</p></div>
+            </article>
+            <article class="step">
+              <span class="step-number">02 / RUN</span>
+              <div><h3>Run a read-only audit</h3><p>The audit detects the project shape and sweeps the relevant launch surfaces before it suggests a fix.</p></div>
+            </article>
+            <article class="step">
+              <span class="step-number">03 / PROVE</span>
+              <div><h3>Let the verifier execute</h3><p>Committed challenges run the checks themselves—tests, validators, and gates—with receipts tied to the claim.</p></div>
+            </article>
+            <article class="step">
+              <span class="step-number">04 / LEARN</span>
+              <div><h3>See the score and the gaps</h3><p>Review the score, coverage, complete findings register, safe approval batch, and a learning plan built from what your app missed.</p></div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section shell" id="inside" aria-labelledby="inside-title">
+        <div class="section-heading">
+          <p class="eyebrow">what’s inside</p>
+          <h2 id="inside-title">A second pass with a memory.</h2>
+          <p>CheckYourself is free, open-source, model-agnostic, and designed to run where your code already lives.</p>
+        </div>
+        <div class="inside-layout">
+          <div class="inside-lead">
+            <h3>Broad enough to catch the quiet failures.</h3>
+            <p>The sweep covers 20 canonical surfaces, grouped into 10 scored categories, backed by 150+ tests. It records what was observed, what was inferred, and what is still untested.</p>
+            <p class="manifest"><b>CLI + MCP</b> · no SaaS account required · local-first by design</p>
+            <div class="tool-strip" aria-label="Compatible AI coding tools">
+              <span>Cursor</span><span>Claude</span><span>Codex</span><span>Copilot</span><span>Windsurf</span><span>Replit</span><span>Lovable</span><span>Bolt</span>
+            </div>
+          </div>
+          <div class="coverage-panel">
+            <div class="coverage-panel-head"><strong>surfaces in the sweep</strong><span>20 mapped</span></div>
+            <ul class="coverage-list">
+              <li>product purpose + harm</li>
+              <li>frontend UX + accessibility</li>
+              <li>API + backend behavior</li>
+              <li>auth + permissions</li>
+              <li>data + recovery</li>
+              <li>secrets + runtime config</li>
+              <li>tests + quality gates</li>
+              <li>CI/CD + dependencies</li>
+              <li>deploy + rollback</li>
+              <li>observability + response</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="boundary shell" aria-labelledby="boundary-title">
+        <h2 id="boundary-title">Evidence, not a guarantee.</h2>
+        <div class="boundary-copy">
+          <p><strong>The score reflects what this audit could prove from the project at that moment.</strong> It does not certify production safety, and it cannot see what the project never exposes.</p>
+          <p>That boundary is the point: anything not checked is reported as unproven, not hidden behind a confident number.</p>
+        </div>
+      </section>
+
+      <section class="start shell" id="get-started" aria-labelledby="start-title">
+        <div class="start-layout">
+          <div>
+            <p class="eyebrow">start with reality</p>
+            <h2 id="start-title">Give “done” somewhere to land.</h2>
+            <p class="start-copy">Add the folder to your project, point your assistant at it, and run the local CLI. Keep the first pass read-only; approve fixes only after you can see the evidence.</p>
+          </div>
+          <div class="command-card">
+            <span class="mono-label">run the audit</span>
+            <code>python3 tools/checkyourself.py /path/to/your/project</code>
+            <span class="command-note">The same workflow is available through MCP for native agent clients.</span>
+            <a class="button button-primary" href="#how-it-works">See the audit loop <span aria-hidden="true">→</span></a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer shell">
+      <p>CheckYourself · check yourself before you wreck yourself.</p>
+      <p><a href="#top">Back to top ↑</a> · Apache-2.0</p>
+    </footer>
+
+    <script>
+      (() => {
+        const root = document.documentElement;
+        const buttons = [...document.querySelectorAll("[data-test^='theme-']")];
+        const chooseTheme = (theme) => {
+          root.dataset.theme = theme;
+          buttons.forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.themeChoice === theme)));
+          try { localStorage.setItem("checkyourself-theme", theme); } catch (error) { /* Keep the current theme for this visit. */ }
+        };
+        buttons.forEach((button) => button.addEventListener("click", () => chooseTheme(button.dataset.themeChoice)));
+        const activeTheme = ["dark", "light", "contrast"].includes(root.dataset.theme) ? root.dataset.theme : "dark";
+        chooseTheme(activeTheme);
+      })();
+    </script>
+  </body>
+</html>
