@@ -276,7 +276,7 @@ CHALLENGE_SEMANTIC_CONTRACTS = {
 }
 
 TEST_RUNNER_MARKERS = (
-    "pytest", "unittest", "jest", "vitest", "mocha", "ava", "go test",
+    "pytest", "unittest", "jest", "vitest", "mocha", "ava", "go test", "node --test",
     "cargo test", "rspec", "phpunit", "dotnet test", "mvn test", "gradle test",
 )
 TEST_COUNT_RE = re.compile(r"(?im)\b\d+\s+(?:passed|failed|skipped|xfailed|xpassed|tests?)\b")
