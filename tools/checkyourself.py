@@ -21,6 +21,7 @@ import math
 import os
 import re
 import secrets
+import signal
 import stat
 import subprocess
 import sys
@@ -1149,8 +1150,9 @@ def _challenge_result(
             for artifact_path in artifact_paths:
                 candidate = root / artifact_path
                 try:
-                    candidate.relative_to(root)
-                except ValueError:
+                    resolved = candidate.resolve()
+                    resolved.relative_to(root)
+                except (OSError, RuntimeError, ValueError):
                     reasons.append(f"artifact path escapes the project root: {artifact_path!r}")
                     continue
                 if candidate.is_symlink() or not candidate.is_file():
@@ -1313,6 +1315,22 @@ def semantic_output_digest(
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _terminate_process_group(process: subprocess.Popen, *, grace_s: float = 1.0) -> Tuple[str, str]:
+    """Terminate a timed-out challenge and all of its descendants."""
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    try:
+        return process.communicate(timeout=grace_s)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        return process.communicate()
+
+
 def _run_challenge(
     root: Path,
     definition: dict,
@@ -1331,43 +1349,36 @@ def _run_challenge(
     if not execution_error and isinstance(command, list) and command:
         try:
             cwd = _challenge_cwd(root, definition)
-            completed = subprocess.run(
+            process = subprocess.Popen(
                 command,
                 cwd=str(cwd),
                 shell=False,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                timeout=float(definition.get("timeout_s", 60)),
-                check=False,
+                start_new_session=True,
             )
-            stdout = completed.stdout or ""
-            stderr = completed.stderr or ""
-            exit_code = completed.returncode
+            try:
+                stdout, stderr = process.communicate(timeout=float(definition.get("timeout_s", 60)))
+                stdout = stdout or ""
+                stderr = stderr or ""
+                exit_code = process.returncode
+            except subprocess.TimeoutExpired as exc:
+                timed_out = True
+                stdout, stderr = _terminate_process_group(process)
+                stdout = stdout or exc.stdout or ""
+                stderr = stderr or exc.stderr or ""
+                if isinstance(stdout, bytes):
+                    stdout = stdout.decode("utf-8", "replace")
+                if isinstance(stderr, bytes):
+                    stderr = stderr.decode("utf-8", "replace")
             status, reasons = _challenge_result(
                 definition,
                 surface_id=surface_id,
                 exit_code=exit_code,
                 stdout=stdout,
                 stderr=stderr,
-                timed_out=False,
-                execution_error="",
-                root=root,
-            )
-        except subprocess.TimeoutExpired as exc:
-            timed_out = True
-            stdout = exc.stdout or ""
-            stderr = exc.stderr or ""
-            if isinstance(stdout, bytes):
-                stdout = stdout.decode("utf-8", "replace")
-            if isinstance(stderr, bytes):
-                stderr = stderr.decode("utf-8", "replace")
-            status, reasons = _challenge_result(
-                definition,
-                surface_id=surface_id,
-                exit_code=None,
-                stdout=stdout,
-                stderr=stderr,
-                timed_out=True,
+                timed_out=timed_out,
                 execution_error="",
                 root=root,
             )

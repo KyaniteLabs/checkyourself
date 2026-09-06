@@ -1,0 +1,48 @@
+{
+  "findings": [
+    {
+      "id": "CY-REVIEW-001",
+      "severity": "P1",
+      "category": "C4",
+      "finding": "Challenge artifact assertions can escape the project through a symlinked parent directory",
+      "plain_english_risk": "A committed challenge can claim PASS using an external file, so the receipt can certify evidence that is not contained in or produced by the reviewed project.",
+      "evidence": [
+        "tools/checkyourself.py:1149",
+        "tools/checkyourself.py:1156",
+        "Reproduction: root/linked -> external directory; success.artifact=linked/proof.txt returned ('PASS', [])"
+      ],
+      "recommended_fix": "Resolve each asserted artifact strictly, require the resolved path to remain under the resolved project root, and reject any symlink in the path chain; add a regression test for a symlinked parent directory.",
+      "status": "open"
+    },
+    {
+      "id": "CY-REVIEW-002",
+      "severity": "P1",
+      "category": "C5",
+      "finding": "Challenge timeout leaves descendant processes running",
+      "plain_english_risk": "A timed-out verifier can keep mutating files, consuming resources, or handling inherited credentials after CheckYourself reports the challenge as stopped.",
+      "evidence": [
+        "tools/checkyourself.py:1316",
+        "tools/checkyourself.py:1332",
+        "tools/checkyourself.py:1348",
+        "Reproduction: timed_out=True while grandchild_alive_after_timeout=True"
+      ],
+      "recommended_fix": "Start challenges in an isolated process group/session, terminate the whole group on timeout, escalate to a bounded kill when needed, and add a regression test that proves descendants are gone.",
+      "status": "open"
+    },
+    {
+      "id": "CY-REVIEW-003",
+      "severity": "P1",
+      "category": "C5",
+      "finding": "The coverage schema rejects the executed receipts required by the scoring workflow",
+      "plain_english_risk": "CheckYourself can mint and consume an EXECUTED challenge receipt, but its own coverage schema only accepts the incompatible caller-issued receipt shape, so a real evidence-bearing coverage artifact cannot pass canonical validation.",
+      "evidence": [
+        "schemas/coverage.schema.json:38",
+        "tools/checkyourself.py:2689",
+        "tools/checkyourself.py:3057",
+        "validate --kind coverage rejected all three executed receipts for missing caller-issued fields and argv command type"
+      ],
+      "recommended_fix": "Add the executed-receipt shape to coverage.schema.json with a oneOf contract shared from challenge-result/receipt definitions, then add challenge-to-coverage-to-score schema validation tests.",
+      "status": "open"
+    }
+  ]
+}

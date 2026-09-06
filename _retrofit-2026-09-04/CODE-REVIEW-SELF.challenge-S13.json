@@ -1,0 +1,66 @@
+{
+  "complete": true,
+  "findings": [],
+  "generated_at": "2026-09-06T01:34:22+00:00",
+  "project": "/Users/simongonzalezdecruz/workspaces/checkyourself",
+  "receipts": [
+    {
+      "captured_output": ".checkyourself/challenge-runs/S13.capture.json",
+      "captured_output_digest": "028c925cd93b24d671ffc3d84e0e435902c349cc9a36c48756fe0497b9e6d714",
+      "challenge_config_digest": "e41c0ac3161551276d8247ae1b7919ae40209a2b41f1fa93f781c1ebe1ef9780",
+      "command": [
+        "python3",
+        "-c",
+        "import subprocess,sys,pathlib,datetime; r=subprocess.run([sys.executable,'-m','py_compile','tools/checkyourself.py','tools/validate_public.py'],capture_output=True,text=True); out=('py_compile rc=%d\\n'%r.returncode)+r.stdout+r.stderr; pathlib.Path('.checkyourself/challenge-runs').mkdir(parents=True,exist_ok=True); pathlib.Path('.checkyourself/challenge-runs/S13.release-tooling.txt').write_text(out); print(out); sys.exit(r.returncode)"
+      ],
+      "cwd": ".",
+      "execution_error": "",
+      "exit_code": 0,
+      "local_integrity_hmac": "ff390ce9f0039213c7f8b35f857c72fa6d374b90288bcab099b452f1c7026129",
+      "receipt_path": ".checkyourself/challenge-runs/S13.receipt.json",
+      "receipt_sha256": "e3dfc7b3b16fec06c25aff6ae311fc4f44409c9d3e03b5b957da6d23f8297b4e",
+      "receipt_type": "EXECUTED",
+      "run_id": "4869752f46d21cd82998cd5db21474a1",
+      "semantic_output_digest": "1a15afbc0a12dbbe19b6de09163550b7dd8966451e4c746b684747b9dfdf300a",
+      "source_revision": "2daf5786c3c0fee8cb695626c58a113622b265e8445586a16cd217d17d9c3a33",
+      "status": "PASS",
+      "surface_id": "S13",
+      "timed_out": false,
+      "timestamp": "2026-09-06T01:34:22+00:00"
+    }
+  ],
+  "schema": "checkyourself-challenge/1",
+  "source_revision": "2daf5786c3c0fee8cb695626c58a113622b265e8445586a16cd217d17d9c3a33",
+  "surfaces": [
+    {
+      "reasons": [],
+      "receipt": {
+        "captured_output": ".checkyourself/challenge-runs/S13.capture.json",
+        "captured_output_digest": "028c925cd93b24d671ffc3d84e0e435902c349cc9a36c48756fe0497b9e6d714",
+        "challenge_config_digest": "e41c0ac3161551276d8247ae1b7919ae40209a2b41f1fa93f781c1ebe1ef9780",
+        "command": [
+          "python3",
+          "-c",
+          "import subprocess,sys,pathlib,datetime; r=subprocess.run([sys.executable,'-m','py_compile','tools/checkyourself.py','tools/validate_public.py'],capture_output=True,text=True); out=('py_compile rc=%d\\n'%r.returncode)+r.stdout+r.stderr; pathlib.Path('.checkyourself/challenge-runs').mkdir(parents=True,exist_ok=True); pathlib.Path('.checkyourself/challenge-runs/S13.release-tooling.txt').write_text(out); print(out); sys.exit(r.returncode)"
+        ],
+        "cwd": ".",
+        "execution_error": "",
+        "exit_code": 0,
+        "local_integrity_hmac": "ff390ce9f0039213c7f8b35f857c72fa6d374b90288bcab099b452f1c7026129",
+        "receipt_path": ".checkyourself/challenge-runs/S13.receipt.json",
+        "receipt_sha256": "e3dfc7b3b16fec06c25aff6ae311fc4f44409c9d3e03b5b957da6d23f8297b4e",
+        "receipt_type": "EXECUTED",
+        "run_id": "4869752f46d21cd82998cd5db21474a1",
+        "semantic_output_digest": "1a15afbc0a12dbbe19b6de09163550b7dd8966451e4c746b684747b9dfdf300a",
+        "source_revision": "2daf5786c3c0fee8cb695626c58a113622b265e8445586a16cd217d17d9c3a33",
+        "status": "PASS",
+        "surface_id": "S13",
+        "timed_out": false,
+        "timestamp": "2026-09-06T01:34:22+00:00"
+      },
+      "status": "PASS",
+      "surface_id": "S13"
+    }
+  ],
+  "tool": "checkyourself-cli"
+}

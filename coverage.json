@@ -1,0 +1,449 @@
+{
+  "tool": "checkyourself-cli",
+  "schema": "checkyourself-coverage/1",
+  "generated_at": "2026-09-06T01:30:46+00:00",
+  "project": "checkyourself",
+  "surfaces": [
+    {
+      "id": "S01",
+      "surface": "Product purpose, users, and harm model",
+      "category": "context",
+      "status": "Unknown",
+      "evidence_reviewed": [
+        "README.md:1",
+        "CONTEXT.md:1"
+      ],
+      "evidence_receipts": [],
+      "missing_evidence": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ],
+      "not_applicable_reason": "",
+      "delegation_receipts": [],
+      "claim_bound_evidence": [],
+      "claim": "",
+      "finding_ids": []
+    },
+    {
+      "id": "S02",
+      "surface": "Stack, architecture, and dependency map",
+      "category": "context",
+      "status": "Unknown",
+      "evidence_reviewed": [
+        "tools/checkyourself.py:1",
+        "tests/test_checkyourself_cli.py:1",
+        "schemas/scan.schema.json:1"
+      ],
+      "evidence_receipts": [],
+      "missing_evidence": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ],
+      "not_applicable_reason": "",
+      "delegation_receipts": [],
+      "claim_bound_evidence": [],
+      "claim": "",
+      "finding_ids": []
+    },
+    {
+      "id": "S03",
+      "surface": "Frontend UX, accessibility, and client safety",
+      "category": "C9",
+      "status": "Unknown",
+      "evidence_reviewed": [
+        "10_DASHBOARD/dashboard-template.html:1",
+        "tests/test_validate_public.py:181"
+      ],
+      "evidence_receipts": [],
+      "missing_evidence": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ],
+      "not_applicable_reason": "",
+      "delegation_receipts": [],
+      "claim_bound_evidence": [],
+      "claim": "",
+      "finding_ids": []
+    },
+    {
+      "id": "S04",
+      "surface": "API/backend behavior, validation, uploads, and webhooks",
+      "category": "C4",
+      "status": "Unknown",
+      "evidence_reviewed": [
+        "tools/checkyourself.py:5183",
+        "tests/test_checkyourself_cli.py:1583"
+      ],
+      "evidence_receipts": [],
+      "missing_evidence": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ],
+      "not_applicable_reason": "",
+      "delegation_receipts": [],
+      "claim_bound_evidence": [],
+      "claim": "",
+      "finding_ids": []
+    },
+    {
+      "id": "S05",
+      "surface": "Auth, permissions, sessions, roles, and admin paths",
+      "category": "C2",
+      "status": "Unknown",
+      "evidence_reviewed": [
+        "tools/checkyourself.py:1171"
+      ],
+      "evidence_receipts": [],
+      "missing_evidence": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ],
+      "not_applicable_reason": "",
+      "delegation_receipts": [],
+      "claim_bound_evidence": [],
+      "claim": "",
+      "finding_ids": []
+    },
+    {
+      "id": "S06",
+      "surface": "Data storage, migrations, backups, and retention",
+      "category": "C1",
+      "status": "Unknown",
+      "evidence_reviewed": [
+        "tools/checkyourself.py:1031"
+      ],
+      "evidence_receipts": [],
+      "missing_evidence": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ],
+      "not_applicable_reason": "",
+      "delegation_receipts": [],
+      "claim_bound_evidence": [],
+      "claim": "",
+      "finding_ids": []
+    },
+    {
+      "id": "S07",
+      "surface": "User, tenant, and role isolation",
+      "category": "C1",
+      "status": "Unknown",
+      "evidence_reviewed": [
+        "tools/checkyourself.py:1054"
+      ],
+      "evidence_receipts": [],
+      "missing_evidence": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ],
+      "not_applicable_reason": "",
+      "delegation_receipts": [],
+      "claim_bound_evidence": [],
+      "claim": "",
+      "finding_ids": []
+    },
+    {
+      "id": "S08",
+      "surface": "Secrets, environment, runtime configuration",
+      "category": "C3",
+      "status": "Unknown",
+      "evidence_reviewed": [
+        "tools/checkyourself.py:1171",
+        "tools/checkyourself.py:1329"
+      ],
+      "evidence_receipts": [],
+      "missing_evidence": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ],
+      "not_applicable_reason": "",
+      "delegation_receipts": [],
+      "claim_bound_evidence": [],
+      "claim": "",
+      "finding_ids": []
+    },
+    {
+      "id": "S09",
+      "surface": "Security and threat model",
+      "category": "C4",
+      "status": "Finding",
+      "evidence_reviewed": [
+        "tools/checkyourself.py:1149",
+        "tools/checkyourself.py:1316",
+        "CODE-REVIEW-SELF.findings.json:1"
+      ],
+      "evidence_receipts": [],
+      "missing_evidence": [],
+      "not_applicable_reason": "",
+      "delegation_receipts": [],
+      "claim_bound_evidence": [],
+      "claim": "",
+      "finding_ids": [
+        "CY-REVIEW-001"
+      ]
+    },
+    {
+      "id": "S10",
+      "surface": "Privacy, consent, compliance, and data governance",
+      "category": "C1",
+      "status": "Unknown",
+      "evidence_reviewed": [
+        "rules.md:1"
+      ],
+      "evidence_receipts": [],
+      "missing_evidence": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ],
+      "not_applicable_reason": "",
+      "delegation_receipts": [],
+      "claim_bound_evidence": [],
+      "claim": "",
+      "finding_ids": []
+    },
+    {
+      "id": "S11",
+      "surface": "Tests, quality gates, and regression coverage",
+      "category": "C5",
+      "status": "Finding",
+      "evidence_reviewed": [
+        "tests/: 150 passed, 88 subtests passed",
+        ".checkyourself/challenge-runs/S11.capture.json"
+      ],
+      "evidence_receipts": [
+        {
+          "captured_output": ".checkyourself/challenge-runs/S11.capture.json",
+          "captured_output_digest": "5fc05ba0c0c7baca9fc1575dbd59550a377adb9636c8c2a5d27b452fd916c847",
+          "challenge_config_digest": "328b87aa75977ee5d00afbcf5302ceba171ea67aaa1e32a512ec4f4536e4eeb8",
+          "command": [
+            "python3",
+            "-c",
+            "import re, subprocess, sys; result = subprocess.run([sys.executable, '-m', 'pytest', 'tests/', '-q'], capture_output=True, text=True); sys.stdout.write(re.sub(r'(?m)( in )\\d+(?:\\.\\d+)?s$', r'\\1<stable>s', result.stdout)); sys.stderr.write(result.stderr); raise SystemExit(result.returncode)"
+          ],
+          "cwd": ".",
+          "execution_error": "",
+          "exit_code": 0,
+          "local_integrity_hmac": "cee3b5372e84b165490e51a81a6793e414b1deee69610c41d63bd395b9553f61",
+          "receipt_sha256": "2432a6bf5419cab6dd907014eac8bed4f61ad9e7ae6cb3ccba948b45a1fe484d",
+          "receipt_type": "EXECUTED",
+          "run_id": "391d117a23fd0f7e91b870c7ea0ac5aa",
+          "semantic_output_digest": "b54cf38478479c15703cc36de59f2c0afe2dd1210f12d87060df217643e3d31f",
+          "source_revision": "2daf5786c3c0fee8cb695626c58a113622b265e8445586a16cd217d17d9c3a33",
+          "status": "PASS",
+          "surface_id": "S11",
+          "timed_out": false,
+          "timestamp": "2026-09-06T01:34:16+00:00"
+        }
+      ],
+      "missing_evidence": [],
+      "not_applicable_reason": "",
+      "delegation_receipts": [],
+      "claim_bound_evidence": [],
+      "claim": "",
+      "finding_ids": [
+        "CY-REVIEW-002",
+        "CY-REVIEW-003"
+      ]
+    },
+    {
+      "id": "S12",
+      "surface": "CI/CD and supply chain",
+      "category": "C6",
+      "status": "Pass",
+      "evidence_reviewed": [
+        "tools/validate_public.py:1",
+        ".checkyourself/challenge-runs/S12.capture.json"
+      ],
+      "evidence_receipts": [
+        {
+          "captured_output": ".checkyourself/challenge-runs/S12.capture.json",
+          "captured_output_digest": "cf37a685ef6dc2dcd3933498a65b846819a4b4a91c2c03907afff6458a6b8b46",
+          "challenge_config_digest": "35ef2d555fcb8f3116375a099d33e80d454e73dbac967af184f971c2147c8ad4",
+          "command": [
+            "python3",
+            "-c",
+            "import subprocess,sys,pathlib; r=subprocess.run([sys.executable,'tools/validate_public.py','.'],capture_output=True,text=True); out=r.stdout+r.stderr; pathlib.Path('.checkyourself/challenge-runs').mkdir(parents=True,exist_ok=True); pathlib.Path('.checkyourself/challenge-runs/S12.public-validation.txt').write_text(out); print(out); sys.exit(r.returncode)"
+          ],
+          "cwd": ".",
+          "execution_error": "",
+          "exit_code": 0,
+          "local_integrity_hmac": "2fa25b98ab82273919c6804ca8995f3653ec5cb736af05c23dbfd6b0fde4be94",
+          "receipt_sha256": "5e5c29a5f0737a377e0b6e7206590ac465e3e6fd5e10a53c3cdc8acb4d2a03ea",
+          "receipt_type": "EXECUTED",
+          "run_id": "c368bd9ca2908930472384632615aeb7",
+          "semantic_output_digest": "f093d6901fb2318021f31272fda4c0f1f42214b7c37e9e33f36f0f64e22574ef",
+          "source_revision": "2daf5786c3c0fee8cb695626c58a113622b265e8445586a16cd217d17d9c3a33",
+          "status": "PASS",
+          "surface_id": "S12",
+          "timed_out": false,
+          "timestamp": "2026-09-06T01:34:22+00:00"
+        }
+      ],
+      "missing_evidence": [],
+      "not_applicable_reason": "",
+      "delegation_receipts": [],
+      "claim_bound_evidence": [],
+      "claim": "",
+      "finding_ids": []
+    },
+    {
+      "id": "S13",
+      "surface": "Hosting, deployment, release, and rollback",
+      "category": "C6",
+      "status": "Pass",
+      "evidence_reviewed": [
+        ".checkyourself/challenges.json:1",
+        ".checkyourself/challenge-runs/S13.capture.json"
+      ],
+      "evidence_receipts": [
+        {
+          "captured_output": ".checkyourself/challenge-runs/S13.capture.json",
+          "captured_output_digest": "028c925cd93b24d671ffc3d84e0e435902c349cc9a36c48756fe0497b9e6d714",
+          "challenge_config_digest": "e41c0ac3161551276d8247ae1b7919ae40209a2b41f1fa93f781c1ebe1ef9780",
+          "command": [
+            "python3",
+            "-c",
+            "import subprocess,sys,pathlib,datetime; r=subprocess.run([sys.executable,'-m','py_compile','tools/checkyourself.py','tools/validate_public.py'],capture_output=True,text=True); out=('py_compile rc=%d\\n'%r.returncode)+r.stdout+r.stderr; pathlib.Path('.checkyourself/challenge-runs').mkdir(parents=True,exist_ok=True); pathlib.Path('.checkyourself/challenge-runs/S13.release-tooling.txt').write_text(out); print(out); sys.exit(r.returncode)"
+          ],
+          "cwd": ".",
+          "execution_error": "",
+          "exit_code": 0,
+          "local_integrity_hmac": "ff390ce9f0039213c7f8b35f857c72fa6d374b90288bcab099b452f1c7026129",
+          "receipt_sha256": "e3dfc7b3b16fec06c25aff6ae311fc4f44409c9d3e03b5b957da6d23f8297b4e",
+          "receipt_type": "EXECUTED",
+          "run_id": "4869752f46d21cd82998cd5db21474a1",
+          "semantic_output_digest": "1a15afbc0a12dbbe19b6de09163550b7dd8966451e4c746b684747b9dfdf300a",
+          "source_revision": "2daf5786c3c0fee8cb695626c58a113622b265e8445586a16cd217d17d9c3a33",
+          "status": "PASS",
+          "surface_id": "S13",
+          "timed_out": false,
+          "timestamp": "2026-09-06T01:34:22+00:00"
+        }
+      ],
+      "missing_evidence": [],
+      "not_applicable_reason": "",
+      "delegation_receipts": [],
+      "claim_bound_evidence": [],
+      "claim": "",
+      "finding_ids": []
+    },
+    {
+      "id": "S14",
+      "surface": "Cloud infrastructure and IaC",
+      "category": "C6",
+      "status": "Unknown",
+      "evidence_reviewed": [
+        "Repository tree inspected; no IaC execution evidence reviewed"
+      ],
+      "evidence_receipts": [],
+      "missing_evidence": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ],
+      "not_applicable_reason": "",
+      "delegation_receipts": [],
+      "claim_bound_evidence": [],
+      "claim": "",
+      "finding_ids": []
+    },
+    {
+      "id": "S15",
+      "surface": "Performance, caching, and rate limits",
+      "category": "C8",
+      "status": "Unknown",
+      "evidence_reviewed": [
+        "tools/checkyourself.py:1316"
+      ],
+      "evidence_receipts": [],
+      "missing_evidence": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ],
+      "not_applicable_reason": "",
+      "delegation_receipts": [],
+      "claim_bound_evidence": [],
+      "claim": "",
+      "finding_ids": []
+    },
+    {
+      "id": "S16",
+      "surface": "Scaling, load, and resilience",
+      "category": "C8",
+      "status": "Unknown",
+      "evidence_reviewed": [
+        "tools/checkyourself.py:1329"
+      ],
+      "evidence_receipts": [],
+      "missing_evidence": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ],
+      "not_applicable_reason": "",
+      "delegation_receipts": [],
+      "claim_bound_evidence": [],
+      "claim": "",
+      "finding_ids": []
+    },
+    {
+      "id": "S17",
+      "surface": "Observability, logs, errors, and incident response",
+      "category": "C7",
+      "status": "Unknown",
+      "evidence_reviewed": [
+        "tools/checkyourself.py:1250"
+      ],
+      "evidence_receipts": [],
+      "missing_evidence": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ],
+      "not_applicable_reason": "",
+      "delegation_receipts": [],
+      "claim_bound_evidence": [],
+      "claim": "",
+      "finding_ids": []
+    },
+    {
+      "id": "S18",
+      "surface": "Availability, recovery, and continuity",
+      "category": "C1",
+      "status": "Unknown",
+      "evidence_reviewed": [
+        "tools/checkyourself.py:1348"
+      ],
+      "evidence_receipts": [],
+      "missing_evidence": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ],
+      "not_applicable_reason": "",
+      "delegation_receipts": [],
+      "claim_bound_evidence": [],
+      "claim": "",
+      "finding_ids": []
+    },
+    {
+      "id": "S19",
+      "surface": "AI/RAG/agent governance",
+      "category": "C10",
+      "status": "Unknown",
+      "evidence_reviewed": [
+        "skills/checkyourself/SKILL.md:1"
+      ],
+      "evidence_receipts": [],
+      "missing_evidence": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ],
+      "not_applicable_reason": "",
+      "delegation_receipts": [],
+      "claim_bound_evidence": [],
+      "claim": "",
+      "finding_ids": []
+    },
+    {
+      "id": "S20",
+      "surface": "Learning needs and remediation history",
+      "category": "learning",
+      "status": "Unknown",
+      "evidence_reviewed": [
+        "04_LEARNING_PLAN/README.md:1",
+        "skills/checkyourself/SKILL.md:1"
+      ],
+      "evidence_receipts": [],
+      "missing_evidence": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ],
+      "not_applicable_reason": "",
+      "delegation_receipts": [],
+      "claim_bound_evidence": [],
+      "claim": "",
+      "finding_ids": []
+    }
+  ]
+}

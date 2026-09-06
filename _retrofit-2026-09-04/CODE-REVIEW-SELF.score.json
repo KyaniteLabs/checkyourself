@@ -1,0 +1,372 @@
+{
+  "tool": "checkyourself-cli",
+  "schema": "checkyourself-score/1",
+  "generated_at": "2026-09-06T01:45:35+00:00",
+  "score": 19,
+  "raw_score": 19,
+  "score_mode": "coverage-backed",
+  "confidence": "low",
+  "counts": {
+    "P0": 0,
+    "P1": 3,
+    "P2": 0,
+    "P3": 0
+  },
+  "caps_applied": [
+    {
+      "cap": 74,
+      "reason": "unresolved P1 finding"
+    },
+    {
+      "cap": 84,
+      "reason": "missing evidence in a critical category"
+    },
+    {
+      "cap": 90,
+      "reason": "score above 90 requires evidence for tests, secrets, deploy/rollback, observability, auth, and data boundaries"
+    }
+  ],
+  "per_category": [
+    {
+      "id": "C1",
+      "category": "Data, privacy, tenant/user isolation",
+      "weight": 18,
+      "coverage_status": "Unknown",
+      "evidence_reviewed": [
+        "rules.md:1",
+        "tools/checkyourself.py:1031",
+        "tools/checkyourself.py:1054",
+        "tools/checkyourself.py:1348"
+      ],
+      "verified_evidence": [],
+      "claim_bound_evidence": [],
+      "missing_evidence": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ],
+      "penalties": [
+        {
+          "reason": "critical coverage unknown",
+          "points": 18,
+          "missing_evidence": [
+            "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+          ]
+        }
+      ],
+      "awarded": 0.0
+    },
+    {
+      "id": "C2",
+      "category": "Auth, permissions, session safety",
+      "weight": 14,
+      "coverage_status": "Unknown",
+      "evidence_reviewed": [
+        "tools/checkyourself.py:1171"
+      ],
+      "verified_evidence": [],
+      "claim_bound_evidence": [],
+      "missing_evidence": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ],
+      "penalties": [
+        {
+          "reason": "critical coverage unknown",
+          "points": 14,
+          "missing_evidence": [
+            "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+          ]
+        }
+      ],
+      "awarded": 0.0
+    },
+    {
+      "id": "C3",
+      "category": "Secrets, environment, runtime config",
+      "weight": 10,
+      "coverage_status": "Unknown",
+      "evidence_reviewed": [
+        "tools/checkyourself.py:1171",
+        "tools/checkyourself.py:1329"
+      ],
+      "verified_evidence": [],
+      "claim_bound_evidence": [],
+      "missing_evidence": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ],
+      "penalties": [
+        {
+          "reason": "critical coverage unknown",
+          "points": 10,
+          "missing_evidence": [
+            "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+          ]
+        }
+      ],
+      "awarded": 0.0
+    },
+    {
+      "id": "C4",
+      "category": "API, validation, uploads, business logic",
+      "weight": 10,
+      "coverage_status": "Finding",
+      "evidence_reviewed": [
+        "CODE-REVIEW-SELF.findings.json:1",
+        "tests/test_checkyourself_cli.py:1583",
+        "tools/checkyourself.py:1149",
+        "tools/checkyourself.py:1316",
+        "tools/checkyourself.py:5183"
+      ],
+      "verified_evidence": [],
+      "claim_bound_evidence": [],
+      "missing_evidence": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ],
+      "penalties": [
+        {
+          "reason": "coverage unknown",
+          "points": 5.0,
+          "missing_evidence": [
+            "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+          ]
+        },
+        {
+          "finding_id": "CY-REVIEW-001",
+          "severity": "P1",
+          "reason": "Challenge artifact assertions can escape the project through a symlinked parent directory",
+          "points": 6.0
+        }
+      ],
+      "awarded": 0.0
+    },
+    {
+      "id": "C5",
+      "category": "Testing and quality gates",
+      "weight": 10,
+      "coverage_status": "Finding",
+      "evidence_reviewed": [
+        ".checkyourself/challenge-runs/S11.capture.json",
+        "tests/: 150 passed, 88 subtests passed"
+      ],
+      "verified_evidence": [],
+      "claim_bound_evidence": [],
+      "missing_evidence": [],
+      "penalties": [
+        {
+          "finding_id": "CY-REVIEW-002",
+          "severity": "P1",
+          "reason": "Challenge timeout leaves descendant processes running",
+          "points": 6.0
+        },
+        {
+          "finding_id": "CY-REVIEW-003",
+          "severity": "P1",
+          "reason": "The coverage schema rejects the executed receipts required by the scoring workflow",
+          "points": 6.0
+        }
+      ],
+      "awarded": 0.0
+    },
+    {
+      "id": "C6",
+      "category": "Deployment, release, rollback, CI/CD",
+      "weight": 8,
+      "coverage_status": "Unknown",
+      "evidence_reviewed": [
+        ".checkyourself/challenge-runs/S12.capture.json",
+        ".checkyourself/challenge-runs/S13.capture.json",
+        ".checkyourself/challenges.json:1",
+        "Repository tree inspected; no IaC execution evidence reviewed",
+        "tools/validate_public.py:1"
+      ],
+      "verified_evidence": [
+        ".checkyourself/challenge-runs/S13.capture.json"
+      ],
+      "claim_bound_evidence": [],
+      "missing_evidence": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass",
+        "S12: evidence receipt: receipt 0: executed receipt: re-executed exit code does not match the receipt"
+      ],
+      "penalties": [
+        {
+          "reason": "coverage unknown",
+          "points": 4.0,
+          "missing_evidence": [
+            "No verifier-captured surface-specific challenge receipt was configured for this code-review pass",
+            "S12: evidence receipt: receipt 0: executed receipt: re-executed exit code does not match the receipt"
+          ]
+        }
+      ],
+      "awarded": 4.0
+    },
+    {
+      "id": "C7",
+      "category": "Observability, logs, errors, incident response",
+      "weight": 8,
+      "coverage_status": "Unknown",
+      "evidence_reviewed": [
+        "tools/checkyourself.py:1250"
+      ],
+      "verified_evidence": [],
+      "claim_bound_evidence": [],
+      "missing_evidence": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ],
+      "penalties": [
+        {
+          "reason": "coverage unknown",
+          "points": 4.0,
+          "missing_evidence": [
+            "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+          ]
+        }
+      ],
+      "awarded": 4.0
+    },
+    {
+      "id": "C8",
+      "category": "Performance, scaling, caching, rate limits",
+      "weight": 8,
+      "coverage_status": "Unknown",
+      "evidence_reviewed": [
+        "tools/checkyourself.py:1316",
+        "tools/checkyourself.py:1329"
+      ],
+      "verified_evidence": [],
+      "claim_bound_evidence": [],
+      "missing_evidence": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ],
+      "penalties": [
+        {
+          "reason": "coverage unknown",
+          "points": 4.0,
+          "missing_evidence": [
+            "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+          ]
+        }
+      ],
+      "awarded": 4.0
+    },
+    {
+      "id": "C9",
+      "category": "Frontend UX, accessibility, client safety",
+      "weight": 8,
+      "coverage_status": "Unknown",
+      "evidence_reviewed": [
+        "10_DASHBOARD/dashboard-template.html:1",
+        "tests/test_validate_public.py:181"
+      ],
+      "verified_evidence": [],
+      "claim_bound_evidence": [],
+      "missing_evidence": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ],
+      "penalties": [
+        {
+          "reason": "coverage unknown",
+          "points": 4.0,
+          "missing_evidence": [
+            "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+          ]
+        }
+      ],
+      "awarded": 4.0
+    },
+    {
+      "id": "C10",
+      "category": "AI/RAG/agent governance",
+      "weight": 6,
+      "coverage_status": "Unknown",
+      "evidence_reviewed": [
+        "skills/checkyourself/SKILL.md:1"
+      ],
+      "verified_evidence": [],
+      "claim_bound_evidence": [],
+      "missing_evidence": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ],
+      "penalties": [
+        {
+          "reason": "coverage unknown",
+          "points": 3.0,
+          "missing_evidence": [
+            "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+          ]
+        }
+      ],
+      "awarded": 3.0
+    }
+  ],
+  "findings_scored": [
+    "CY-REVIEW-001",
+    "CY-REVIEW-002",
+    "CY-REVIEW-003"
+  ],
+  "coverage_complete": false,
+  "manual_evidence_needed": [
+    {
+      "category": "C1",
+      "surface": "Data, privacy, tenant/user isolation",
+      "needed": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ]
+    },
+    {
+      "category": "C2",
+      "surface": "Auth, permissions, session safety",
+      "needed": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ]
+    },
+    {
+      "category": "C3",
+      "surface": "Secrets, environment, runtime config",
+      "needed": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ]
+    },
+    {
+      "category": "C4",
+      "surface": "API, validation, uploads, business logic",
+      "needed": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ]
+    },
+    {
+      "category": "C6",
+      "surface": "Deployment, release, rollback, CI/CD",
+      "needed": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass",
+        "S12: evidence receipt: receipt 0: executed receipt: re-executed exit code does not match the receipt"
+      ]
+    },
+    {
+      "category": "C7",
+      "surface": "Observability, logs, errors, incident response",
+      "needed": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ]
+    },
+    {
+      "category": "C8",
+      "surface": "Performance, scaling, caching, rate limits",
+      "needed": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ]
+    },
+    {
+      "category": "C9",
+      "surface": "Frontend UX, accessibility, client safety",
+      "needed": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ]
+    },
+    {
+      "category": "C10",
+      "surface": "AI/RAG/agent governance",
+      "needed": [
+        "No verifier-captured surface-specific challenge receipt was configured for this code-review pass"
+      ]
+    }
+  ],
+  "workflow_dispositions": []
+}

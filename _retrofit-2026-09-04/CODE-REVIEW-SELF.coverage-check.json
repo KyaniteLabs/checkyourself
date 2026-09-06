@@ -1,0 +1,14 @@
+{
+  "tool": "checkyourself-cli",
+  "schema": "checkyourself-coverage-check/1",
+  "complete": false,
+  "surface_count": 20,
+  "required_surface_count": 20,
+  "errors": [],
+  "warnings": [
+    "S11 evidence receipt: receipt 0: executed receipt: re-executed exit code does not match the receipt",
+    "S11 is treated as Unknown until its verifier-captured evidence resolves",
+    "S12 evidence receipt: receipt 0: executed receipt: re-executed exit code does not match the receipt",
+    "S12 is treated as Unknown until its verifier-captured evidence resolves"
+  ]
+}

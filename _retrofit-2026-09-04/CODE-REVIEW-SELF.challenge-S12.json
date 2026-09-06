@@ -1,0 +1,66 @@
+{
+  "complete": true,
+  "findings": [],
+  "generated_at": "2026-09-06T01:34:22+00:00",
+  "project": "/Users/simongonzalezdecruz/workspaces/checkyourself",
+  "receipts": [
+    {
+      "captured_output": ".checkyourself/challenge-runs/S12.capture.json",
+      "captured_output_digest": "cf37a685ef6dc2dcd3933498a65b846819a4b4a91c2c03907afff6458a6b8b46",
+      "challenge_config_digest": "35ef2d555fcb8f3116375a099d33e80d454e73dbac967af184f971c2147c8ad4",
+      "command": [
+        "python3",
+        "-c",
+        "import subprocess,sys,pathlib; r=subprocess.run([sys.executable,'tools/validate_public.py','.'],capture_output=True,text=True); out=r.stdout+r.stderr; pathlib.Path('.checkyourself/challenge-runs').mkdir(parents=True,exist_ok=True); pathlib.Path('.checkyourself/challenge-runs/S12.public-validation.txt').write_text(out); print(out); sys.exit(r.returncode)"
+      ],
+      "cwd": ".",
+      "execution_error": "",
+      "exit_code": 0,
+      "local_integrity_hmac": "2fa25b98ab82273919c6804ca8995f3653ec5cb736af05c23dbfd6b0fde4be94",
+      "receipt_path": ".checkyourself/challenge-runs/S12.receipt.json",
+      "receipt_sha256": "5e5c29a5f0737a377e0b6e7206590ac465e3e6fd5e10a53c3cdc8acb4d2a03ea",
+      "receipt_type": "EXECUTED",
+      "run_id": "c368bd9ca2908930472384632615aeb7",
+      "semantic_output_digest": "f093d6901fb2318021f31272fda4c0f1f42214b7c37e9e33f36f0f64e22574ef",
+      "source_revision": "2daf5786c3c0fee8cb695626c58a113622b265e8445586a16cd217d17d9c3a33",
+      "status": "PASS",
+      "surface_id": "S12",
+      "timed_out": false,
+      "timestamp": "2026-09-06T01:34:22+00:00"
+    }
+  ],
+  "schema": "checkyourself-challenge/1",
+  "source_revision": "2daf5786c3c0fee8cb695626c58a113622b265e8445586a16cd217d17d9c3a33",
+  "surfaces": [
+    {
+      "reasons": [],
+      "receipt": {
+        "captured_output": ".checkyourself/challenge-runs/S12.capture.json",
+        "captured_output_digest": "cf37a685ef6dc2dcd3933498a65b846819a4b4a91c2c03907afff6458a6b8b46",
+        "challenge_config_digest": "35ef2d555fcb8f3116375a099d33e80d454e73dbac967af184f971c2147c8ad4",
+        "command": [
+          "python3",
+          "-c",
+          "import subprocess,sys,pathlib; r=subprocess.run([sys.executable,'tools/validate_public.py','.'],capture_output=True,text=True); out=r.stdout+r.stderr; pathlib.Path('.checkyourself/challenge-runs').mkdir(parents=True,exist_ok=True); pathlib.Path('.checkyourself/challenge-runs/S12.public-validation.txt').write_text(out); print(out); sys.exit(r.returncode)"
+        ],
+        "cwd": ".",
+        "execution_error": "",
+        "exit_code": 0,
+        "local_integrity_hmac": "2fa25b98ab82273919c6804ca8995f3653ec5cb736af05c23dbfd6b0fde4be94",
+        "receipt_path": ".checkyourself/challenge-runs/S12.receipt.json",
+        "receipt_sha256": "5e5c29a5f0737a377e0b6e7206590ac465e3e6fd5e10a53c3cdc8acb4d2a03ea",
+        "receipt_type": "EXECUTED",
+        "run_id": "c368bd9ca2908930472384632615aeb7",
+        "semantic_output_digest": "f093d6901fb2318021f31272fda4c0f1f42214b7c37e9e33f36f0f64e22574ef",
+        "source_revision": "2daf5786c3c0fee8cb695626c58a113622b265e8445586a16cd217d17d9c3a33",
+        "status": "PASS",
+        "surface_id": "S12",
+        "timed_out": false,
+        "timestamp": "2026-09-06T01:34:22+00:00"
+      },
+      "status": "PASS",
+      "surface_id": "S12"
+    }
+  ],
+  "tool": "checkyourself-cli"
+}
