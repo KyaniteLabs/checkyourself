@@ -22,6 +22,9 @@ jobs:
       - name: Compile Python tools
         run: python3 -m py_compile tools/checkyourself.py tools/validate_public.py tests/test_checkyourself_cli.py tests/test_validate_public.py
 
+      - name: Install test runner (S11 challenge contracts exercise pytest)
+        run: pip install --break-system-packages -q pytest
+
       - name: Unit tests
         run: python3 -m unittest discover -s tests
 

@@ -1707,7 +1707,6 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
 
             scan_result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
             self.assertEqual(scan_result.returncode, 0, scan_result.stderr)
-            scan = json.loads(scan_result.stdout)
             scan_path = project / "scan.json"
             scan_path.write_text(scan_result.stdout, encoding="utf-8")
             self.assertEqual(self.run_cli("validate", "--kind", "scan", str(scan_path)).returncode, 0)
