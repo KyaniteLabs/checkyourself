@@ -150,4 +150,3 @@ This is consistent with the documented schema-validation command. The trust prob
 | 8 | SEV-2 | Core scoring is unbound to the original completion claim. | `tools/checkyourself.py:2276`; `90_ADVANCED/capabilities/01-spec-driven-delivery/SKILL.md:57` | Add verifier-owned challenges tied to accepted task outcomes. |
 
 **THE ONE THING**
-
