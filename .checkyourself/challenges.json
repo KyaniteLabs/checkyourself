@@ -2,18 +2,52 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "schema": "checkyourself-challenges/1",
   "challenges": {
-    "S01": { "requires_explicit_config": true, "description": "Document the product purpose, users, and harm model." },
-    "S02": { "requires_explicit_config": true, "description": "Provide the project's stack and dependency verification command." },
-    "S03": { "requires_explicit_config": true, "description": "Provide the project's frontend, accessibility, and client-safety checks." },
-    "S04": { "requires_explicit_config": true, "description": "Provide the project's API and validation checks." },
-    "S05": { "requires_explicit_config": true, "description": "Provide the project's authentication and authorization checks." },
-    "S06": { "requires_explicit_config": true, "description": "Provide the project's storage, migration, backup, and retention checks." },
-    "S07": { "requires_explicit_config": true, "description": "Provide the project's tenant and role-isolation checks." },
-    "S08": { "requires_explicit_config": true, "description": "Provide the project's secrets and runtime-configuration checks." },
-    "S09": { "requires_explicit_config": true, "description": "Provide the project's security and threat-model checks." },
-    "S10": { "requires_explicit_config": true, "description": "Provide the project's privacy and compliance checks." },
+    "S01": {
+      "requires_explicit_config": true,
+      "description": "Document the product purpose, users, and harm model."
+    },
+    "S02": {
+      "requires_explicit_config": true,
+      "description": "Provide the project's stack and dependency verification command."
+    },
+    "S03": {
+      "requires_explicit_config": true,
+      "description": "Provide the project's frontend, accessibility, and client-safety checks."
+    },
+    "S04": {
+      "requires_explicit_config": true,
+      "description": "Provide the project's API and validation checks."
+    },
+    "S05": {
+      "requires_explicit_config": true,
+      "description": "Provide the project's authentication and authorization checks."
+    },
+    "S06": {
+      "requires_explicit_config": true,
+      "description": "Provide the project's storage, migration, backup, and retention checks."
+    },
+    "S07": {
+      "requires_explicit_config": true,
+      "description": "Provide the project's tenant and role-isolation checks."
+    },
+    "S08": {
+      "requires_explicit_config": true,
+      "description": "Provide the project's secrets and runtime-configuration checks."
+    },
+    "S09": {
+      "requires_explicit_config": true,
+      "description": "Provide the project's security and threat-model checks."
+    },
+    "S10": {
+      "requires_explicit_config": true,
+      "description": "Provide the project's privacy and compliance checks."
+    },
     "S11": {
-      "command": ["python3", "-c", "import re, subprocess, sys; result = subprocess.run([sys.executable, '-m', 'pytest', 'tests/', '-q'], capture_output=True, text=True); sys.stdout.write(re.sub(r'(?m)( in )\\d+(?:\\.\\d+)?s$', r'\\1<stable>s', result.stdout)); sys.stderr.write(result.stderr); raise SystemExit(result.returncode)"],
+      "command": [
+        "python3",
+        "-c",
+        "import re, subprocess, sys; result = subprocess.run([sys.executable, '-m', 'pytest', 'tests/', '-q'], capture_output=True, text=True); sys.stdout.write(re.sub(r'(?m)( in )\\d+(?:\\.\\d+)?s$', r'\\1<stable>s', result.stdout)); sys.stderr.write(result.stderr); raise SystemExit(result.returncode)"
+      ],
       "cwd": ".",
       "timeout_s": 180,
       "success": {
@@ -23,14 +57,65 @@
       "output_kind": "text",
       "description": "Run CheckYourself's own regression suite."
     },
-    "S12": { "requires_explicit_config": true, "description": "Provide the project's CI and supply-chain verification command." },
-    "S13": { "requires_explicit_config": true, "description": "Provide the project's deployment, release, and rollback verification command." },
-    "S14": { "requires_explicit_config": true, "description": "Provide the project's infrastructure-as-code verification command." },
-    "S15": { "requires_explicit_config": true, "description": "Provide the project's performance and rate-limit verification command." },
-    "S16": { "requires_explicit_config": true, "description": "Provide the project's scaling and resilience verification command." },
-    "S17": { "requires_explicit_config": true, "description": "Provide the project's observability and incident-response verification command." },
-    "S18": { "requires_explicit_config": true, "description": "Provide the project's recovery and continuity verification command." },
-    "S19": { "requires_explicit_config": true, "description": "Provide the project's AI and agent-governance verification command." },
-    "S20": { "requires_explicit_config": true, "description": "Provide the project's learning and remediation-history verification command." }
+    "S12": {
+      "command": [
+        "python3",
+        "-c",
+        "import subprocess,sys,pathlib; r=subprocess.run([sys.executable,'tools/validate_public.py','.'],capture_output=True,text=True); out=r.stdout+r.stderr; pathlib.Path('.checkyourself/challenge-runs').mkdir(parents=True,exist_ok=True); pathlib.Path('.checkyourself/challenge-runs/S12.public-validation.txt').write_text(out); print(out); sys.exit(r.returncode)"
+      ],
+      "cwd": ".",
+      "timeout_s": 90,
+      "success": {
+        "exit_zero": true,
+        "regex_match": "OK: public CheckYourself validation passed",
+        "artifact": ".checkyourself/challenge-runs/S12.public-validation.txt"
+      },
+      "output_kind": "text",
+      "description": "Public-truth + link validation with committed artifact."
+    },
+    "S13": {
+      "command": [
+        "python3",
+        "-c",
+        "import subprocess,sys,pathlib,datetime; r=subprocess.run([sys.executable,'-m','py_compile','tools/checkyourself.py','tools/validate_public.py'],capture_output=True,text=True); out=('py_compile rc=%d\\n'%r.returncode)+r.stdout+r.stderr; pathlib.Path('.checkyourself/challenge-runs').mkdir(parents=True,exist_ok=True); pathlib.Path('.checkyourself/challenge-runs/S13.release-tooling.txt').write_text(out); print(out); sys.exit(r.returncode)"
+      ],
+      "cwd": ".",
+      "timeout_s": 60,
+      "success": {
+        "exit_zero": true,
+        "regex_match": "rc=0",
+        "artifact": ".checkyourself/challenge-runs/S13.release-tooling.txt"
+      },
+      "output_kind": "text",
+      "description": "Release-tooling compile check with committed artifact."
+    },
+    "S14": {
+      "requires_explicit_config": true,
+      "description": "Provide the project's infrastructure-as-code verification command."
+    },
+    "S15": {
+      "requires_explicit_config": true,
+      "description": "Provide the project's performance and rate-limit verification command."
+    },
+    "S16": {
+      "requires_explicit_config": true,
+      "description": "Provide the project's scaling and resilience verification command."
+    },
+    "S17": {
+      "requires_explicit_config": true,
+      "description": "Provide the project's observability and incident-response verification command."
+    },
+    "S18": {
+      "requires_explicit_config": true,
+      "description": "Provide the project's recovery and continuity verification command."
+    },
+    "S19": {
+      "requires_explicit_config": true,
+      "description": "Provide the project's AI and agent-governance verification command."
+    },
+    "S20": {
+      "requires_explicit_config": true,
+      "description": "Provide the project's learning and remediation-history verification command."
+    }
   }
 }
