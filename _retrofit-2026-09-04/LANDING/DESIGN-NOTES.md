@@ -1,7 +1,7 @@
 # CheckYourself landing page — design notes
 
-Date: 2026-09-05  
-Artifact: `index.html` at the repository root  
+Date: 2026-09-05
+Artifact: `index.html` at the repository root
 Scope: one self-contained, static GitHub Pages landing page; no external assets, fonts, scripts, or network calls.
 
 ## Direction snapshot
