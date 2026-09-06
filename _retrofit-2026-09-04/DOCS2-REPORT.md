@@ -1,7 +1,7 @@
 # DOCS2 Report — Public Documentation Retrofit
 
-Date: 2026-09-05  
-Scope: README.md, llms.txt, CHANGELOG.md, docs/RETROFIT-LEARNINGS-2026-09-04.md  
+Date: 2026-09-05
+Scope: README.md, llms.txt, CHANGELOG.md, docs/RETROFIT-LEARNINGS-2026-09-04.md
 Git: no commit or push performed
 
 ## Fact table

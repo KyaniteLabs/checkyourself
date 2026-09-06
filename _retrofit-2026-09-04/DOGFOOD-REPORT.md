@@ -1,7 +1,7 @@
 # CheckYourself dogfood defect retrofit
 
-Date: 2026-09-04  
-Scope: CheckYourself CLI and scanner only  
+Date: 2026-09-04
+Scope: CheckYourself CLI and scanner only
 Git: no commit, no push, no installs, no network
 
 ## Result
@@ -46,7 +46,7 @@ secrets and unguarded sinks.
 
 ### Tests
 
-`python3 -m unittest discover -s tests -p 'test_*.py'`  
+`python3 -m unittest discover -s tests -p 'test_*.py'`
 Result: 101 tests passed.
 
 New regression coverage proves:

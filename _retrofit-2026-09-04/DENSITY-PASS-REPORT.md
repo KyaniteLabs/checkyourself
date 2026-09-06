@@ -1,6 +1,6 @@
 # Density Pass Report
 
-Date: 2026-09-05  
+Date: 2026-09-05
 Scope: `skills/checkyourself/SKILL.md` plus non-README Markdown in
 `02_RUN_DIAGNOSTIC`, `05_OUTPUT_TEMPLATES`, and `06_ADAPTERS`.
 

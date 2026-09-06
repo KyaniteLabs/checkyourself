@@ -135,8 +135,8 @@ Found 57 symbols across 1 file.
 
 ```python
 25	from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
-26	
-27	
+26
+27
 28	TOOL_NAME = "checkyourself-cli"
 29	SCAN_SCHEMA_ID = "checkyourself-scan/1"
 30	COVERAGE_SCHEMA_ID = "checkyourself-coverage/1"
@@ -147,11 +147,11 @@ Found 57 symbols across 1 file.
 
 ... (gap) ...
 
-198	
+198
 199	ENV_EXAMPLE_NAMES = {".env.example", ".env.sample", ".env.template", "env.example"}
 200	SEVERITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
 201	RESOLVED_STATUSES = {"fixed", "accepted-risk", "deferred", "not-applicable", "suppressed"}
-202	
+202
 203	COVERAGE_SURFACES = [
 204	    ("S01", "Product purpose, users, and harm model", "context"),
 205	    ("S02", "Stack, architecture, and dependency map", "context"),
@@ -174,7 +174,7 @@ Found 57 symbols across 1 file.
 222	    ("S19", "AI/RAG/agent governance", "C10"),
 223	    ("S20", "Learning needs and remediation history", "learning"),
 224	]
-225	
+225
 226	SCORE_CATEGORIES = {
 227	    "C1": ("Data, privacy, tenant/user isolation", 18),
 228	    "C2": ("Auth, permissions, session safety", 14),
@@ -187,35 +187,35 @@ Found 57 symbols across 1 file.
 235	    "C9": ("Frontend UX, accessibility, client safety", 8),
 236	    "C10": ("AI/RAG/agent governance", 6),
 237	}
-238	
+238
 239	SEVERITY_PENALTIES = {"P0": 1.0, "P1": 0.60, "P2": 0.25, "P3": 0.10}
 240	CRITICAL_CATEGORIES = {"C1", "C2", "C3"}
 241	HIGH_SCORE_GATE_CATEGORIES = {"C1", "C2", "C3", "C5", "C6", "C7"}
 242	VALID_COVERAGE_STATUSES = {"Pass", "Finding", "Unknown", "NotApplicable"}
 243	_NO_COVERAGE = object()
-244	
-245	
+244
+245
 246	class CliError(Exception):
 247	    """User-facing CLI error with a stable exit code."""
-248	
+248
 249	    def __init__(self, message: str, code: int = 2):
 250	        super().__init__(message)
 251	        self.code = code
-252	
-253	
+252
+253
 254	class Finding:
 
 ... (gap) ...
 
 1696	    return errors
-1697	
-1698	
+1697
+1698
 1699	def require_findings_artifact(data: Any) -> None:
 1700	    errors = findings_artifact_errors(data)
 1701	    if errors:
 1702	        raise CliError("invalid findings artifact: " + "; ".join(errors))
-1703	
-1704	
+1703
+1704
 1705	def infer_category(text: str) -> str:
 ```
 
@@ -353,18 +353,18 @@ nl -ba 02_RUN_DIAGNOSTIC/coverage-matrix.md
 nl -ba 02_RUN_DIAGNOSTIC/scoring-method.md' in /Users/simongonzalezdecruz/workspaces/checkyourself
  succeeded in 0ms:
      1	# CheckYourself Context Router
-     2	
+     2
      3	This file is the file-first entrypoint for agents using CheckYourself. It keeps
      4	the repo compatible with staged-context (ICM-style) loading without making
      5	users read methodology notes first.
-     6	
+     6
      7	CheckYourself is a public, folder-based diagnostic system. It uses staged
      8	Markdown context instead of a runtime framework. Load only the stage needed for
      9	the user's current task, then write outputs to that stage's `output/` folder
     10	when the user asks for files or when a handoff artifact is useful.
-    11	
+    11
     12	## Canonical Rules
-    13	
+    13
     14	1. Start read-only for diagnostics.
     15	2. Infer the user's project stack from evidence.
     16	3. Sweep the full coverage matrix before ranking findings.
@@ -374,9 +374,9 @@ nl -ba 02_RUN_DIAGNOSTIC/scoring-method.md' in /Users/simongonzalezdecruz/worksp
     20	7. Keep the Creator Kit and local agent state out of public releases.
     21	8. Detect the user's primary language and any candidate second language at runtime. Ask before using an inferred second language unless the user already named it.
     22	9. Keep output structure accessible for ADHD, autism, and dyslexia.
-    23	
+    23
     24	## Stage Router
-    25	
+    25
     26	| User intent | Load first | Then load | Primary output |
     27	|---|---|---|---|
     28	| "How do I use this?" | `00_START_HERE/CONTEXT.md` | `README.md`, `START_HERE.md` | User chooses a path |
@@ -386,37 +386,37 @@ nl -ba 02_RUN_DIAGNOSTIC/scoring-method.md' in /Users/simongonzalezdecruz/worksp
     32	| "Create a learning plan" | `04_LEARNING_PLAN/CONTEXT.md` | Diagnostic/remediation history | Bespoke Learning Plan |
     33	| "Make a dashboard" | `10_DASHBOARD/CONTEXT.md` | Existing report only | Optional HTML dashboard or inline Markdown fallback |
     34	| "Use advanced guidance" | `90_ADVANCED/CONTEXT.md` | Relevant capability only | Specialist checklist or plan |
-    35	
+    35
     36	For product voice and tone, load `identity.md`. For example user requests and
     37	the expected response shape, load `examples.md`. For the underlying diagnostic,
     38	learning-plan, and risk-surface philosophy, load the files in `reference/`.
-    39	
+    39
     40	## Output Handoffs
-    41	
+    41
     42	Use these folders for durable handoffs when file output is requested:
-    43	
+    43
     44	- `01_PROJECT_CONTEXT/output/`
     45	- `02_RUN_DIAGNOSTIC/output/`
     46	- `03_GUIDED_FIX_MODE/output/`
     47	- `04_LEARNING_PLAN/output/`
     48	- `10_DASHBOARD/output/`
-    49	
+    49
     50	Do not write generated outputs into source templates unless the user explicitly
     51	asks to update the templates.
-    52	
+    52
     53	## Public Release Boundary
-    54	
+    54
     55	The public repository should include the CheckYourself product files and should
     56	exclude:
-    57	
+    57
     58	- the private creator/launch-kit sidecar folder
     59	- `.omx/`
     60	- `.DS_Store`
     61	- local generated report/dashboard files unless intentionally committed
      1	# Rules
-     2	
+     2
      3	## Always
-     4	
+     4
      5	- Start with diagnosis before remediation.
      6	- Keep the product voice direct, useful, and lightly opinionated: check yourself before you wreck yourself.
      7	- Explain the stack you detected and how you detected it.
@@ -436,9 +436,9 @@ nl -ba 02_RUN_DIAGNOSTIC/scoring-method.md' in /Users/simongonzalezdecruz/worksp
     21	- For dependency/security remediation, verify the default-branch alert state after merge before saying the finding is resolved.
     22	- For a 100% readiness claim, require agreement between scanner findings, live dependency/security alerts, default-branch CI, and git branch state.
     23	- Treat lockfile source as evidence. Version strings alone do not prove an advisory is fixed when a registry crate, local patch, fork, or vendored crate may differ.
-    24	
+    24
     25	## Never
-    26	
+    26
     27	- Do not assume a stack without evidence.
     28	- Do not make production changes without explicit approval.
     29	- Do not expose secret values in output.
@@ -456,9 +456,9 @@ nl -ba 02_RUN_DIAGNOSTIC/scoring-method.md' in /Users/simongonzalezdecruz/worksp
     41	- Do not claim a dependency alert is resolved from a local branch, PR branch, or local build alone.
     42	- Do not broad-search build output, dependency folders, generated files, or vendored code unless that path is the explicit subject.
     43	- Do not claim all public repositories are clean without exact namespace, repository count, timestamp, fork policy, and current evidence.
-    44	
+    44
     45	## Token efficiency and context loading
-    46	
+    46
     47	- Read the smallest useful context first.
     48	- Keep broad sweeps compact.
     49	- Use tables for the complete findings/backlog.
@@ -470,9 +470,9 @@ nl -ba 02_RUN_DIAGNOSTIC/scoring-method.md' in /Users/simongonzalezdecruz/worksp
     55	- If the user does not want HTML, provide the inline Markdown dashboard fallback instead of another visual file.
     56	- Keep the audit complete even when the initial explanation is compact.
     57	- Exclude `target/`, `node_modules/`, `vendor/`, generated schemas, and build artifacts from broad scans and searches unless they are the affected surface.
-    58	
+    58
     59	## Decision priority
-    60	
+    60
     61	1. User safety and data protection.
     62	2. Production correctness and reversibility.
     63	3. Complete risk visibility.
@@ -481,16 +481,16 @@ nl -ba 02_RUN_DIAGNOSTIC/scoring-method.md' in /Users/simongonzalezdecruz/worksp
     66	6. Learning value.
     67	7. Optimization.
      1	# CheckYourself Coverage Matrix
-     2	
+     2
      3	A CheckYourself diagnostic is not allowed to stop after a few obvious issues. The reviewer must sweep every relevant production surface below and mark each one as one of:
-     4	
+     4
      5	- **Pass** — evidence shows the control exists and is credible.
      6	- **Finding** — evidence shows a gap or risky implementation.
      7	- **Unknown** — the reviewer cannot tell from available evidence. Unknowns in critical areas should become questions or temporary risks.
      8	- **Not applicable** — the app genuinely does not use this surface.
-     9	
+     9
     10	The goal is maximum practical coverage, not fake certainty. If the AI cannot inspect enough of the project, it must say what it cannot verify.
-    11	
+    11
     12	| # | Surface | What to inspect | Typical findings |
     13	|---:|---|---|---|
     14	| 1 | Product purpose and users | What the app does, who can use it, who can be harmed | unclear risk model, missing admin/user distinction |
@@ -513,21 +513,21 @@ nl -ba 02_RUN_DIAGNOSTIC/scoring-method.md' in /Users/simongonzalezdecruz/worksp
     31	| 18 | Availability and recovery | backups, restore tests, disaster recovery, data export | backups untested, no RTO/RPO, no recovery drill |
     32	| 19 | AI/RAG/agent governance | prompts, tool permissions, evals, citations, refusal, sandboxing | hallucinated answers, unsafe tools, prompt injection, no evals |
     33	| 20 | Learning needs | gaps that reveal what the builder should learn next | generic learning plan not tied to real findings |
-    34	
+    34
     35	## Completeness rule
-    36	
+    36
     37	The report must include a **Coverage Sweep** table. Every row above must be represented as Pass, Finding, Unknown, or Not applicable. The remediation backlog must include every row marked Finding and any high-impact Unknown that blocks confidence.
-    38	
+    38
     39	In prose, use **Not applicable**. In the coverage JSON written for the CLI, use
     40	exactly these status values: `Pass`, `Finding`, `Unknown`, `NotApplicable`.
      1	# Scoring Method
-     2	
+     2
      3	The Production Reality Score is a 0–100 readiness confidence score.
-     4	
+     4
      5	It is not a moral judgment and not a guarantee. It is an evidence-based estimate of how ready the app is for real users.
-     6	
+     6
      7	## Category weights
-     8	
+     8
      9	| Category | Weight |
     10	|---|---:|
     11	| Data, privacy, and tenant/user isolation | 18 |
@@ -540,23 +540,23 @@ nl -ba 02_RUN_DIAGNOSTIC/scoring-method.md' in /Users/simongonzalezdecruz/worksp
     18	| Performance, scaling, caching, and rate limits | 8 |
     19	| Frontend UX, accessibility, and client safety | 8 |
     20	| AI/RAG/agent governance, if applicable | 6 |
-    21	
+    21
     22	If a category does not apply, mark it `NotApplicable` and provide an explicit `not_applicable_reason`. Its weight slot is not redistributed; the CLI awards the full weight for that category automatically when a valid reason is present. Do not adjust other category weights. Hand-scored totals must treat a NotApplicable category as if it received full credit for that weight, matching the behavior of `score --findings --coverage`.
-    23	
+    23
     24	In prose, write **Not applicable**. In coverage JSON, use the exact enum
     25	`NotApplicable`; both spellings describe the same state.
-    26	
+    26
     27	## Caps
-    28	
+    28
     29	- Any unresolved P0 caps the final score at 49.
     30	- Any unresolved P1 caps the final score at 74.
     31	- Missing evidence in a critical category caps the final score at 84. This cap applies in every score mode, including estimates.
     32	- A score above 90 requires credible evidence for tests, secrets handling, deployment/rollback, observability, auth, and data boundaries. This cap applies in every score mode, including estimates.
-    33	
+    33
     34	## Executable scoring contract
-    35	
+    35
     36	The CLI computes the base score and caps deterministically:
-    37	
+    37
     38	1. For each category, start with its weight.
     39	2. Subtract the evidence penalty for an `Unknown` category (`100%` of the
     40	   weight for critical categories C1/C2/C3, otherwise `50%`). Subtract each
@@ -568,23 +568,23 @@ nl -ba 02_RUN_DIAGNOSTIC/scoring-method.md' in /Users/simongonzalezdecruz/worksp
     46	   critical evidence is missing, 90 if a high-score launch-gate category lacks
     47	   evidence)`.
     48	5. `final_score = min(base_score, minimum_cap)`.
-    49	
+    49
     50	`NotApplicable` with a concrete reason retains the category's full weight. The
     51	executable reference is [`docs/cli.md#scoring`](../docs/cli.md#scoring), backed
     52	by [`tools/checkyourself.py`](../tools/checkyourself.py).
-    53	
+    53
     54	## Confidence labels
-    55	
+    55
     56	Every score must include a confidence label:
-    57	
+    57
     58	- **High confidence** — direct repo/config/test evidence.
     59	- **Medium confidence** — enough evidence, but some assumptions.
     60	- **Low confidence** — limited context; score may change significantly.
-    61	
+    61
     62	## Required explanation
-    63	
+    63
     64	For each category, say:
-    65	
+    65
     66	- what evidence was found;
     67	- what was missing;
     68	- what points were awarded;
@@ -606,24 +606,24 @@ nl -ba skills/checkyourself/SKILL.md
 nl -ba docs/RETROFIT-LEARNINGS-2026-09-04.md' in /Users/simongonzalezdecruz/workspaces/checkyourself
  succeeded in 0ms:
      1	# CheckYourself — AI Production-Readiness Diagnostic for Apps Built With AI
-     2	
+     2
      3	**TL;DR:** CheckYourself — AI production-readiness diagnostic for apps built with AI. Best for founders and engineers shipping AI-generated apps.
-     4	
+     4
      5	> **Check yourself before you wreck yourself — for the apps you ship.** Before you launch it, CheckYourself.
-     6	
+     6
      7	[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
      8	[![Model-agnostic](https://img.shields.io/badge/AI-model--agnostic-blue.svg)](#works-with-every-ai-coding-tool)
      9	[![Production-hardening engine](https://img.shields.io/badge/engine-19%20capabilities-blueviolet.svg)](90_ADVANCED/)
     10	[![Read-only by default](https://img.shields.io/badge/safety-read--only%20first-brightgreen.svg)](#is-it-safe-to-run-on-my-codebase)
-    11	
+    11
     12	**CheckYourself is a free, open-source, model-agnostic production-readiness system for apps built with AI coding assistants.** It turns any AI assistant — Cursor, Claude, ChatGPT, Gemini, Copilot, Windsurf, Replit, Lovable, Bolt, Codex, or a local agent — into a pre-launch auditor that inspects your app, infers the stack, finds production gaps, explains every risk in plain English, proposes fixes for your approval, verifies them, and then writes a learning plan built from the exact gaps your own project had.
-    13	
+    13
     14	Under the hood it is a complete, staged engineering system, not a single canned prompt: an ICM-style context workspace that routes the agent through each stage, an evidence-based 0–100 scoring method with severity caps, a 19-capability production-hardening engine spanning auth, data, secrets, CI/CD, observability, privacy, and AI governance, JSON output schemas, report and risk templates, and a public validation suite. You install it as your AI assistant's operating context — no SaaS, no account, no lock-in to any one model.
-    15	
+    15
     16	---
-    17	
+    17
     18	## Table of contents
-    19	
+    19
     20	- [What is CheckYourself?](#what-is-checkyourself)
     21	- [Why it exists](#why-it-exists)
     22	- [Get started](#get-started)
@@ -638,31 +638,31 @@ nl -ba docs/RETROFIT-LEARNINGS-2026-09-04.md' in /Users/simongonzalezdecruz/work
     31	- [Safety model](#safety-model)
     32	- [FAQ](#faq)
     33	- [License](#license)
-    34	
+    34
     35	---
-    36	
+    36
     37	## What is CheckYourself?
-    38	
+    38
     39	CheckYourself is an open-source **production-readiness audit system** — a structured, staged engineering framework of context files, scoring logic, output schemas, templates, and a deep production-hardening capability stack that you load as an AI coding assistant's operating context, so it can grade an AI-built app the way real production would: honestly, completely, and before launch.
-    40	
+    40
     41	It answers one question that matters to every "vibe coder," indie hacker, and AI-assisted builder: **"Is this app actually ready to ship, and if not, what exactly is wrong and how do I fix it?"**
-    42	
+    42
     43	Unlike a "top three issues" linter, CheckYourself builds a **complete findings register** and a **complete remediation backlog**, scores production readiness from 0–100, and walks you through fixes one safe, reversible batch at a time. When the audit is done, it generates a **bespoke learning plan** so you actually learn from what your project was missing.
-    44	
+    44
     45	It is also organized as an ICM-style context workspace: [`CONTEXT.md`](CONTEXT.md) routes the agent to staged folders, each major stage has its own `CONTEXT.md`, and durable handoff artifacts belong in stage `output/` folders. CheckYourself is not affiliated with the RinDig ICM project; it uses the same file-first idea so agents know what to read, do, and produce at each step.
-    46	
+    46
     47	---
-    48	
+    48
     49	## Why it exists
-    50	
+    50
     51	Apps built fast with AI tools tend to look finished long before they are safe to launch. The gaps are usually invisible from the happy path: missing auth checks, unvalidated inputs, leaked secrets, no backups, no rollback, no tests, no rate limits, no error tracking.
-    52	
+    52
     53	CheckYourself gives you reality **before production does the grading** — a calm, complete, plain-English second pass that any AI assistant can run on your behalf.
-    54	
+    54
     55	---
-    56	
+    56
     57	## Get started
-    58	
+    58
     59	1. Download or clone this repository.
     60	2. Put the `checkyourself` folder in or next to your project.
     61	3. Point your AI coding assistant at the folder as its **operating context**. Start at [`CONTEXT.md`](CONTEXT.md) — it routes the agent through each stage without loading the whole repo. New to the system? Read [`START_HERE.md`](START_HERE.md) first.
@@ -671,13 +671,13 @@ nl -ba docs/RETROFIT-LEARNINGS-2026-09-04.md' in /Users/simongonzalezdecruz/work
     64	6. Recheck and rescore after each batch.
     65	7. Continue until every finding is fixed, deferred with a reason, accepted as risk, suppressed with evidence, proven not applicable, or remains open with blocker context.
     66	8. Get a custom learning plan based on the actual gaps.
-    67	
+    67
     68	> **No model lock-in. No required cloud account. No required command line.**
-    69	
+    69
     70	### Direct your assistant
-    71	
+    71
     72	Once the folder is in place, tell your AI assistant how to operate within it:
-    73	
+    73
     74	```text
     75	Use the checkyourself folder as your operating context.
     76	Start with a read-only diagnostic.
@@ -685,25 +685,25 @@ nl -ba docs/RETROFIT-LEARNINGS-2026-09-04.md' in /Users/simongonzalezdecruz/work
     78	Generate the dashboard only if I say `dashboard yes` or `dashboard inline`.
     79	After the diagnostic, create a learning plan based on the gaps you found.
     80	```
-    81	
+    81
     82	---
-    83	
+    83
     84	## Visual workflow
-    85	
+    85
     86	![CheckYourself user workflow: add the folder, run the audit, review the backlog, approve fixes, verify, repeat, and learn](assets/checkyourself-user-workflow.png)
-    87	
+    87
     88	```text
     89	Add the folder → run the audit → review the full backlog → approve fixes → verify → repeat → learn what you missed
     90	```
-    91	
+    91
     92	CheckYourself is not a "top three issues" tool. It creates a complete findings register and a complete remediation backlog. The first approval batch is intentionally small so fixes stay safe, understandable, and reversible.
-    93	
+    93
     94	---
-    95	
+    95
     96	## What it produces
-    97	
+    97
     98	Default outputs (see a real example in [`samples/sample-production-reality-report.md`](samples/sample-production-reality-report.md)):
-    99	
+    99
    100	- **Project Map** — what your app appears to do.
    101	- **Detected Stack** — framework, database, auth, hosting, tests, deployment signals, and confidence.
    102	- **Production Reality Score** — a 0–100 score with caps and reasoning ([how the score works](docs/checkyourself-score-explained.md)).
@@ -713,17 +713,17 @@ nl -ba docs/RETROFIT-LEARNINGS-2026-09-04.md' in /Users/simongonzalezdecruz/work
    106	- **Highest-Severity Approval Batch** — a small unresolved slice for review, not the whole scope. The local CLI does not infer safety, dependencies, coupling, or blast radius; the diagnostic and human approval gate still do.
    107	- **Guided Fix Loop** — approve, fix, verify, rescore, repeat.
    108	- **Bespoke Learning Plan** — what to learn next based on what your own app was missing.
-   109	
+   109
    110	Optional output:
-   111	
+   111
    112	- **Human Audit Dashboard** — one self-contained HTML/CSS dashboard that visualizes the score, risks, backlog, coverage, status, and learning plan. It is optional because dashboards use extra tokens. Ask for it with `dashboard yes`, or use `dashboard inline` for the compact Markdown fallback.
-   113	
+   113
    114	---
-   115	
+   115
    116	## What it checks
-   117	
+   117
    118	The diagnostic sweeps the whole relevant production surface:
-   119	
+   119
    120	- product purpose, users, and harm model;
    121	- frontend UX, accessibility, and client safety;
    122	- API/backend behavior, validation, uploads, and webhooks;
@@ -737,171 +737,171 @@ nl -ba docs/RETROFIT-LEARNINGS-2026-09-04.md' in /Users/simongonzalezdecruz/work
    130	- performance, scaling, caching, and rate limits;
    131	- privacy, compliance, data retention, and consent;
    132	- AI/RAG/agent governance when applicable.
-   133	
+   133
    134	The full technical engine lives in [`90_ADVANCED/`](90_ADVANCED/), but users do not need to read it first.
-   135	
+   135
    136	---
-   137	
+   137
    138	## Works with every AI coding tool
-   139	
+   139
    140	CheckYourself is **model-agnostic** and ships as plain Markdown, so it runs in any AI assistant that can read text or files:
-   141	
+   141
    142	| Category | Tools |
    143	| --- | --- |
    144	| AI IDEs & editors | Cursor, Windsurf, GitHub Copilot, Codex |
    145	| Chat assistants | ChatGPT, Claude, Gemini |
    146	| App builders | Replit, Lovable, Bolt |
    147	| Local & custom agents | any local model or agent that reads files |
-   148	
+   148
    149	Tool-specific setup guides live in [`06_ADAPTERS/`](06_ADAPTERS/README.md).
-   150	
+   150
    151	---
-   152	
+   152
    153	## Who it is for
-   154	
+   154
    155	CheckYourself is for people who build with AI and want reality before production does the grading:
-   156	
+   156
    157	- beginners learning by doing;
    158	- intermediate builders who can ship but want a safer second pass;
    159	- experienced developers who want a reusable audit context;
    160	- AI-built app learners and community builders;
    161	- Cursor, Windsurf, Replit, Lovable, Bolt, ChatGPT, Claude, Gemini, Codex, and local-agent users;
    162	- founders, freelancers, agencies, and teams preparing real launches.
-   163	
+   163
    164	---
-   165	
+   165
    166	## How it works
-   167	
+   167
    168	CheckYourself runs as a staged workflow, each stage with its own context file so your AI tool always knows what to read, do, and produce:
-   169	
+   169
    170	1. **Project context** — the agent maps what your app does and detects the stack.
    171	2. **Run diagnostic** — a read-only sweep produces the Production Reality Report and score.
    172	3. **Guided fix mode** — you approve fixes in safe batches; the agent applies and verifies them.
    173	4. **Learning plan** — the agent writes a plan from the real gaps it found.
    174	5. **Dashboard (optional)** — a self-contained HTML or inline Markdown view of everything.
-   175	
+   175
    176	Each stage is defined by its own context files, scoring rules, schemas, and templates — so the agent always knows what to read, what to do, and what to produce. The advanced engine in [`90_ADVANCED/`](90_ADVANCED/) deepens any stage when a domain warrants it.
-   177	
+   177
    178	---
-   179	
+   179
    180	## Optional local CLI
-   181	
+   181
    182	For a zero-token head start, CheckYourself ships a small **optional** scan & scaffold CLI — standard library only, no network, no secret values printed:
-   183	
+   183
    184	```bash
    185	python3 tools/checkyourself.py /path/to/your/project
    186	```
-   187	
+   187
    188	It detects your stack, flags obvious deterministic risks (possible hardcoded secrets, a committed `.env`, missing `.env.example`, absent tests or CI) ranked P0–P3, and writes a pre-filled context file your AI can build on. Add `--json` for a machine-readable summary, `--format json --no-write` for JSON stdout, or `--ci` to use it as a lightweight pipeline gate (non-zero exit on a P0). The CLI is a scaffold, not a substitute — the AI still runs the full diagnostic. See [`docs/cli.md`](docs/cli.md).
-   189	
+   189
    190	The CLI is the canonical local engine, and CheckYourself also ships a thin local stdio MCP wrapper for native-agent clients. There is no hosted API for the current open-source product. See [`docs/cli.md`](docs/cli.md), [`docs/mcp.md`](docs/mcp.md), and [`docs/agent-access-cli-plan.md`](docs/agent-access-cli-plan.md).
-   191	
+   191
    192	---
-   193	
+   193
    194	## Optional visual dashboard
-   195	
+   195
    196	The Markdown report is the default output because it is cheaper, faster, and easier for most AI tools to produce.
-   197	
+   197
    198	This repository includes a real dogfood dashboard screenshot from CheckYourself auditing itself:
-   199	
+   199
    200	![CheckYourself dogfood dashboard showing the self-audit score, launch status, risk counts, and coverage sweep](10_DASHBOARD/output/checkyourself-dogfood-dashboard-live-20260612.png)
-   201	
+   201
    202	After the report exists, say either:
-   203	
+   203
    204	```text
    205	dashboard yes
    206	```
-   207	
+   207
    208	The AI creates one self-contained HTML/CSS dashboard from the report — it should not re-run the audit just to make the dashboard. If you do not want HTML, ask for:
-   209	
+   209
    210	```text
    211	dashboard inline
    212	```
-   213	
+   213
    214	or:
-   215	
+   215
    216	```text
    217	dashboard inline
    218	```
-   219	
+   219
    220	The first creates one self-contained HTML/CSS file. The second returns the
    221	compact Markdown dashboard shape instead of creating a file.
-   222	
+   222
    223	Dashboard files:
-   224	
+   224
    225	- [`10_DASHBOARD/README.md`](10_DASHBOARD/README.md)
    226	- [`10_DASHBOARD/dashboard-data-contract.md`](10_DASHBOARD/dashboard-data-contract.md)
    227	- [`10_DASHBOARD/inline-dashboard.md`](10_DASHBOARD/inline-dashboard.md)
    228	- [`10_DASHBOARD/dashboard-prompt.md`](10_DASHBOARD/dashboard-prompt.md)
    229	- [`10_DASHBOARD/dashboard-template.html`](10_DASHBOARD/dashboard-template.html)
-   230	
+   230
    231	---
-   232	
+   232
    233	## Token efficiency by design
-   234	
+   234
    235	CheckYourself uses progressive context loading so audits stay affordable even on large projects:
-   236	
+   236
    237	- Start with the stage context and coverage matrix.
    238	- Load advanced files only when a domain is relevant.
    239	- Keep the complete findings register compact.
    240	- Expand details for P0/P1 items and the next approval batch.
    241	- Do not paste long source files, logs, or reference docs back to the user.
    242	- Generate the HTML dashboard only when the user asks for it.
-   243	
+   243
    244	See [`docs/token-efficiency.md`](docs/token-efficiency.md).
-   245	
+   245
    246	---
-   247	
+   247
    248	## Safety model
-   249	
+   249
    250	**Start read-only.** CheckYourself inspects, explains, and recommends before any code or config changes happen. Fixes require explicit user approval, are applied in small reversible batches, and are re-verified and re-scored after each batch. This is the single most important rule in the system.
-   251	
+   251
    252	---
-   253	
+   253
    254	## FAQ
-   255	
+   255
    256	### What is CheckYourself in one sentence?
    257	CheckYourself is a free, open-source, model-agnostic production-readiness system that turns any AI coding assistant into a pre-launch auditor for apps built with AI — a staged diagnostic workspace, an evidence-based score, a complete findings register and remediation backlog, approval-based guided fixes, and a 19-capability hardening engine that finds every gap, explains the risks, fixes them with your approval, and teaches you what you missed.
-   258	
+   258
    259	### Do I need to install a toolchain or use the command line?
    260	No build step, no dependencies, and no required command line. You load CheckYourself as your AI assistant's operating context and it works through the stages with you. It also ships a small optional Python CLI and validator for maintainers and agent workflows, but you never need them to run an audit.
-   261	
+   261
    262	### Which AI tools does it work with?
    263	Any model-agnostic assistant that reads text or files, including Cursor, Windsurf, GitHub Copilot, Codex, ChatGPT, Claude, Gemini, Replit, Lovable, Bolt, and local agents.
-   264	
+   264
    265	### Is it safe to run on my codebase?
    266	Yes. CheckYourself starts **read-only** by default. It will not change code or configuration until you approve a specific, reversible fix, and it re-verifies after every batch.
-   267	
+   267
    268	### How is it different from a linter or a "top issues" tool?
    269	A linter flags style and a few obvious problems. CheckYourself builds a *complete* findings register and remediation backlog across the entire production surface — auth, data, secrets, CI/CD, deployment, observability, privacy, and more — then guides fixes and produces a learning plan.
-   270	
+   270
    271	### What does the Production Reality Score mean?
    272	It is a 0–100 production-readiness score with severity caps and explicit reasoning, explained in [`docs/checkyourself-score-explained.md`](docs/checkyourself-score-explained.md). A low score with clear findings is more useful than a falsely high one.
-   273	
+   273
    274	### Is CheckYourself free and open source?
    275	Yes — it is released under the [Apache License, Version 2.0](LICENSE) and is free to use, copy, and adapt under those terms.
-   276	
+   276
    277	### Who is it for?
    278	Vibe coders, indie hackers, beginners learning by doing, intermediate builders, experienced developers wanting a reusable audit, and founders, freelancers, agencies, and teams preparing real launches.
-   279	
+   279
    280	---
-   281	
+   281
    282	## Contributing
-   283	
+   283
    284	Issues and pull requests are welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md) and the [`CHANGELOG.md`](CHANGELOG.md) for project history.
-   285	
+   285
    286	---
-   287	
+   287
    288	## License
-   289	
+   289
    290	Apache License, Version 2.0 — free and open source. See [`LICENSE`](LICENSE).
-   291	
+   291
    292	<!-- s-plus-geo:start -->
-   293	
+   293
    294	## What is CheckYourself?
-   295	
+   295
    296	**CheckYourself** is a **AI production-readiness diagnostic for apps built with AI** that helps **founders and engineers shipping AI-generated apps** **score production readiness with evidence-backed findings and a fix path**.
-   297	
+   297
    298	| | |
    299	| --- | --- |
    300	| **Product** | CheckYourself |
@@ -910,77 +910,77 @@ nl -ba docs/RETROFIT-LEARNINGS-2026-09-04.md' in /Users/simongonzalezdecruz/work
    303	| **Not** | a generic linter or code formatter |
    304	| **Source** | [GitHub](https://github.com/KyaniteLabs/checkyourself) · [Forgejo](https://git.kyanitelabs.tech/KyaniteLabs/checkyourself) |
    305	| **Keywords** | AI app production readiness, pre-launch audit, vibe-code diagnostic |
-   306	
+   306
    307	## Who it's for
-   308	
+   308
    309	- Primary: founders and engineers shipping AI-generated apps
    310	- Use when you need to score production readiness with evidence-backed findings and a fix path
    311	- Skip if you need a generic linter or code formatter
-   312	
+   312
    313	## FAQ
-   314	
+   314
    315	### What is CheckYourself?
-   316	
+   316
    317	CheckYourself is a AI production-readiness diagnostic for apps built with AI. It helps founders and engineers shipping AI-generated apps score production readiness with evidence-backed findings and a fix path.
-   318	
+   318
    319	### Who should use CheckYourself?
-   320	
+   320
    321	founders and engineers shipping AI-generated apps.
-   322	
+   322
    323	### How is CheckYourself different?
-   324	
+   324
    325	Unlike style linters, CheckYourself judges ship-readiness with evidence, not only style.
-   326	
+   326
    327	### Is CheckYourself production software?
-   328	
+   328
    329	Treat the README status and release tags as source of truth for maturity. Validate against your own requirements before production use.
-   330	
+   330
    331	## Status
-   332	
+   332
    333	- Maintained as of 2026 on the default branch
    334	- Prefer release tags when pinning dependencies
    335	- Report issues on the canonical remote listed above
-   336	
+   336
    337	## Agent surface
-   338	
+   338
    339	- Coding agents: read this README first, then repo docs/`AGENTS.md` if present
    340	- Prefer machine-readable briefs (`llms.txt`) when the repo ships one
    341	- MCP or skill entrypoints are documented in-repo when applicable
-   342	
+   342
    343	## Contributing
-   344	
+   344
    345	Issues and PRs welcome on the canonical remote. Keep public docs free of secrets and machine-local paths.
-   346	
+   346
    347	## License
-   348	
+   348
    349	See [LICENSE](LICENSE) in this repository (or package metadata if license is package-only).
-   350	
+   350
    351	<!-- s-plus-geo:end -->
      1	---
      2	name: checkyourself
      3	description: Production-readiness diagnostics and guided remediation for AI-built apps using CheckYourself. Use when the user asks for a pre-launch audit, production readiness score, evidence-backed findings register, safest first fix batch, learning plan, optional dashboard, or a read-only reality check before shipping a repository, app, website, agent, MCP server, or AI-generated project.
      4	---
-     5	
+     5
      6	# CheckYourself
-     7	
+     7
      8	## Overview
-     9	
+     9
     10	Use CheckYourself to turn an AI assistant into a calm, evidence-first production reviewer. Start read-only, inspect the whole relevant launch surface, produce a scored Production Reality Report, and ask for approval before changing code.
-    11	
+    11
     12	## Workflow
-    13	
+    13
     14	1. Identify the project and available CheckYourself context.
     15	   - If this repository or a copied `checkyourself` folder is present, start with `CONTEXT.md`, `AGENTS.md`, `rules.md`, `02_RUN_DIAGNOSTIC/coverage-matrix.md`, and `02_RUN_DIAGNOSTIC/scoring-method.md`.
     16	   - If only this skill is available, use the workflow below and ask for the smallest missing project evidence.
     17	   - Infer stack, audience, data shape, deploy target, and risk level from files and configuration. Label guesses.
-    18	
+    18
     19	2. Run deterministic checks when safe and available.
     20	   - Prefer read-only commands.
     21	   - Each scan finding carries a stable, semantic rule ID (for example
     22	     `CY-SECRET-001`, `CY-CONFIG-001`) that stays the same across runs, so you
     23	     can suppress, diff, and cite findings reliably.
     24	   - If `tools/checkyourself.py` exists, the deterministic pipeline is:
-    25	
+    25
     26	```bash
     27	python3 tools/checkyourself.py describe --format json
     28	python3 tools/checkyourself.py scan /path/to/project --deep --format json --no-write
@@ -990,16 +990,16 @@ nl -ba docs/RETROFIT-LEARNINGS-2026-09-04.md' in /Users/simongonzalezdecruz/work
     32	python3 tools/checkyourself.py next --findings scan.json --format json
     33	python3 tools/checkyourself.py diff --old baseline.json --new current.json --ci   # regression gate
     34	```
-    35	
+    35
     36	   - Treat scanner findings as confirmed evidence. Do not invent a separate
     37	     scoring or backlog path. If Python is unavailable, sweep manually and say
     38	     the score is hand-computed.
-    39	
+    39
     40	### Manual fallback contract
-    41	
+    41
     42	When the CLI is unavailable, manual output still uses a canonical rule-ID
     43	registry and evidence rubric:
-    44	
+    44
     45	| Rule ID | Canonical manual condition |
     46	|---|---|
     47	| `CY-MANUAL-AUTH-001` | Auth, permission, session, or admin behavior lacks verified server-side evidence. |
@@ -1010,20 +1010,20 @@ nl -ba docs/RETROFIT-LEARNINGS-2026-09-04.md' in /Users/simongonzalezdecruz/work
     52	| `CY-MANUAL-OBS-001` | Observability, alerting, or incident response lacks a verified receipt. |
     53	| `CY-MANUAL-AI-001` | AI/RAG/agent permissions, evaluation, or refusal behavior lacks verified evidence. |
     54	| `CY-MANUAL-OTHER-001` | A material gap does not match another registered manual condition. |
-    55	
+    55
     56	Reuse a detector ID from the [canonical detector-rule registry](../../docs/cli.md#canonical-detector-rule-registry)
     57	when the condition matches a shipped detector. Do not invent a new ID or
     58	renumber this registry for one report.
-    59	
+    59
     60	Every manual finding must include: the registry ID; severity and category; an
     61	exact file, command output, or owner-provided artifact with date/scope; the
     62	plain-English risk; and a status. A `Pass` needs direct evidence, a `Finding`
     63	needs evidence of the gap and its harm, `Unknown` needs an explicit missing-
     64	evidence request, and `Not applicable` needs a concrete reason. If no artifact
     65	can be inspected, label the result as a low-confidence hand-computed estimate.
-    66	
+    66
     67	### Deterministic score contract
-    68	
+    68
     69	The executable score is `final_score = min(base_score, minimum_cap)`, where
     70	`base_score` is the rounded sum of clamped per-category awards after evidence
     71	and unresolved-finding penalties. The cap is the minimum of 100, 49 for an
@@ -1031,10 +1031,10 @@ nl -ba docs/RETROFIT-LEARNINGS-2026-09-04.md' in /Users/simongonzalezdecruz/work
     73	category, and 90 for a missing high-score launch-gate category. `NotApplicable`
     74	with a concrete reason retains its category weight. See the [CLI scoring
     75	contract](../../docs/cli.md#scoring) and [executable implementation](../../tools/checkyourself.py).
-    76	
+    76
     77	3. Sweep the production surface.
     78	   Cover product purpose, frontend UX, accessibility, backend/API behavior, auth, data storage, migrations, secrets, runtime config, tests, CI/CD, dependencies, deploy/rollback, observability, performance, privacy, compliance, and AI/RAG/agent governance when relevant.
-    79	
+    79
     80	4. Produce a Production Reality Report.
     81	   Include:
     82	   - executive summary;
@@ -1052,32 +1052,32 @@ nl -ba docs/RETROFIT-LEARNINGS-2026-09-04.md' in /Users/simongonzalezdecruz/work
     94	   - safest first approval batch;
     95	   - questions that would change the diagnosis;
     96	   - learning-plan seeds based on the actual gaps.
-    97	
+    97
     98	5. Recommend before acting.
     99	   For each backlog item include finding ID, severity, fix summary, impact or blast radius, why it matters, likely files/systems touched, verification, rollback idea, learning value, and status. Do not modify files until the user approves a specific fix or batch.
-   100	
+   100
    101	6. After approval, run the guided fix loop.
    102	   Make the smallest reversible change, verify it, update finding status, rescore when evidence changes, and continue until findings are fixed, accepted as risk, deferred with a reason, suppressed with evidence, or proven not applicable.
-   103	
+   103
    104	7. Create the learning plan.
    105	   Tie lessons to the real findings and fixes. Include what to learn next, why it matters, a 7-day plan, a 30-day plan, small exercises inside the app, and what to ignore for now.
-   106	
+   106
    107	## Example Prompts
-   108	
+   108
    109	```text
    110	Use $checkyourself to run a read-only production-readiness diagnostic for this app. Do not change code yet.
    111	```
-   112	
+   112
    113	```text
    114	Use $checkyourself to score this MCP server before launch, list every blocking unknown, and propose the safest first fix batch.
    115	```
-   116	
+   116
    117	```text
    118	Use $checkyourself on this website repo. After the report, make a learning plan from the gaps you found. dashboard inline.
    119	```
-   120	
+   120
    121	## Safety Rules
-   122	
+   122
    123	- Start read-only.
    124	- Do not change code, install dependencies, rotate secrets, touch production systems, or rewrite architecture without explicit approval.
    125	- Do not stop at the first few issues. The first approval batch is only the first safe batch, not the full scope.
@@ -1086,95 +1086,95 @@ nl -ba docs/RETROFIT-LEARNINGS-2026-09-04.md' in /Users/simongonzalezdecruz/work
    128	- Do not paste long logs, source files, or reference docs back to the user unless needed.
    129	- For regulated, financial, health, legal, life-safety, security-critical, or high-volume systems, recommend qualified expert review.
    130	- Never ask for or expose live secrets, customer data, proprietary code, or unredacted `.env` values.
-   131	
+   131
    132	## Dashboard Modes
-   133	
+   133
    134	- Default: no dashboard.
    135	- If the user says `dashboard yes`, create a self-contained HTML/CSS dashboard from the existing report. Do not rerun the audit just to make the dashboard.
    136	- If the user says `dashboard inline`, produce a compact Markdown dashboard.
-   137	
+   137
    138	## Voice
-   139	
+   139
    140	Be direct, useful, and evidence-first. A light reality-check tone is fine, but aim the sharpness at the project state, never the person. For high-stakes findings, be blunt and calm.
-   141	
+   141
    142	Useful phrasing:
-   143	
+   143
    144	- "Demo-ready is not launch-ready. Here is the receipt."
    145	- "This passes the happy path. Production does not grade on the happy path."
    146	- "Not a disaster. Definitely a future incident with a calendar invite."
      1	# Retrofit Process Learnings — 2026-09-04
-     2	
+     2
      3	This note records process lessons from the documentation, validation, and
      4	evidence close-out. It is for maintainers running future multi-worker changes;
      5	it does not change the product contract.
-     6	
+     6
      7	## Evidence freshness has two clocks
-     8	
+     8
      9	A worker can observe a correct local projection while the orchestrator's branch
     10	still lacks that projection. The reverse also happens: a commit can exist while
     11	generated receipts, screenshots, or reports still describe an older tree. A
     12	"code-complete" report is therefore not proof that the committed or released
     13	surface is current.
-    14	
+    14
     15	Keep these states separate in every wave:
-    16	
+    16
     17	1. worker worktree state;
     18	2. orchestrator branch state;
     19	3. default-branch or release state;
     20	4. generated proof state.
-    21	
+    21
     22	Record the source state used for each receipt, regenerate derived proof from one
     23	captured evidence set, and re-run acceptance after integration. Treat a report
     24	that projects a future commit as a plan, not as current proof.
-    25	
+    25
     26	## Public validation needs an artifact boundary
-    27	
+    27
     28	Retrofit reports are process evidence, not public product documentation. When a
     29	public Markdown/link validator walks `_retrofit-*` artifacts, intentionally
     30	incomplete evidence links can make the public gate fail and hide whether the
     31	product surface itself is healthy. This is a boundary-design failure, not a
     32	reason to erase useful evidence.
-    33	
+    33
     34	Choose one explicit policy before the next retrofit: exclude process-artifact
     35	directories from public validation, or validate them with a separate historical
     36	artifact contract. Keep the exclusion narrow and visible, and report both
     37	product-surface results and artifact-contract results separately.
-    38	
+    38
     39	## License files and badges are different evidence classes
-    40	
+    40
     41	A README badge is a presentation claim. The LICENSE file is the legal artifact;
     42	the manifest and NOTICE provide machine-readable and attribution context. A
     43	green badge cannot override a conflicting license file. Resolve the owner's
     44	legal choice first, then align the badge, prose, manifest, LICENSE, and NOTICE
     45	as one change and validate every public claim.
-    46	
+    46
     47	## Capture the baseline before changing a wave
-    48	
+    48
     49	The required validator and full test suite repeatedly exposed inherited README
     50	and retrofit-artifact failures only after a worker had changed code. Without a
     51	pre-wave receipt, an acceptance failure is ambiguous: regression, inherited
     52	debt, or an artifact owned by another lane.
-    53	
+    53
     54	Before implementation, capture the exact commands, exit codes, failure list,
     55	and ownership of known failures. After implementation, compare the same checks
     56	with the same scope. A wave passes only when it introduces no new failure; an
     57	inherited failure remains visible and explicitly out of scope.
-    58	
+    58
     59	## Orchestrator and worker Git ownership must stay explicit
-    60	
+    60
     61	Workers need a precise changed-file list and verification receipt, but the
     62	orchestrator owns branch integration and commits. A worker's local clean status
     63	or commit is not a merged delivery receipt, and an orchestrator's integration
     64	commit does not replace worker-level proof.
-    65	
+    65
     66	The dispatch brief should name the owner of branch, commit, push, and release
     67	actions. The worker report should list every changed file and the exact checks
     68	run. The orchestrator should re-check the integrated tree before reporting
     69	completion. Keep task-tracker setup in the worker harness ready before dispatch;
     70	otherwise even status bookkeeping becomes an avoidable failure mode.
-    71	
+    71
     72	## Generated receipts should have one reproducible producer
-    73	
+    73
     74	Manual date and scan-count edits created avoidable freshness drift during the
     75	close-out. A dependency-free receipt command should capture scan, coverage,
     76	score, and rendering inputs once, then generate all derived proof from that
@@ -1284,29 +1284,29 @@ nl -ba 05_OUTPUT_TEMPLATES/production-reality-report.md
 nl -ba samples/sample-production-reality-report.md" in /Users/simongonzalezdecruz/workspaces/checkyourself
  succeeded in 0ms:
     35	---
-    36	
+    36
     37	## What is CheckYourself?
-    38	
+    38
     39	CheckYourself is an open-source **production-readiness audit system** — a structured, staged engineering framework of context files, scoring logic, output schemas, templates, and a deep production-hardening capability stack that you load as an AI coding assistant's operating context, so it can grade an AI-built app the way real production would: honestly, completely, and before launch.
-    40	
+    40
     41	It answers one question that matters to every "vibe coder," indie hacker, and AI-assisted builder: **"Is this app actually ready to ship, and if not, what exactly is wrong and how do I fix it?"**
-    42	
+    42
     43	Unlike a "top three issues" linter, CheckYourself builds a **complete findings register** and a **complete remediation backlog**, scores production readiness from 0–100, and walks you through fixes one safe, reversible batch at a time. When the audit is done, it generates a **bespoke learning plan** so you actually learn from what your project was missing.
-    44	
+    44
     45	It is also organized as an ICM-style context workspace: [`CONTEXT.md`](CONTEXT.md) routes the agent to staged folders, each major stage has its own `CONTEXT.md`, and durable handoff artifacts belong in stage `output/` folders. CheckYourself is not affiliated with the RinDig ICM project; it uses the same file-first idea so agents know what to read, do, and produce at each step.
-    46	
+    46
     47	---
-    48	
+    48
     49	## Why it exists
-    50	
+    50
     51	Apps built fast with AI tools tend to look finished long before they are safe to launch. The gaps are usually invisible from the happy path: missing auth checks, unvalidated inputs, leaked secrets, no backups, no rollback, no tests, no rate limits, no error tracking.
-    52	
+    52
     53	CheckYourself gives you reality **before production does the grading** — a calm, complete, plain-English second pass that any AI assistant can run on your behalf.
-    54	
+    54
     55	---
-    56	
+    56
     57	## Get started
-    58	
+    58
     59	1. Download or clone this repository.
     60	2. Put the `checkyourself` folder in or next to your project.
     61	3. Point your AI coding assistant at the folder as its **operating context**. Start at [`CONTEXT.md`](CONTEXT.md) — it routes the agent through each stage without loading the whole repo. New to the system? Read [`START_HERE.md`](START_HERE.md) first.
@@ -1315,13 +1315,13 @@ nl -ba samples/sample-production-reality-report.md" in /Users/simongonzalezdecru
     64	6. Recheck and rescore after each batch.
     65	7. Continue until every finding is fixed, deferred with a reason, accepted as risk, suppressed with evidence, proven not applicable, or remains open with blocker context.
     66	8. Get a custom learning plan based on the actual gaps.
-    67	
+    67
     68	> **No model lock-in. No required cloud account. No required command line.**
-    69	
+    69
     70	### Direct your assistant
-    71	
+    71
     72	Once the folder is in place, tell your AI assistant how to operate within it:
-    73	
+    73
     74	```text
     75	Use the checkyourself folder as your operating context.
     76	Start with a read-only diagnostic.
@@ -1329,25 +1329,25 @@ nl -ba samples/sample-production-reality-report.md" in /Users/simongonzalezdecru
     78	Generate the dashboard only if I say `dashboard yes` or `dashboard inline`.
     79	After the diagnostic, create a learning plan based on the gaps you found.
     80	```
-    81	
+    81
     82	---
-    83	
+    83
     84	## Visual workflow
-    85	
+    85
     86	![CheckYourself user workflow: add the folder, run the audit, review the backlog, approve fixes, verify, repeat, and learn](assets/checkyourself-user-workflow.png)
-    87	
+    87
     88	```text
     89	Add the folder → run the audit → review the full backlog → approve fixes → verify → repeat → learn what you missed
     90	```
-    91	
+    91
     92	CheckYourself is not a "top three issues" tool. It creates a complete findings register and a complete remediation backlog. The first approval batch is intentionally small so fixes stay safe, understandable, and reversible.
-    93	
+    93
     94	---
-    95	
+    95
     96	## What it produces
-    97	
+    97
     98	Default outputs (see a real example in [`samples/sample-production-reality-report.md`](samples/sample-production-reality-report.md)):
-    99	
+    99
    100	- **Project Map** — what your app appears to do.
    101	- **Detected Stack** — framework, database, auth, hosting, tests, deployment signals, and confidence.
    102	- **Production Reality Score** — a 0–100 score with caps and reasoning ([how the score works](docs/checkyourself-score-explained.md)).
@@ -1357,17 +1357,17 @@ nl -ba samples/sample-production-reality-report.md" in /Users/simongonzalezdecru
    106	- **Highest-Severity Approval Batch** — a small unresolved slice for review, not the whole scope. The local CLI does not infer safety, dependencies, coupling, or blast radius; the diagnostic and human approval gate still do.
    107	- **Guided Fix Loop** — approve, fix, verify, rescore, repeat.
    108	- **Bespoke Learning Plan** — what to learn next based on what your own app was missing.
-   109	
+   109
    110	Optional output:
-   111	
+   111
    112	- **Human Audit Dashboard** — one self-contained HTML/CSS dashboard that visualizes the score, risks, backlog, coverage, status, and learning plan. It is optional because dashboards use extra tokens. Ask for it with `dashboard yes`, or use `dashboard inline` for the compact Markdown fallback.
-   113	
+   113
    114	---
-   115	
+   115
    116	## What it checks
-   117	
+   117
    118	The diagnostic sweeps the whole relevant production surface:
-   119	
+   119
    120	- product purpose, users, and harm model;
    121	- frontend UX, accessibility, and client safety;
    122	- API/backend behavior, validation, uploads, and webhooks;
@@ -1381,139 +1381,139 @@ nl -ba samples/sample-production-reality-report.md" in /Users/simongonzalezdecru
    130	- performance, scaling, caching, and rate limits;
    131	- privacy, compliance, data retention, and consent;
    132	- AI/RAG/agent governance when applicable.
-   133	
+   133
    134	The full technical engine lives in [`90_ADVANCED/`](90_ADVANCED/), but users do not need to read it first.
-   135	
+   135
    136	---
-   137	
+   137
    138	## Works with every AI coding tool
-   139	
+   139
    140	CheckYourself is **model-agnostic** and ships as plain Markdown, so it runs in any AI assistant that can read text or files:
-   141	
+   141
    142	| Category | Tools |
    143	| --- | --- |
    144	| AI IDEs & editors | Cursor, Windsurf, GitHub Copilot, Codex |
    145	| Chat assistants | ChatGPT, Claude, Gemini |
    146	| App builders | Replit, Lovable, Bolt |
    147	| Local & custom agents | any local model or agent that reads files |
-   148	
+   148
    149	Tool-specific setup guides live in [`06_ADAPTERS/`](06_ADAPTERS/README.md).
-   150	
+   150
    151	---
-   152	
+   152
    153	## Who it is for
-   154	
+   154
    155	CheckYourself is for people who build with AI and want reality before production does the grading:
-   156	
+   156
    157	- beginners learning by doing;
    158	- intermediate builders who can ship but want a safer second pass;
    159	- experienced developers who want a reusable audit context;
    160	- AI-built app learners and community builders;
    161	- Cursor, Windsurf, Replit, Lovable, Bolt, ChatGPT, Claude, Gemini, Codex, and local-agent users;
    162	- founders, freelancers, agencies, and teams preparing real launches.
-   163	
+   163
    164	---
-   165	
+   165
    166	## How it works
-   167	
+   167
    168	CheckYourself runs as a staged workflow, each stage with its own context file so your AI tool always knows what to read, do, and produce:
-   169	
+   169
    170	1. **Project context** — the agent maps what your app does and detects the stack.
    171	2. **Run diagnostic** — a read-only sweep produces the Production Reality Report and score.
    172	3. **Guided fix mode** — you approve fixes in safe batches; the agent applies and verifies them.
    173	4. **Learning plan** — the agent writes a plan from the real gaps it found.
    174	5. **Dashboard (optional)** — a self-contained HTML or inline Markdown view of everything.
-   175	
+   175
    176	Each stage is defined by its own context files, scoring rules, schemas, and templates — so the agent always knows what to read, what to do, and what to produce. The advanced engine in [`90_ADVANCED/`](90_ADVANCED/) deepens any stage when a domain warrants it.
-   177	
+   177
    178	---
-   179	
+   179
    180	## Optional local CLI
-   181	
+   181
    182	For a zero-token head start, CheckYourself ships a small **optional** scan & scaffold CLI — standard library only, no network, no secret values printed:
-   183	
+   183
    184	```bash
    185	python3 tools/checkyourself.py /path/to/your/project
    186	```
-   187	
+   187
    188	It detects your stack, flags obvious deterministic risks (possible hardcoded secrets, a committed `.env`, missing `.env.example`, absent tests or CI) ranked P0–P3, and writes a pre-filled context file your AI can build on. Add `--json` for a machine-readable summary, `--format json --no-write` for JSON stdout, or `--ci` to use it as a lightweight pipeline gate (non-zero exit on a P0). The CLI is a scaffold, not a substitute — the AI still runs the full diagnostic. See [`docs/cli.md`](docs/cli.md).
-   189	
+   189
    190	The CLI is the canonical local engine, and CheckYourself also ships a thin local stdio MCP wrapper for native-agent clients. There is no hosted API for the current open-source product. See [`docs/cli.md`](docs/cli.md), [`docs/mcp.md`](docs/mcp.md), and [`docs/agent-access-cli-plan.md`](docs/agent-access-cli-plan.md).
-   191	
+   191
    192	---
-   193	
+   193
    194	## Optional visual dashboard
-   195	
+   195
    196	The Markdown report is the default output because it is cheaper, faster, and easier for most AI tools to produce.
-   197	
+   197
    198	This repository includes a real dogfood dashboard screenshot from CheckYourself auditing itself:
-   199	
+   199
    200	![CheckYourself dogfood dashboard showing the self-audit score, launch status, risk counts, and coverage sweep](10_DASHBOARD/output/checkyourself-dogfood-dashboard-live-20260612.png)
-   201	
+   201
    202	After the report exists, say either:
-   203	
+   203
    204	```text
    205	dashboard yes
    206	```
-   207	
+   207
    208	The AI creates one self-contained HTML/CSS dashboard from the report — it should not re-run the audit just to make the dashboard. If you do not want HTML, ask for:
-   209	
+   209
    210	```text
    211	dashboard inline
    212	```
-   213	
+   213
    214	or:
-   215	
+   215
    216	```text
    217	dashboard inline
    218	```
-   219	
+   219
    220	The first creates one self-contained HTML/CSS file. The second returns the
    221	compact Markdown dashboard shape instead of creating a file.
-   222	
+   222
    223	Dashboard files:
-   224	
+   224
    225	- [`10_DASHBOARD/README.md`](10_DASHBOARD/README.md)
    226	- [`10_DASHBOARD/dashboard-data-contract.md`](10_DASHBOARD/dashboard-data-contract.md)
    227	- [`10_DASHBOARD/inline-dashboard.md`](10_DASHBOARD/inline-dashboard.md)
    228	- [`10_DASHBOARD/dashboard-prompt.md`](10_DASHBOARD/dashboard-prompt.md)
    229	- [`10_DASHBOARD/dashboard-template.html`](10_DASHBOARD/dashboard-template.html)
-   230	
+   230
    231	---
-   232	
+   232
    233	## Token efficiency by design
-   234	
+   234
    235	CheckYourself uses progressive context loading so audits stay affordable even on large projects:
-   236	
+   236
    237	- Start with the stage context and coverage matrix.
    238	- Load advanced files only when a domain is relevant.
    239	- Keep the complete findings register compact.
    240	- Expand details for P0/P1 items and the next approval batch.
    241	- Do not paste long source files, logs, or reference docs back to the user.
    242	- Generate the HTML dashboard only when the user asks for it.
-   243	
+   243
    244	See [`docs/token-efficiency.md`](docs/token-efficiency.md).
-   245	
+   245
    246	---
-   247	
+   247
    248	## Safety model
-   249	
+   249
    250	**Start read-only.** CheckYourself inspects, explains, and recommends before any code or config changes happen. Fixes require explicit user approval, are applied in small reversible batches, and are re-verified and re-scored after each batch. This is the single most important rule in the system.
-   251	
+   251
    252	---
-   253	
+   253
    254	## FAQ
-   255	
+   255
      1	# Production Reality Report
-     2	
+     2
      3	## 1. Executive Summary
-     4	
-     5	
+     4
+     5
      6	## 2. What this app appears to do
-     7	
-     8	
+     7
+     8
      9	## 3. Detected stack
-    10	
+    10
     11	| Area | Detected technology | Evidence | Confidence |
     12	|---|---|---|---|
     13	| Frontend |  |  |  |
@@ -1523,24 +1523,24 @@ nl -ba samples/sample-production-reality-report.md" in /Users/simongonzalezdecru
     17	| Hosting/deployment |  |  |  |
     18	| Testing |  |  |  |
     19	| AI/RAG/agents |  |  |  |
-    20	
+    20
     21	## 4. Unknowns and assumptions
-    22	
+    22
     23	| Unknown/assumption | Why it matters | How to resolve | Blocks score? |
     24	|---|---|---|---|
-    25	
+    25
     26	### Public repository scope confirmation, if applicable
-    27	
+    27
     28	| Owner namespace | Repository count | Fork policy | Verification time | Live evidence checked | Not included |
     29	|---|---:|---|---|---|---|
-    30	
+    30
     31	## 5. Production Reality Score
-    32	
+    32
     33	**Score:** __ / 100
     34	**Confidence:** High / Medium / Low
-    35	
+    35
     36	### Score breakdown
-    37	
+    37
     38	| Category | Weight | Awarded | Evidence | What would improve it |
     39	|---|---:|---:|---|---|
     40	| Data, privacy, and tenant/user isolation | 18 |  |  |  |
@@ -1553,19 +1553,19 @@ nl -ba samples/sample-production-reality-report.md" in /Users/simongonzalezdecru
     47	| Performance, scaling, caching, and rate limits | 8 |  |  |  |
     48	| Frontend UX, accessibility, and client safety | 8 |  |  |  |
     49	| AI/RAG/agent governance, if applicable | 6 |  |  |  |
-    50	
+    50
     51	### Score cap applied
-    52	
+    52
     53	- [ ] P0 cap at 49
     54	- [ ] P1 cap at 74
     55	- [ ] Missing evidence cap at 84
     56	- [ ] Missing key launch-gate evidence cap at 90
     57	- [ ] No cap
-    58	
+    58
     59	## 6. Coverage Sweep
-    60	
+    60
     61	Every relevant production surface must be represented here. Do not stop after a few obvious issues.
-    62	
+    62
     63	| # | Surface | Status: Pass / Finding / Unknown / Not applicable | Evidence or reason | Related finding IDs |
     64	|---:|---|---|---|---|
     65	| 1 | Product purpose and users |  |  |  |
@@ -1588,45 +1588,45 @@ nl -ba samples/sample-production-reality-report.md" in /Users/simongonzalezdecru
     82	| 18 | Availability and recovery |  |  |  |
     83	| 19 | AI/RAG/agent governance |  |  |  |
     84	| 20 | Learning needs |  |  |  |
-    85	
+    85
     86	## 7. P0 findings — do not ship
-    87	
+    87
     88	| ID | Finding | Plain-English risk | Evidence | Recommended fix |
     89	|---|---|---|---|---|
-    90	
+    90
     91	## 8. P1 findings — serious before launch
-    92	
+    92
     93	| ID | Finding | Plain-English risk | Evidence | Recommended fix |
     94	|---|---|---|---|---|
-    95	
+    95
     96	## 9. P2 findings — important hardening gaps
-    97	
+    97
     98	| ID | Finding | Plain-English risk | Evidence | Recommended fix |
     99	|---|---|---|---|---|
-   100	
+   100
    101	## 10. P3 findings — improvements
-   102	
+   102
    103	| ID | Finding | Why it helps | Evidence | Suggested timing |
    104	|---|---|---|---|---|
-   105	
+   105
    106	## 11. Evidence table
-   107	
+   107
    108	| Evidence | File/location | Supports finding | Confidence |
    109	|---|---|---|---|
-   110	
+   110
    111	## 12. Complete ranked remediation backlog
-   112	
+   112
    113	List every finding that needs remediation. The first approval batch is only the starting point, not the full scope.
-   114	
+   114
    115	| Order | Finding ID | Severity | Fix summary | Impact / blast radius | Why this order | Files/systems touched | Approval needed | Verification | Rollback | Learning value | Status |
    116	|---:|---|---|---|---|---|---|---|---|---|---|---|
-   117	
+   117
    118	## 13. Safest first approval batch
-   119	
+   119
    120	Select the smallest safe batch to approve first from the complete backlog. This may be one fix, several related fixes, or all P0 fixes if they are tightly coupled. Do not present this as the whole project scope.
-   121	
+   121
    122	### Fix card
-   123	
+   123
    124	- Finding ID:
    125	- Why this comes first:
    126	- Plain-English explanation:
@@ -1636,53 +1636,53 @@ nl -ba samples/sample-production-reality-report.md" in /Users/simongonzalezdecru
    130	- Rollback:
    131	- Learning value:
    132	- Approval question:
-   133	
+   133
    134	## 14. Full remediation path
-   135	
+   135
    136	Explain how to continue after the first approved batch.
-   137	
+   137
    138	| Wave | Included findings | Goal | Exit criteria |
    139	|---|---|---|---|
    140	| Wave 1 |  | Remove do-not-ship blockers |  |
    141	| Wave 2 |  | Remove serious launch risks |  |
    142	| Wave 3 |  | Complete important hardening |  |
    143	| Wave 4 |  | Cleanup, polish, and learning |  |
-   144	
+   144
    145	## 15. What can wait, and why
-   146	
+   146
    147	This section is not for hiding issues. Anything deferred must still appear in the backlog.
-   148	
+   148
    149	| Deferred item | Why it can wait | Trigger that makes it urgent |
    150	|---|---|---|
-   151	
+   151
    152	## 16. Questions that would change this diagnosis
-   153	
-   154	
+   153
+   154
    155	## 17. Learning-plan seeds
-   156	
+   156
    157	| Finding | Concept to learn | Why it matters now | Suggested exercise |
    158	|---|---|---|---|
-   159	
+   159
    160	## 18. Optional dashboard offer
-   161	
+   161
    162	The dashboard is optional. Ask the user before generating it.
-   163	
+   163
    164	Suggested language:
-   165	
+   165
    166	```text
    167	I can also generate a visual CheckYourself HTML/CSS dashboard from this report. It is optional and may use extra tokens. Do you want the dashboard?
    168	```
-   169	
+   169
    170	## 19. Optional dashboard handoff
-   171	
+   171
    172	Dashboard generated? Yes / No
-   173	
+   173
    174	Default: No. Offer the dashboard only after the report is complete. Generate it only when the user explicitly asks, with wording such as `dashboard yes` or `dashboard inline`.
-   175	
+   175
    176	If generated, use `10_DASHBOARD/CONTEXT.md` and include the complete remediation backlog. Do not re-run the audit just to build the dashboard.
-   177	
+   177
    178	If the user declines HTML/CSS, provide the inline Markdown dashboard fallback with:
-   179	
+   179
    180	- project name;
    181	- score before/after, if applicable;
    182	- ship status;
@@ -1692,20 +1692,20 @@ nl -ba samples/sample-production-reality-report.md" in /Users/simongonzalezdecru
    186	- complete remediation backlog;
    187	- current approval batch;
    188	- learning-plan highlights.
-   189	
+   189
    190	Keep dashboard evidence concise. Link or reference files by path instead of pasting raw file content.
      1	# Sample Production Reality Report
-     2	
+     2
      3	This sample is intentionally generic. It shows the shape of a useful CheckYourself output.
-     4	
+     4
      5	## 1. Executive Summary
-     6	
+     6
      7	This app appears to be a client portal where users can log in and view account-specific records.
-     8	
+     8
      9	The UI appears functional, but the production-readiness risk is high because the diagnostic found evidence of protected frontend routes without enough evidence of server-side ownership checks. That means the app may hide records in the browser while still allowing direct API access if a user changes an ID.
-    10	
+    10
     11	## 2. Detected stack
-    12	
+    12
     13	| Area | Detected technology | Evidence | Confidence |
     14	|---|---|---|---|
     15	| Frontend | React/Next-style app | `package.json`, route files | Medium |
@@ -1714,42 +1714,42 @@ nl -ba samples/sample-production-reality-report.md" in /Users/simongonzalezdecru
     18	| Auth | Session/JWT-style | middleware and auth filenames | Low |
     19	| Hosting | Unknown | no deployment config found | Low |
     20	| Testing | Not proven | no tests detected | Medium |
-    21	
+    21
     22	## 3. Production Reality Score
-    23	
+    23
     24	**Score:** 42 / 100
     25	**Confidence:** Medium
-    26	
+    26
     27	The unresolved P0 (unverified server-side ownership checks) caps the ceiling at 49. Per-category penalties for the missing ownership check, absent tests, no rollback plan, and no error monitoring brought the score down to 42.
-    28	
+    28
     29	## 4. P0 findings
-    30	
+    30
     31	| ID | Finding | Plain-English risk | Evidence | Recommended first fix |
     32	|---|---|---|---|---|
     33	| P0-001 | Missing proof of object-level authorization | A logged-in user might access another user’s record by changing an ID. | Protected UI route, API path accepting IDs, no negative test found. | Add server-side user/tenant ownership check and a negative test. |
-    34	
+    34
     35	## 5. P1 findings
-    36	
+    36
     37	| ID | Finding | Plain-English risk | Evidence | Recommended first fix |
     38	|---|---|---|---|---|
     39	| P1-001 | No rollback plan found | If a deploy breaks, there is no documented undo path. | No release or rollback docs found. | Add a rollback checklist for deploys and migrations. |
     40	| P1-002 | No error monitoring found | You may not know when users are hitting crashes. | No monitoring SDK/config detected. | Add basic error tracking or structured error logs. |
-    41	
+    41
     42	## 6. Complete ranked remediation backlog
-    43	
+    43
     44	| Order | Finding | Status |
     45	|---:|---|---|
     46	| 1 | Fix server-side ownership checks for record APIs. | Still open |
     47	| 2 | Add negative authorization tests. | Still open |
     48	| 3 | Write a deployment and rollback checklist. | Still open |
     49	| 4 | Add basic error monitoring or structured error logs. | Still open |
-    50	
+    50
     51	## 7. Safest first approval batch
-    52	
+    52
     53	Start with the server-side ownership check and negative test because they address the highest-risk data exposure path. The rollback checklist and monitoring work remain in the backlog; they are not ignored.
-    54	
+    54
     55	## 8. Learning-plan seeds
-    56	
+    56
     57	| Finding | Concept to learn | Why it matters now |
     58	|---|---|---|
     59	| P0-001 | Server-side authorization | UI protection does not secure an API. |
@@ -1793,8 +1793,8 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   1451	    add("a bespoke learning plan from the gaps.")
   1452	    add("```")
   1453	    return "\n".join(lines) + "\n"
-  1454	
-  1455	
+  1454
+  1455
   1456	def coverage_emit(project: str = "") -> dict:
   1457	    return {
   1458	        "tool": TOOL_NAME,
@@ -1814,8 +1814,8 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   1472	            for sid, surface, category in COVERAGE_SURFACES
   1473	        ],
   1474	    }
-  1475	
-  1476	
+  1475
+  1476
   1477	def _coverage_surfaces(data: Any) -> Tuple[List[Any], List[str]]:
   1478	    """Return coverage rows and structural errors without trusting input shape."""
   1479	    if not isinstance(data, dict):
@@ -1831,11 +1831,11 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   1489	    if not isinstance(surfaces, list):
   1490	        return [], ["coverage artifact must contain a surfaces array"]
   1491	    return surfaces, []
-  1492	
-  1493	
+  1492
+  1493
   1494	def _coverage_validation_errors(data: Any) -> List[str]:
   1495	    """Validate rows that can influence a coverage-backed score.
-  1496	
+  1496
   1497	    Missing canonical rows remain valid incomplete evidence and are handled by
   1498	    ``category_coverage``. Any supplied row, however, must identify one
   1499	    canonical surface and must not contradict its category or status contract.
@@ -1843,17 +1843,17 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   1501	    surfaces, errors = _coverage_surfaces(data)
   1502	    if errors:
   1503	        return errors
-  1504	
+  1504
   1505	    by_id = {sid: (surface, category) for sid, surface, category in COVERAGE_SURFACES}
   1506	    by_name = {surface: sid for sid, surface, _category in COVERAGE_SURFACES}
   1507	    seen_ids: set[str] = set()
-  1508	
+  1508
   1509	    for index, item in enumerate(surfaces):
   1510	        prefix = f"coverage row {index}"
   1511	        if not isinstance(item, dict):
   1512	            errors.append(f"{prefix} must be an object")
   1513	            continue
-  1514	
+  1514
   1515	        raw_id = item.get("id")
   1516	        raw_surface = item.get("surface")
   1517	        raw_category = item.get("category")
@@ -1871,14 +1871,14 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   1529	            errors.append(f"{prefix} is missing category")
   1530	        elif not isinstance(raw_category, str) or not raw_category.strip():
   1531	            errors.append(f"{prefix} has an invalid category: {raw_category!r}")
-  1532	
+  1532
   1533	        if "id" in item:
   1534	            sid = raw_id
   1535	        elif isinstance(raw_surface, str):
   1536	            sid = by_name.get(raw_surface)
   1537	        else:
   1538	            sid = None
-  1539	
+  1539
   1540	        if not sid:
   1541	            errors.append(f"{prefix} must identify a canonical surface by id or surface")
   1542	            continue
@@ -1888,23 +1888,23 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   1546	        if sid in seen_ids:
   1547	            errors.append(f"{prefix} duplicates coverage id: {sid}")
   1548	        seen_ids.add(sid)
-  1549	
+  1549
   1550	        expected_surface, expected_category = by_id[sid]
   1551	        if raw_surface is not None and raw_surface != expected_surface:
   1552	            errors.append(
   1553	                f"{prefix} surface {raw_surface!r} does not match {sid} ({expected_surface!r})"
   1554	            )
-  1555	
+  1555
   1556	        if isinstance(raw_category, str) and raw_category.strip() and raw_category != expected_category:
   1557	            errors.append(
   1558	                f"{prefix} category {raw_category!r} does not match {sid} ({expected_category!r})"
   1559	            )
-  1560	
+  1560
   1561	        if "status" not in item or item.get("status") is None:
   1562	            errors.append(f"{prefix} has a null or missing status")
   1563	        elif not isinstance(item.get("status"), str) or item.get("status") not in VALID_COVERAGE_STATUSES:
   1564	            errors.append(f"{prefix} has invalid status: {item.get('status')!r}")
-  1565	
+  1565
   1566	        for field in ("evidence_reviewed", "missing_evidence"):
   1567	            if field in item:
   1568	                value = item.get(field)
@@ -1912,10 +1912,10 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   1570	                    errors.append(f"{prefix} has an invalid {field} array")
   1571	        if "not_applicable_reason" in item and not isinstance(item.get("not_applicable_reason"), str):
   1572	            errors.append(f"{prefix} has an invalid not_applicable_reason")
-  1573	
+  1573
   1574	    return list(dict.fromkeys(errors))
-  1575	
-  1576	
+  1575
+  1576
   1577	def coverage_check(data: Any) -> dict:
   1578	    errors = _coverage_validation_errors(data)
   1579	    warnings: List[str] = []
@@ -1930,14 +1930,14 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   1588	            "errors": errors,
   1589	            "warnings": warnings,
   1590	        }
-  1591	
+  1591
   1592	    by_id = {str(item.get("id")): item for item in surfaces if isinstance(item, dict) and item.get("id")}
   1593	    # Key strictly on the surface name: falling back to category collapsed
   1594	    # multiple surfaces onto one key and over-reported missing rows.
   1595	    by_name = {str(item.get("surface")): item for item in surfaces if isinstance(item, dict) and item.get("surface")}
   1596	    valid_statuses = VALID_COVERAGE_STATUSES
   1597	    pathlike_re = re.compile(r"[\w./\\-]+\.\w+|:\d+")
-  1598	
+  1598
   1599	    for sid, surface, _category in COVERAGE_SURFACES:
   1600	        item = by_id.get(sid) or by_name.get(surface)
   1601	        if not item:
@@ -1957,7 +1957,7 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   1615	            warnings.append(f"{sid} is Unknown but missing_evidence is empty")
   1616	        if status == "NotApplicable" and not item.get("not_applicable_reason"):
   1617	            errors.append(f"{sid} is NotApplicable but has no not_applicable_reason")
-  1618	
+  1618
   1619	    return {
   1620	        "tool": TOOL_NAME,
   1621	        "schema": "checkyourself-coverage-check/1",
@@ -1967,8 +1967,8 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   1625	        "errors": errors,
   1626	        "warnings": warnings,
   1627	    }
-  1628	
-  1629	
+  1628
+  1629
   1630	def normalize_findings(data: Any) -> List[dict]:
   1631	    if isinstance(data, list):
   1632	        findings = data
@@ -1981,7 +1981,7 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   1639	            findings = []
   1640	    else:
   1641	        findings = []
-  1642	
+  1642
   1643	    normalized: List[dict] = []
   1644	    for i, raw in enumerate(findings, start=1):
   1645	        if not isinstance(raw, dict):
@@ -2011,8 +2011,8 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   1669	        })
   1670	    normalized.sort(key=lambda f: (SEVERITY_ORDER.get(f["severity"], 9), f["category"], f["id"]))
   1671	    return normalized
-  1672	
-  1673	
+  1672
+  1673
   1674	def findings_artifact_errors(data: Any) -> List[str]:
   1675	    """Reject malformed findings receipts instead of treating them as empty."""
   1676	    if isinstance(data, list):
@@ -2030,20 +2030,20 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   1688	            return ["artifact must contain a findings or remediation_backlog array"]
   1689	    else:
   1690	        return ["findings artifact must be an object or array"]
-  1691	
+  1691
   1692	    errors = []
   1693	    for index, item in enumerate(findings):
   1694	        if not isinstance(item, dict):
   1695	            errors.append(f"finding {index} must be an object")
   1696	    return errors
-  1697	
-  1698	
+  1697
+  1698
   1699	def require_findings_artifact(data: Any) -> None:
   1700	    errors = findings_artifact_errors(data)
   1701	    if errors:
   1702	        raise CliError("invalid findings artifact: " + "; ".join(errors))
-  1703	
-  1704	
+  1703
+  1704
   1705	def infer_category(text: str) -> str:
   1780	        if category not in SCORE_CATEGORIES:
   1781	            if sid:
@@ -2065,26 +2065,26 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   1797	        state["surfaces"].append(sid or str(item.get("surface") or category))
   1798	        state["evidence_reviewed"].extend(evidence)
   1799	        state["missing_evidence"].extend(str(x) for x in item.get("missing_evidence") or [])
-  1800	
+  1800
   1801	    for sid in sorted(scored_surface_ids - present_ids):
   1802	        category = id_to_category[sid]
   1803	        state = category_state[category]
   1804	        state["missing_evidence"].append(f"surface {sid} missing from coverage artifact")
   1805	        if state["status"] is None or status_rank.get("Unknown", 3) > status_rank.get(state["status"], 0):
   1806	            state["status"] = "Unknown"
-  1807	
+  1807
   1808	    for state in category_state.values():
   1809	        if state["status"] is None:
   1810	            state["status"] = "MissingCoverage"
   1811	            state["missing_evidence"].append("no coverage entries supplied for this category")
   1812	        state["evidence_reviewed"] = sorted(set(state["evidence_reviewed"]))
   1813	        state["missing_evidence"] = sorted(set(state["missing_evidence"]))
-  1814	
+  1814
   1815	    required_ids = {sid for sid, _surface, _category in COVERAGE_SURFACES}
   1816	    complete = required_ids <= present_ids
   1817	    return category_state, complete
-  1818	
-  1819	
+  1818
+  1819
   1820	def missing_manual_evidence(coverage_by_category: Dict[str, dict]) -> List[dict]:
   1821	    needed: List[dict] = []
   1822	    for cid, (name, _weight) in SCORE_CATEGORIES.items():
@@ -2096,8 +2096,8 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   1828	                "needed": state["missing_evidence"] or ["manual coverage evidence"],
   1829	            })
   1830	    return needed
-  1831	
-  1832	
+  1831
+  1832
   1833	def inferred_coverage_from_scan(scan_data: dict, findings: List[dict]) -> Dict[str, dict]:
   1834	    category_state: Dict[str, dict] = {
   1835	        cid: {
@@ -2109,7 +2109,7 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   1841	        for cid in SCORE_CATEGORIES
   1842	    }
   1843	    open_findings = [f for f in findings if f.get("status") not in RESOLVED_STATUSES]
-  1844	
+  1844
   1845	    def set_state(cid: str, status: str, evidence: List[str], missing: List[str], surfaces: List[str]) -> None:
   1846	        category_state[cid] = {
   1847	            "status": status,
@@ -2117,7 +2117,7 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   1849	            "missing_evidence": missing,
   1850	            "surfaces": surfaces,
   1851	        }
-  1852	
+  1852
   1853	    c3_findings = [f for f in open_findings if f.get("category") == "C3"]
   1854	    if c3_findings:
   1855	        set_state("C3", "Finding", [f["id"] for f in c3_findings], [], ["S08"])
@@ -2131,7 +2131,7 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   1863	            ["manual secret-handling and runtime-config review still needed"],
   1864	            ["S08"],
   1865	        )
-  1866	
+  1866
   1867	    tests = scan_data.get("tests") if isinstance(scan_data.get("tests"), list) else []
   1868	    if tests:
   1869	        set_state(
@@ -2143,7 +2143,7 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   1875	        )
   1876	    else:
   1877	        set_state("C5", "Finding", [], ["no automated tests detected by scan"], ["S11"])
-  1878	
+  1878
   1879	    ci = scan_data.get("ci") if isinstance(scan_data.get("ci"), list) else []
   1880	    if ci:
   1881	        set_state(
@@ -2155,10 +2155,10 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   1887	        )
   1888	    else:
   1889	        set_state("C6", "Finding", [], ["no CI workflow detected by scan"], ["S12"])
-  1890	
+  1890
   1891	    return category_state
-  1892	
-  1893	
+  1892
+  1893
   1894	def score_from_inputs(findings_data: Any, coverage_data: Any = _NO_COVERAGE) -> dict:
   1895	    require_findings_artifact(findings_data)
   1896	    findings = normalize_findings(findings_data)
@@ -2166,7 +2166,7 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   1898	    unresolved = [f for f in findings if f.get("status") not in RESOLVED_STATUSES]
   1899	    for f in unresolved:
   1900	        counts[f["severity"]] = counts.get(f["severity"], 0) + 1
-  1901	
+  1901
   1902	    if coverage_data is not _NO_COVERAGE:
   1903	        coverage_errors = _coverage_validation_errors(coverage_data)
   1904	        if coverage_errors:
@@ -2185,7 +2185,7 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   1917	        score_mode = "finding-only-estimate"
   1918	    per_category: List[dict] = []
   1919	    raw_total = 0.0
-  1920	
+  1920
   1921	    for cid, (name, weight) in SCORE_CATEGORIES.items():
   1922	        if (
   1923	            isinstance(weight, bool)
@@ -2198,7 +2198,7 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   1930	        coverage_state = coverage_by_category[cid]
   1931	        penalties: List[dict] = []
   1932	        awarded = float(weight)
-  1933	
+  1933
   1934	        status = coverage_state["status"]
   1935	        if status == "Unknown":
   1936	            missing = coverage_state["missing_evidence"] or ["evidence missing for this category"]
@@ -2211,7 +2211,7 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   1943	                penalties.append({"reason": "coverage unknown", "points": round(reduction, 2), "missing_evidence": missing})
   1944	        elif status == "MissingCoverage":
   1945	            penalties.append({"reason": "coverage artifact not supplied", "points": 0, "missing_evidence": coverage_state["missing_evidence"]})
-  1946	
+  1946
   1947	        for f in category_findings:
   1948	            fraction = SEVERITY_PENALTIES.get(f["severity"], 0.10)
   1949	            if (
@@ -2229,7 +2229,7 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   1961	                "reason": f["finding"],
   1962	                "points": round(points, 2),
   1963	            })
-  1964	
+  1964
   1965	        awarded = max(0.0, min(float(weight), awarded))
   1966	        raw_total += awarded
   1967	        per_category.append({
@@ -2242,7 +2242,7 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   1974	            "penalties": penalties,
   1975	            "awarded": round(awarded, 2),
   1976	        })
-  1977	
+  1977
   1978	    raw_score = round(raw_total)
   1979	    caps: List[dict] = []
   1980	    cap_value = 100
@@ -2252,7 +2252,7 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   1984	    if counts["P1"]:
   1985	        cap_value = min(cap_value, 74)
   1986	        caps.append({"cap": 74, "reason": "unresolved P1 finding"})
-  1987	
+  1987
   1988	    critical_gap = False
   1989	    high_score_gap = False
   1990	    # Evidence caps apply in every score mode: an estimate without coverage
@@ -2268,7 +2268,7 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   2000	    if high_score_gap:
   2001	        cap_value = min(cap_value, 90)
   2002	        caps.append({"cap": 90, "reason": "score above 90 requires evidence for tests, secrets, deploy/rollback, observability, auth, and data boundaries"})
-  2003	
+  2003
   2004	    score = min(raw_score, cap_value)
   2005	    any_gap = any(
   2006	        state["status"] in {"Unknown", "MissingCoverage"}
@@ -2282,7 +2282,7 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   2014	        confidence = "medium"
   2015	    else:
   2016	        confidence = "low"
-  2017	
+  2017
   2018	    return {
   2019	        "tool": TOOL_NAME,
   2020	        "schema": SCORE_SCHEMA_ID,
@@ -2298,8 +2298,8 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   2030	        "coverage_complete": coverage_complete,
   2031	        "manual_evidence_needed": missing_manual_evidence(coverage_by_category),
   2032	    }
-  2033	
-  2034	
+  2033
+  2034
   2035	def backlog_from_findings(findings_data: Any) -> dict:
   2036	    require_findings_artifact(findings_data)
   2037	    findings = normalize_findings(findings_data)
@@ -2337,8 +2337,8 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   2069	            "safety_analysis": "not performed",
   2070	        },
   2071	    }
-  2072	
-  2073	
+  2072
+  2073
   2074	def next_from_findings(findings_data: Any) -> dict:
   2075	    require_findings_artifact(findings_data)
   2076	    backlog = backlog_from_findings(findings_data)["remediation_backlog"]
@@ -2359,11 +2359,11 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   2091	            "safety_analysis": "not performed",
   2092	        },
   2093	    }
-  2094	
-  2095	
+  2094
+  2095
   2096	def diff_findings(old_data: Any, new_data: Any) -> dict:
   2097	    """Compare two findings artifacts (scan output, report, or finding list).
-  2098	
+  2098
   2099	    Stable rule IDs make this meaningful: the same risk keeps the same ID
   2100	    across runs, so added/resolved is a real delta, not ID-shuffle noise.
   2101	    """
@@ -2374,7 +2374,7 @@ sed -n '1780,2110p' tools/checkyourself.py | nl -ba -v1780" in /Users/simongonza
   2106	    added_ids = sorted(set(new_findings) - set(old_findings))
   2107	    removed_ids = sorted(set(old_findings) - set(new_findings))
   2108	    persisting_ids = sorted(set(old_findings) & set(new_findings))
-  2109	
+  2109
   2110	    def is_open(finding: dict) -> bool:
 
 hook: PostToolUse
@@ -2388,26 +2388,26 @@ nl -ba schemas/score-result.schema.json
 nl -ba schemas/checkyourself-report.schema.json' in /Users/simongonzalezdecruz/workspaces/checkyourself
  succeeded in 0ms:
      1	# Diagnostic Philosophy
-     2	
+     2
      3	The diagnostic is designed for people who may not know what they do not know.
-     4	
+     4
      5	That means the AI must not simply ask, “Do you have observability?” A beginner may not know what that means.
-     6	
+     6
      7	Instead, the AI should ask or inspect concrete evidence:
-     8	
+     8
      9	- Where do errors go when the app crashes?
     10	- Can you tell which user triggered a failed request?
     11	- Is there a place you would see a spike in failures?
     12	- Do you have a rollback path if a deploy breaks?
     13	- Can User A access User B’s data by changing an ID?
-    14	
+    14
     15	The goal is interpreted context: the AI maps visible project artifacts to invisible production risks.
      1	# Production Risk Surfaces
-     2	
+     2
      3	Use this list during diagnostics.
-     4	
+     4
      5	## User and data risks
-     6	
+     6
      7	- Authentication.
      8	- Authorization.
      9	- Session handling.
@@ -2415,9 +2415,9 @@ nl -ba schemas/checkyourself-report.schema.json' in /Users/simongonzalezdecruz/w
     11	- PII handling.
     12	- Retention and deletion.
     13	- Admin tools.
-    14	
+    14
     15	## Input and abuse risks
-    16	
+    16
     17	- Forms.
     18	- Uploads.
     19	- Webhooks.
@@ -2425,9 +2425,9 @@ nl -ba schemas/checkyourself-report.schema.json' in /Users/simongonzalezdecruz/w
     21	- Search.
     22	- Rate limits.
     23	- Payment flows.
-    24	
+    24
     25	## Operational risks
-    26	
+    26
     27	- Secrets.
     28	- Environment config.
     29	- Deployment.
@@ -2439,9 +2439,9 @@ nl -ba schemas/checkyourself-report.schema.json' in /Users/simongonzalezdecruz/w
     35	- Alerts.
     36	- Backups.
     37	- Recovery.
-    38	
+    38
     39	## AI-specific risks
-    40	
+    40
     41	- Unsupported claims.
     42	- Missing citations.
     43	- Prompt injection.
@@ -2451,47 +2451,47 @@ nl -ba schemas/checkyourself-report.schema.json' in /Users/simongonzalezdecruz/w
     47	- Model/provider failure.
     48	- Evaluation gaps.
      1	# Learning Plan Philosophy
-     2	
+     2
      3	The best learning plan is not a generic syllabus.
-     4	
+     4
      5	It is a map from the user's own mistakes, gaps, and fixes to the concepts they need next.
-     6	
+     6
      7	## Good learning item
-     8	
+     8
      9	- Triggered by a finding.
     10	- Explains why it matters in the app.
     11	- Gives one small exercise in the app.
     12	- Defines terms.
     13	- Has a success signal.
-    14	
+    14
     15	## Bad learning item
-    16	
+    16
     17	- Generic.
     18	- Too broad.
     19	- Not tied to the diagnostic.
     20	- Too advanced for the immediate problem.
     21	- Does not include practice.
      1	# CheckYourself Score Explained
-     2	
+     2
      3	A score is useful because people need a simple signal.
-     4	
+     4
      5	A score is dangerous because people may treat it as permission to ship.
-     6	
+     6
      7	So CheckYourself uses the score as a conversation starter, not as a guarantee.
-     8	
+     8
      9	## What the score means
-    10	
+    10
     11	The score estimates production-readiness confidence based on available evidence.
-    12	
+    12
     13	It is deliberately hard to game. Absence of findings is treated as absence of
     14	evidence, not proof of safety: if the scanner finds no secrets, the secrets
     15	surface is `Unknown`, not `Pass`. A coverage surface marked `Pass` without
     16	evidence, or `Not applicable` without a reason, is downgraded to `Unknown`, and
     17	any required surface omitted from the coverage artifact counts as `Unknown`. So
     18	omitting or hand-waving a surface never scores better than honestly reporting it.
-    19	
+    19
     20	## Score modes and confidence
-    21	
+    21
     22	- **Coverage-backed** — you supplied a filled coverage artifact. Only this mode
     23	  can reach `high` confidence, and only when all 20 surfaces are present with
     24	  real evidence.
@@ -2499,35 +2499,35 @@ nl -ba schemas/checkyourself-report.schema.json' in /Users/simongonzalezdecruz/w
     26	  stays `low`.
     27	- **Finding-only estimate** — derived from a bare findings list. Confidence
     28	  stays `low`.
-    29	
+    29
     30	The evidence caps below apply in **every** mode, so an estimate can never report
     31	a launch-ready number.
-    32	
+    32
     33	## What the score does not mean
-    34	
+    34
     35	It does not mean:
-    36	
+    36
     37	- the app is secure;
     38	- the app is compliant;
     39	- the app has been penetration tested;
     40	- a human expert reviewed it;
     41	- production launch is risk-free.
-    42	
+    42
     43	## Why caps matter
-    44	
+    44
     45	Caps stop polish from hiding risk. They apply in order, and the lowest one wins:
-    46	
+    46
     47	- an unresolved **P0** caps the score at **49**;
     48	- an unresolved **P1** caps the score at **74**;
     49	- **missing evidence in a critical category** (data, auth, secrets) caps at **84**;
     50	- **missing key launch-gate evidence** (tests, secrets, deploy/rollback,
     51	  observability, auth, data boundaries) caps at **90**.
-    52	
+    52
     53	A beautiful app that leaks user data is not production-ready, so a single P0
     54	keeps the score at 49 no matter how polished everything else looks.
-    55	
+    55
     56	## How to raise the score honestly
-    57	
+    57
     58	- Fix P0/P1 issues.
     59	- Add tests for risky paths.
     60	- Document deployment and rollback.
@@ -3143,7 +3143,7 @@ sed -n '1722,1847p' tests/test_checkyourself_cli.py | nl -ba -v1722" in /Users/s
   1688	            return ["artifact must contain a findings or remediation_backlog array"]
   1689	    else:
   1690	        return ["findings artifact must be an object or array"]
-  1691	
+  1691
   1692	    errors = []
   1693	    for index, item in enumerate(findings):
   1694	        if not isinstance(item, dict):
@@ -3151,7 +3151,7 @@ sed -n '1722,1847p' tests/test_checkyourself_cli.py | nl -ba -v1722" in /Users/s
   1696	    return errors
   1740	def category_coverage(coverage_data: Optional[dict]) -> Tuple[Dict[str, dict], bool]:
   1741	    """Fold surface-level coverage into per-category scoring state.
-  1742	
+  1742
   1743	    Anti-gaming rules: a surface omitted from the artifact counts as Unknown
   1744	    (never as full credit), Pass without evidence downgrades to Unknown, and
   1745	    NotApplicable without a reason downgrades to Unknown. Omitting or
@@ -3168,22 +3168,22 @@ sed -n '1722,1847p' tests/test_checkyourself_cli.py | nl -ba -v1722" in /Users/s
   1756	    }
   1757	    if not coverage_data:
   1758	        return category_state, False
-  1759	
+  1759
   1760	    surfaces = coverage_data.get("surfaces") or coverage_data.get("coverage") or []
   1761	    if not isinstance(surfaces, list):
   1762	        return category_state, False
-  1763	
+  1763
   1764	    name_to_id = {surface: sid for sid, surface, _category in COVERAGE_SURFACES}
   1765	    id_to_category = {sid: category for sid, _surface, category in COVERAGE_SURFACES}
   1766	    scored_surface_ids = {sid for sid, _surface, category in COVERAGE_SURFACES if category in SCORE_CATEGORIES}
-  1767	
+  1767
   1768	    category_state = {
   1769	        cid: {"status": None, "evidence_reviewed": [], "missing_evidence": [], "surfaces": []}
   1770	        for cid in SCORE_CATEGORIES
   1771	    }
   1772	    status_rank = {"Finding": 4, "Unknown": 3, "Pass": 2, "NotApplicable": 1}
   1773	    present_ids = set()
-  1774	
+  1774
   1775	    for item in surfaces:
   1776	        if not isinstance(item, dict):
   1777	            continue
@@ -3209,26 +3209,26 @@ sed -n '1722,1847p' tests/test_checkyourself_cli.py | nl -ba -v1722" in /Users/s
   1797	        state["surfaces"].append(sid or str(item.get("surface") or category))
   1798	        state["evidence_reviewed"].extend(evidence)
   1799	        state["missing_evidence"].extend(str(x) for x in item.get("missing_evidence") or [])
-  1800	
+  1800
   1801	    for sid in sorted(scored_surface_ids - present_ids):
   1802	        category = id_to_category[sid]
   1803	        state = category_state[category]
   1804	        state["missing_evidence"].append(f"surface {sid} missing from coverage artifact")
   1805	        if state["status"] is None or status_rank.get("Unknown", 3) > status_rank.get(state["status"], 0):
   1806	            state["status"] = "Unknown"
-  1807	
+  1807
   1808	    for state in category_state.values():
   1809	        if state["status"] is None:
   1810	            state["status"] = "MissingCoverage"
   1811	            state["missing_evidence"].append("no coverage entries supplied for this category")
   1812	        state["evidence_reviewed"] = sorted(set(state["evidence_reviewed"]))
   1813	        state["missing_evidence"] = sorted(set(state["missing_evidence"]))
-  1814	
+  1814
   1815	    required_ids = {sid for sid, _surface, _category in COVERAGE_SURFACES}
   1816	    complete = required_ids <= present_ids
   1817	    return category_state, complete
-  1818	
-  1819	
+  1818
+  1819
   1820	def missing_manual_evidence(coverage_by_category: Dict[str, dict]) -> List[dict]:
   1821	    needed: List[dict] = []
   1822	    for cid, (name, _weight) in SCORE_CATEGORIES.items():
@@ -3240,8 +3240,8 @@ sed -n '1722,1847p' tests/test_checkyourself_cli.py | nl -ba -v1722" in /Users/s
   1828	                "needed": state["missing_evidence"] or ["manual coverage evidence"],
   1829	            })
   1830	    return needed
-  1831	
-  1832	
+  1831
+  1832
   1833	def inferred_coverage_from_scan(scan_data: dict, findings: List[dict]) -> Dict[str, dict]:
   1834	    category_state: Dict[str, dict] = {
   1835	        cid: {
@@ -3253,7 +3253,7 @@ sed -n '1722,1847p' tests/test_checkyourself_cli.py | nl -ba -v1722" in /Users/s
   1841	        for cid in SCORE_CATEGORIES
   1842	    }
   1843	    open_findings = [f for f in findings if f.get("status") not in RESOLVED_STATUSES]
-  1844	
+  1844
   1845	    def set_state(cid: str, status: str, evidence: List[str], missing: List[str], surfaces: List[str]) -> None:
   1846	        category_state[cid] = {
   1847	            "status": status,
@@ -3261,7 +3261,7 @@ sed -n '1722,1847p' tests/test_checkyourself_cli.py | nl -ba -v1722" in /Users/s
   1849	            "missing_evidence": missing,
   1850	            "surfaces": surfaces,
   1851	        }
-  1852	
+  1852
   1853	    c3_findings = [f for f in open_findings if f.get("category") == "C3"]
   1854	    if c3_findings:
   1855	        set_state("C3", "Finding", [f["id"] for f in c3_findings], [], ["S08"])
@@ -3275,7 +3275,7 @@ sed -n '1722,1847p' tests/test_checkyourself_cli.py | nl -ba -v1722" in /Users/s
   1863	            ["manual secret-handling and runtime-config review still needed"],
   1864	            ["S08"],
   1865	        )
-  1866	
+  1866
   1867	    tests = scan_data.get("tests") if isinstance(scan_data.get("tests"), list) else []
   1868	    if tests:
   1869	        set_state(
@@ -3287,7 +3287,7 @@ sed -n '1722,1847p' tests/test_checkyourself_cli.py | nl -ba -v1722" in /Users/s
   1875	        )
   1876	    else:
   1877	        set_state("C5", "Finding", [], ["no automated tests detected by scan"], ["S11"])
-  1878	
+  1878
   1879	    ci = scan_data.get("ci") if isinstance(scan_data.get("ci"), list) else []
   1880	    if ci:
   1881	        set_state(
@@ -3299,10 +3299,10 @@ sed -n '1722,1847p' tests/test_checkyourself_cli.py | nl -ba -v1722" in /Users/s
   1887	        )
   1888	    else:
   1889	        set_state("C6", "Finding", [], ["no CI workflow detected by scan"], ["S12"])
-  1890	
+  1890
   1891	    return category_state
-  1892	
-  1893	
+  1892
+  1893
   1894	def score_from_inputs(findings_data: Any, coverage_data: Any = _NO_COVERAGE) -> dict:
   1895	    require_findings_artifact(findings_data)
   1896	    findings = normalize_findings(findings_data)
@@ -3310,7 +3310,7 @@ sed -n '1722,1847p' tests/test_checkyourself_cli.py | nl -ba -v1722" in /Users/s
   1898	    unresolved = [f for f in findings if f.get("status") not in RESOLVED_STATUSES]
   1899	    for f in unresolved:
   1900	        counts[f["severity"]] = counts.get(f["severity"], 0) + 1
-  1901	
+  1901
   1902	    if coverage_data is not _NO_COVERAGE:
   1903	        coverage_errors = _coverage_validation_errors(coverage_data)
   1904	        if coverage_errors:
@@ -3329,7 +3329,7 @@ sed -n '1722,1847p' tests/test_checkyourself_cli.py | nl -ba -v1722" in /Users/s
   1917	        score_mode = "finding-only-estimate"
   1918	    per_category: List[dict] = []
   1919	    raw_total = 0.0
-  1920	
+  1920
   1921	    for cid, (name, weight) in SCORE_CATEGORIES.items():
   1922	        if (
   1923	            isinstance(weight, bool)
@@ -3342,7 +3342,7 @@ sed -n '1722,1847p' tests/test_checkyourself_cli.py | nl -ba -v1722" in /Users/s
   1930	        coverage_state = coverage_by_category[cid]
   1931	        penalties: List[dict] = []
   1932	        awarded = float(weight)
-  1933	
+  1933
   1934	        status = coverage_state["status"]
   1935	        if status == "Unknown":
   1936	            missing = coverage_state["missing_evidence"] or ["evidence missing for this category"]
@@ -3355,7 +3355,7 @@ sed -n '1722,1847p' tests/test_checkyourself_cli.py | nl -ba -v1722" in /Users/s
   1943	                penalties.append({"reason": "coverage unknown", "points": round(reduction, 2), "missing_evidence": missing})
   1944	        elif status == "MissingCoverage":
   1945	            penalties.append({"reason": "coverage artifact not supplied", "points": 0, "missing_evidence": coverage_state["missing_evidence"]})
-  1946	
+  1946
   1947	        for f in category_findings:
   1948	            fraction = SEVERITY_PENALTIES.get(f["severity"], 0.10)
   1949	            if (
@@ -3373,7 +3373,7 @@ sed -n '1722,1847p' tests/test_checkyourself_cli.py | nl -ba -v1722" in /Users/s
   1961	                "reason": f["finding"],
   1962	                "points": round(points, 2),
   1963	            })
-  1964	
+  1964
   1965	        awarded = max(0.0, min(float(weight), awarded))
   1966	        raw_total += awarded
   1967	        per_category.append({
@@ -3386,7 +3386,7 @@ sed -n '1722,1847p' tests/test_checkyourself_cli.py | nl -ba -v1722" in /Users/s
   1974	            "penalties": penalties,
   1975	            "awarded": round(awarded, 2),
   1976	        })
-  1977	
+  1977
   1978	    raw_score = round(raw_total)
   1979	    caps: List[dict] = []
   1980	    cap_value = 100
@@ -3396,7 +3396,7 @@ sed -n '1722,1847p' tests/test_checkyourself_cli.py | nl -ba -v1722" in /Users/s
   1984	    if counts["P1"]:
   1985	        cap_value = min(cap_value, 74)
   1986	        caps.append({"cap": 74, "reason": "unresolved P1 finding"})
-  1987	
+  1987
   1988	    critical_gap = False
   1989	    high_score_gap = False
   1990	    # Evidence caps apply in every score mode: an estimate without coverage
@@ -3412,7 +3412,7 @@ sed -n '1722,1847p' tests/test_checkyourself_cli.py | nl -ba -v1722" in /Users/s
   2000	    if high_score_gap:
   2001	        cap_value = min(cap_value, 90)
   2002	        caps.append({"cap": 90, "reason": "score above 90 requires evidence for tests, secrets, deploy/rollback, observability, auth, and data boundaries"})
-  2003	
+  2003
   2004	    score = min(raw_score, cap_value)
   2005	    any_gap = any(
   2006	        state["status"] in {"Unknown", "MissingCoverage"}
@@ -3426,7 +3426,7 @@ sed -n '1722,1847p' tests/test_checkyourself_cli.py | nl -ba -v1722" in /Users/s
   2014	        confidence = "medium"
   2015	    else:
   2016	        confidence = "low"
-  2017	
+  2017
   2018	    return {
   2019	        "tool": TOOL_NAME,
   2020	        "schema": SCORE_SCHEMA_ID,
@@ -3485,7 +3485,7 @@ sed -n '1722,1847p' tests/test_checkyourself_cli.py | nl -ba -v1722" in /Users/s
   1737	                for index, (sid, surface, category) in enumerate(cy.COVERAGE_SURFACES, start=1)
   1738	            ],
   1739	        }
-  1740	
+  1740
   1741	    def _run_mcp_score(self, coverage: object) -> dict:
   1742	        messages = "\n".join([
   1743	            json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25"}}),
@@ -3504,36 +3504,36 @@ sed -n '1722,1847p' tests/test_checkyourself_cli.py | nl -ba -v1722" in /Users/s
   1756	        self.assertEqual(result.returncode, 0, result.stderr)
   1757	        responses = {json.loads(line)["id"]: json.loads(line) for line in result.stdout.splitlines()}
   1758	        return responses[2]
-  1759	
+  1759
   1760	    def test_score_rejects_invalid_coverage_in_cli_and_mcp(self) -> None:
   1761	        base = self._full_coverage()
   1762	        cases = {}
-  1763	
+  1763
   1764	        invalid = deepcopy(base)
   1765	        invalid["surfaces"][2]["status"] = "Bogus"
   1766	        cases["invalid status"] = invalid
-  1767	
+  1767
   1768	        null_status = deepcopy(base)
   1769	        null_status["surfaces"][2]["status"] = None
   1770	        cases["null status"] = null_status
   1771	        cases["null artifact"] = None
-  1772	
+  1772
   1773	        duplicate = deepcopy(base)
   1774	        duplicate["surfaces"].append(deepcopy(duplicate["surfaces"][0]))
   1775	        cases["duplicate id"] = duplicate
-  1776	
+  1776
   1777	        unknown_id = deepcopy(base)
   1778	        unknown_id["surfaces"][2]["id"] = "S99"
   1779	        cases["unknown id"] = unknown_id
-  1780	
+  1780
   1781	        mismatched_category = deepcopy(base)
   1782	        mismatched_category["surfaces"][2]["category"] = "C2"
   1783	        cases["mismatched category"] = mismatched_category
-  1784	
+  1784
   1785	        missing_surface = deepcopy(base)
   1786	        del missing_surface["surfaces"][2]["surface"]
   1787	        cases["missing canonical surface"] = missing_surface
-  1788	
+  1788
   1789	        structural_drift = deepcopy(base)
   1790	        structural_drift["surfaces"].append({
   1791	            "id": "S99",
@@ -3543,7 +3543,7 @@ sed -n '1722,1847p' tests/test_checkyourself_cli.py | nl -ba -v1722" in /Users/s
   1795	            "evidence_reviewed": ["src/app.py:99"],
   1796	        })
   1797	        cases["unknown structural row"] = structural_drift
-  1798	
+  1798
   1799	        for label, coverage in cases.items():
   1800	            with self.subTest(label=label):
   1801	                with tempfile.TemporaryDirectory() as tmp:
@@ -3560,13 +3560,13 @@ sed -n '1722,1847p' tests/test_checkyourself_cli.py | nl -ba -v1722" in /Users/s
   1812	                self.assertEqual(error["code"], 2)
   1813	                self.assertIn("fill coverage.json with evidence, then re-run score", error["error"])
   1814	                self.assertIn("invalid coverage artifact", cli_result.stderr)
-  1815	
+  1815
   1816	                mcp_response = self._run_mcp_score(coverage)
   1817	                mcp_result = mcp_response["result"]
   1818	                self.assertTrue(mcp_result["isError"])
   1819	                self.assertNotIn("score", mcp_result["structuredContent"])
   1820	                self.assertNotIn("confidence", mcp_result["structuredContent"])
-  1821	
+  1821
   1822	    def test_coverage_backed_full_evidence_reaches_high_confidence(self) -> None:
   1823	        from importlib import util as _util
   1824	        spec = _util.spec_from_file_location("cy", CLI)
@@ -3711,27 +3711,27 @@ docs/cli.md:324:The MCP wrapper is local stdio and thin by design:
 docs/cli.md:330:It exposes native tools for `describe`, `scan`, `coverage_emit`,
 docs/cli.md:331:`coverage_check`, `score`, `backlog`, `next`, `diff`, `validate`, and `schema`.
      1	# Production Reality Report
-     2	
+     2
      3	Project: CheckYourself dogfood self-audit
      4	Generated: 2026-05-29 03:04 PDT
      5	Scope: Public `KyaniteLabs/checkyourself` repository, local CLI/MCP interface, docs, dashboard output, and private Creator Kit boundary.
-     6	
+     6
      7	## 1. Executive Summary
-     8	
+     8
      9	CheckYourself is at 100 / 100 for the current public repo launch criteria.
-    10	
+    10
     11	The final UltraQA pass found one actionable code-review issue: package scripts
     12	could echo credential-shaped values into generated JSON or Markdown context.
     13	That is now fixed and covered by a regression test.
-    14	
+    14
     15	Plain English: the public package is launch-ready. The score is 100 because the
     16	repo now has evidence for every applicable production surface, no unresolved
     17	P0/P1/P2/P3 findings, a local-first CLI, a thin MCP wrapper, current docs,
     18	support/security triage, passing tests, passing secret scans, and a clean
     19	public/private boundary.
-    20	
+    20
     21	## 2. Detected Stack
-    22	
+    22
     23	| Surface | Detected evidence | Confidence |
     24	|---|---|---|
     25	| Product type | Markdown-first AI diagnostic and guided hardening workspace | High |
@@ -3742,33 +3742,33 @@ docs/cli.md:331:`coverage_check`, `score`, `backlog`, `next`, `diff`, `validate`
     30	| Schemas | JSON contracts for scan, coverage, score, backlog, next batch, dashboard, learning plan, and capabilities | High |
     31	| CI | GitHub Actions validates public shape, compile, tests, CLI contracts, MCP smoke, and gitleaks | High |
     32	| Private boundary | Creator Kit sidecar is ignored and excluded from public release | High |
-    33	
+    33
     34	## 3. Unknowns And Assumptions
-    35	
+    35
     36	No score-blocking unknowns remain.
-    37	
+    37
     38	| Item | Treatment |
     39	|---|---|
     40	| First external user feedback | Future product growth, not a launch blocker. |
     41	| Tagged release | Useful next distribution step, not required for current repo readiness. |
     42	| More cross-agent eval fixtures | Useful quality expansion; one known-bad fixture already exists. |
-    43	
+    43
     44	## 4. Production Reality Score
-    45	
+    45
     46	**Score:** 100 / 100
     47	**Confidence:** High
     48	**Caps applied:** None
-    49	
+    49
     50	### Score receipts
-    51	
+    51
     52	- Deterministic scan reports 0 findings.
     53	- Coverage file represents all 20 surfaces with evidence or a not-applicable reason.
     54	- Score command returns raw 100, final 100, high confidence, and no caps.
     55	- Tests, public validation, MCP smoke, and gitleaks pass locally.
     56	- Prior pushed CI run `26630676966` passed on GitHub Actions.
-    57	
+    57
     58	## 5. Coverage Sweep
-    59	
+    59
     60	| # | Surface | Status | Evidence summary |
     61	|---:|---|---|---|
     62	| 1 | Product purpose and users | Pass | README, START_HERE, and bootstrap define audience, outputs, and approval workflow. |
@@ -3791,33 +3791,33 @@ docs/cli.md:331:`coverage_check`, `score`, `backlog`, `next`, `diff`, `validate`
     79	| 18 | Availability/recovery | Not applicable | Static open-source repo; recovery is GitHub history, cloneability, and future releases. |
     80	| 19 | AI/RAG/agent governance | Pass | AGENTS, rules, coverage matrix, scoring method, schemas, and fixture govern behavior. |
     81	| 20 | Learning needs | Pass | Learning templates, output, changelog, and dogfood reports tie findings to learning. |
-    82	
+    82
     83	## 6. Findings Register
-    84	
+    84
     85	| ID | Severity | Finding | Status | Evidence |
     86	|---|---|---|---|---|
     87	| CY-REVIEW-001 | P1 | Package scripts could leak credential-shaped values into generated JSON/Markdown. | Fixed | `redact_sensitive_text()` plus regression test. |
     88	| CY-OPS-001 | P3 | Maintainer support/security triage was not documented. | Fixed | Added SECURITY.md, SUPPORT.md, and bug-report issue template. |
     89	| CY-EVIDENCE-001 | P3 | Dogfood artifacts still reflected the pre-CLI/MCP 92 score. | Fixed | Added coverage-backed 100 score evidence and refreshed reports/dashboard. |
-    90	
+    90
     91	No open findings remain.
-    92	
+    92
     93	## 7. Remediation Backlog
-    94	
+    94
     95	| Rank | ID | Fix | Verification |
     96	|---:|---|---|---|
     97	| 1 | CY-REVIEW-001 | Redact package script values before output. | 10 unit tests pass; token absent from JSON and Markdown fixture output. |
     98	| 2 | CY-OPS-001 | Add support/security triage docs and issue template. | Public validator requires these files. |
     99	| 3 | CY-EVIDENCE-001 | Refresh dogfood report, coverage, dashboard data, and screenshot. | Coverage check and score command return 100/high. |
-   100	
+   100
    101	All backlog items are fixed.
-   102	
+   102
    103	## 8. Safest First Approval Batch
-   104	
+   104
    105	No approval batch remains. The final pass is complete.
-   106	
+   106
    107	## 9. Verification Commands
-   108	
+   108
    109	- `python3 tools/checkyourself.py scan . --format json --no-write`
    110	- `python3 tools/checkyourself.py coverage --check 02_RUN_DIAGNOSTIC/output/checkyourself-dogfood-coverage.json --format json`
    111	- `python3 tools/checkyourself.py score --findings /tmp/cy_scan_final.json --coverage 02_RUN_DIAGNOSTIC/output/checkyourself-dogfood-coverage.json --format json`
@@ -3827,9 +3827,9 @@ docs/cli.md:331:`coverage_check`, `score`, `backlog`, `next`, `diff`, `validate`
    115	- MCP smoke test for `initialize`, `tools/list`, and `tools/call`
    116	- `gitleaks dir . --no-banner --redact --exit-code 1`
    117	- `gitleaks git --no-banner --redact`
-   118	
+   118
    119	## 10. Learning Plan Seeds
-   120	
+   120
    121	- Secret redaction must cover generated helper output, not just findings.
    122	- Scores above 90 require coverage evidence, not a clean scan alone.
    123	- Static open-source projects still need support and security triage surfaces.
@@ -3837,7 +3837,7 @@ docs/cli.md:331:`coverage_check`, `score`, `backlog`, `next`, `diff`, `validate`
 
  succeeded in 0ms:
      1	from __future__ import annotations
-     2	
+     2
      3	import json
      4	import os
      5	from copy import deepcopy
@@ -3848,12 +3848,12 @@ docs/cli.md:331:`coverage_check`, `score`, `backlog`, `next`, `diff`, `validate`
     10	import unittest
     11	from pathlib import Path
     12	from unittest import mock
-    13	
-    14	
+    13
+    14
     15	ROOT = Path(__file__).resolve().parents[1]
     16	CLI = ROOT / "tools" / "checkyourself.py"
-    17	
-    18	
+    17
+    18
     19	GOLDEN_REPORT = {
     20	    "project": "Example App",
     21	    "executive_summary": "Demo-ready, with launch work still required.",
@@ -3944,7 +3944,7 @@ docs/cli.md:331:`coverage_check`, `score`, `backlog`, `next`, `diff`, `validate`
    106	        "reason": "The optional dashboard was not requested.",
    107	    },
    108	}
-   109	
+   109
    110	REPORT_REQUIRED_SECTIONS = (
    111	    "project",
    112	    "executive_summary",
@@ -3972,14 +3972,14 @@ docs/cli.md:331:`coverage_check`, `score`, `backlog`, `next`, `diff`, `validate`
   1103	    config_error: Optional[str] = None,
   1104	) -> List[Finding]:
   1105	    """Build scan findings with stable, semantic rule IDs.
-  1106	
+  1106
   1107	    IDs are part of the public contract: suppressions, diffs, and CI gates key
   1108	    off them, so they must stay identical run-to-run and release-to-release.
   1109	    """
   1110	    findings: List[Finding] = []
   1111	    real_env_files = content["real_env_files"]
   1112	    env_files = content["env_files"]
-  1113	
+  1113
   1114	    if config_error:
   1115	        findings.append(Finding(
   1116	            "CY-CONFIG-003", "P2", "Invalid CheckYourself suppression configuration",
@@ -3989,7 +3989,7 @@ docs/cli.md:331:`coverage_check`, `score`, `backlog`, `next`, `diff`, `validate`
   1120	            category="C3",
   1121	            recommended_fix="Correct the suppression file shape and rerun the scan; invalid configuration must never hide findings.",
   1122	        ))
-  1123	
+  1123
   1124	    if content["suspicious_high"]:
   1125	        findings.append(Finding(
   1126	            "CY-SECRET-001", "P0", "High-confidence credential shape in source",
@@ -3999,7 +3999,7 @@ docs/cli.md:331:`coverage_check`, `score`, `backlog`, `next`, `diff`, `validate`
   1130	            category="C3",
   1131	            recommended_fix="Rotate anything real, remove it from source, load it from environment variables, and confirm history exposure.",
   1132	        ))
-  1133	
+  1133
   1134	    if content["suspicious_low"]:
   1135	        findings.append(Finding(
   1136	            "CY-SECRET-002", "P2", "Possible secret-like field without credential shape",
@@ -4009,7 +4009,7 @@ docs/cli.md:331:`coverage_check`, `score`, `backlog`, `next`, `diff`, `validate`
   1140	            category="C3",
   1141	            recommended_fix="Verify whether the value is a credential. If it is benign, add a reviewed `.checkyourself.yml` suppression; if real, move it to environment variables.",
   1142	        ))
-  1143	
+  1143
   1144	    unignored_env_files = [
   1145	        path for path in real_env_files if not gitignore_ignores_path(gitignore, path)
   1146	    ]
@@ -4030,7 +4030,7 @@ docs/cli.md:331:`coverage_check`, `score`, `backlog`, `next`, `diff`, `validate`
   1161	            category="C3",
   1162	            recommended_fix="Run git history/secret checks and keep only redacted `.env.example` files in the repo.",
   1163	        ))
-  1164	
+  1164
   1165	    has_example = any(is_env_example_name(Path(e).name) for e in env_files)
   1166	    if real_env_files and not has_example:
   1167	        findings.append(Finding(
@@ -4041,7 +4041,7 @@ docs/cli.md:331:`coverage_check`, `score`, `backlog`, `next`, `diff`, `validate`
   1172	            category="C3",
   1173	            recommended_fix="Add `.env.example` with variable names, safe placeholders, and setup notes.",
   1174	        ))
-  1175	
+  1175
   1176	    if content["default_credentials"]:
   1177	        findings.append(Finding(
   1178	            "CY-CONFIG-002", "P1", "Default or weak credentials in committed configuration",
@@ -4051,7 +4051,7 @@ docs/cli.md:331:`coverage_check`, `score`, `backlog`, `next`, `diff`, `validate`
   1182	            category="C3",
   1183	            recommended_fix="Replace default credentials with strong generated values loaded from the environment, and rotate anything already deployed.",
   1184	        ))
-  1185	
+  1185
   1186	    if content["debug_flags"]:
   1187	        findings.append(Finding(
   1188	            "CY-CONFIG-001", "P2", "Debug mode enabled in configuration",
@@ -4092,7 +4092,7 @@ docs/cli.md:331:`coverage_check`, `score`, `backlog`, `next`, `diff`, `validate`
   1312	        config_error=config.get("config_error"),
   1313	    )
   1314	    finding_dicts = apply_suppressions([f.to_dict() for f in findings], config.get("suppress") or [])
-  1315	
+  1315
   1316	    counts = {sev: 0 for sev in ("P0", "P1", "P2", "P3")}
   1317	    suppression_count = 0
   1318	    for f in finding_dicts:
@@ -4100,7 +4100,7 @@ docs/cli.md:331:`coverage_check`, `score`, `backlog`, `next`, `diff`, `validate`
   1320	            suppression_count += 1
   1321	            continue
   1322	        counts[f["severity"]] = counts.get(f["severity"], 0) + 1
-  1323	
+  1323
   1324	    return {
   1325	        "tool": TOOL_NAME,
   1326	        "schema": SCAN_SCHEMA_ID,
@@ -4127,7 +4127,7 @@ docs/cli.md:331:`coverage_check`, `score`, `backlog`, `next`, `diff`, `validate`
   1347	    }
   2096	def diff_findings(old_data: Any, new_data: Any) -> dict:
   2097	    """Compare two findings artifacts (scan output, report, or finding list).
-  2098	
+  2098
   2099	    Stable rule IDs make this meaningful: the same risk keeps the same ID
   2100	    across runs, so added/resolved is a real delta, not ID-shuffle noise.
   2101	    """
@@ -4138,10 +4138,10 @@ docs/cli.md:331:`coverage_check`, `score`, `backlog`, `next`, `diff`, `validate`
   2106	    added_ids = sorted(set(new_findings) - set(old_findings))
   2107	    removed_ids = sorted(set(old_findings) - set(new_findings))
   2108	    persisting_ids = sorted(set(old_findings) & set(new_findings))
-  2109	
+  2109
   2110	    def is_open(finding: dict) -> bool:
   2111	        return finding.get("status") not in RESOLVED_STATUSES
-  2112	
+  2112
   2113	    status_changes: List[dict] = []
   2114	    severity_changes: List[dict] = []
   2115	    resolved_status_ids: List[str] = []
@@ -4169,19 +4169,19 @@ docs/cli.md:331:`coverage_check`, `score`, `backlog`, `next`, `diff`, `validate`
   2137	            unchanged_ids.append(fid)
   2138	        if is_open(old_finding) and not is_open(new_finding):
   2139	            resolved_status_ids.append(fid)
-  2140	
+  2140
   2141	    # A finding can resolve without disappearing from the artifact. Include
   2142	    # those transitions in the existing resolved collection so consumers do
   2143	    # not have to infer closure from counts or status_changes.
   2144	    resolved_ids = sorted(set(removed_ids) | set(resolved_status_ids))
-  2145	
+  2145
   2146	    regression_events: List[dict] = []
-  2147	
+  2147
   2148	    def add_regression(event: dict) -> None:
   2149	        key = (event["id"], event["type"])
   2150	        if not any((existing["id"], existing["type"]) == key for existing in regression_events):
   2151	            regression_events.append(event)
-  2152	
+  2152
   2153	    for fid in added_ids:
   2154	        finding = new_findings[fid]
   2155	        if is_open(finding) and finding["severity"] in {"P0", "P1"}:
@@ -4210,7 +4210,7 @@ docs/cli.md:331:`coverage_check`, `score`, `backlog`, `next`, `diff`, `validate`
   2178	                "old_severity": old_finding["severity"],
   2179	                "new_severity": new_finding["severity"],
   2180	            })
-  2181	
+  2181
   2182	    evidence_changes: List[dict] = []
   2183	    for fid in persisting_ids:
   2184	        old_evidence = set(old_findings[fid].get("evidence") or [])
@@ -4221,14 +4221,14 @@ docs/cli.md:331:`coverage_check`, `score`, `backlog`, `next`, `diff`, `validate`
   2189	                "evidence_added": sorted(new_evidence - old_evidence),
   2190	                "evidence_resolved": sorted(old_evidence - new_evidence),
   2191	            })
-  2192	
+  2192
   2193	    def open_counts(findings: Dict[str, dict]) -> Dict[str, int]:
   2194	        counts = {sev: 0 for sev in ("P0", "P1", "P2", "P3")}
   2195	        for f in findings.values():
   2196	            if f.get("status") not in RESOLVED_STATUSES:
   2197	                counts[f["severity"]] = counts.get(f["severity"], 0) + 1
   2198	        return counts
-  2199	
+  2199
   2200	    old_counts = open_counts(old_findings)
   2201	    new_counts = open_counts(new_findings)
   2202	    count_regression = any(new_counts[sev] > old_counts[sev] for sev in ("P0", "P1"))
@@ -4258,8 +4258,8 @@ docs/cli.md:331:`coverage_check`, `score`, `backlog`, `next`, `diff`, `validate`
   2608	        "valid": not errors,
   2609	        "errors": errors,
   2610	    }
-  2611	
-  2612	
+  2611
+  2612
   2613	def parse_report(body: str) -> dict:
   2614	    """Parse and validate one complete Production Reality Report."""
   2615	    try:
@@ -4272,8 +4272,8 @@ docs/cli.md:331:`coverage_check`, `score`, `backlog`, `next`, `diff`, `validate`
   2622	    if errors:
   2623	        raise CliError("invalid report artifact: " + "; ".join(errors))
   2624	    return report
-  2625	
-  2626	
+  2625
+  2626
   2627	def regenerate_report(report: dict) -> str:
   2628	    """Validate and render a report in canonical, byte-stable JSON form."""
   2629	    if not isinstance(report, dict):
@@ -4405,7 +4405,7 @@ docs/agent-self-improvement.md:50:answer from one surface. Make the receipts agr
     42	# spec-driven-delivery
     43	Convert ambiguous product intent into machine-checkable specs, acceptance criteria, and change plans.
     44	## Operating contract
-    45	
+    45
     46	Act as a production hardening specialist for **01 Product Intent & Contracts**. Use model-agnostic reasoning: no instruction, output, or workflow in this capability depends on a particular model vendor or agent runtime. Prefer deterministic evidence over persuasive prose. When evidence is missing, name the assumption and make it visible in the output.
     47	## When to activate
     48	Use this capability when defining, refining, or reviewing a feature before implementation. Trigger on requirements, user stories, acceptance criteria, OpenAPI, AsyncAPI, JSON Schema, contracts, ADRs, RFCs, roadmap items, or “turn this idea into buildable work”.
@@ -4416,7 +4416,7 @@ docs/agent-self-improvement.md:50:answer from one surface. Make the receipts agr
     53	- existing APIs
     54	- schema definitions
     55	- constraints
-    56	
+    56
     57	## Work protocol
     58	1. Separate intent from implementation. Capture actors, jobs, constraints, non-goals, and success measures first.
     59	2. Write contracts before code: request/response shapes, events, permissions, data lifecycle, observability signals, and failure modes.
@@ -4424,11 +4424,11 @@ docs/agent-self-improvement.md:50:answer from one surface. Make the receipts agr
     61	4. Identify product, technical, security, privacy, and operational assumptions. Mark blocking assumptions explicitly.
     62	5. Create a minimum viable production slice: the smallest implementation that includes auth, tests, telemetry, rollback, and docs.
     63	6. Update specs when requirements change; regenerate or refactor code from the source of truth rather than letting code drift silently.
-    64	
+    64
     65	## Required output format
-    66	
+    66
     67	Return a concise report with these sections unless the user requested a concrete file or code diff:
-    68	
+    68
     69	1. **Scope interpreted** — what is in and out.
     70	2. **Findings / decisions** — ordered by production risk, not by discovery order.
     71	3. **Recommended actions** — owner-ready tasks with priority and rationale.
@@ -4440,32 +4440,32 @@ docs/agent-self-improvement.md:50:answer from one surface. Make the receipts agr
     77	- Every external boundary has a schema or contract and compatibility strategy.
     78	- Every production behavior names expected failure modes and user-visible fallback behavior.
     79	- Human review checkpoints exist for priorities, specs, and intent-to-ship decisions.
-    80	
+    80
     81	## Anti-patterns to block
     82	- Do not start with framework scaffolding when the contract is unknown.
     83	- Do not let generated code become the only specification.
     84	- Do not accept “works locally” as an acceptance criterion.
-    85	
+    85
     86	## Hand-off rules
     87	- Hand off to the orchestrator when a request spans more than three production layers or has unclear risk ownership.
     88	- Consider `prodhardening.api_backend_services` when its layer is implicated by the findings.
     89	- Consider `prodhardening.testing_quality_engineering` when its layer is implicated by the findings.
     90	- Consider `prodhardening.orchestrator` when its layer is implicated by the findings.
-    91	
+    91
     92	## Examples
     93	**Prompt:** “Turn this feature idea into an implementation plan.”
-    94	
+    94
     95	**Expected handling:** Return a spec, acceptance tests, API/data contracts, risk assumptions, and sequencing.
-    96	
+    96
     97	**Prompt:** “Review this OpenAPI file before implementation.”
-    98	
+    98
     99	**Expected handling:** Check completeness, consistency, auth, error model, pagination, idempotency, and testability.
-   100	
+   100
    101	## References to load on demand
    102	- `../../references/spec-driven-delivery.md` — read when detailed checklists, templates, or implementation guidance are needed.
    103	- `../../templates/adr.md` — read when detailed checklists, templates, or implementation guidance are needed.
    104	- `../../templates/spec-template.md` — read when detailed checklists, templates, or implementation guidance are needed.
-   105	
+   105
    106	## Completion definition
    107	The work is complete only when recommendations are actionable, verification steps are explicit, and unresolved assumptions are visible. Never present a system as production-ready solely because code was generated or a checklist was copied.
 
@@ -4484,15 +4484,15 @@ sed -n '2835,2876p' tools/checkyourself.py | nl -ba -v2835" in /Users/simongonza
    551	        spec = _util.spec_from_file_location("cy", CLI)
    552	        cy = _util.module_from_spec(spec)
    553	        spec.loader.exec_module(cy)
-   554	
+   554
    555	        generated = cy.regenerate_report(GOLDEN_REPORT)
    556	        parsed = cy.parse_report(generated)
    557	        regenerated = cy.regenerate_report(parsed)
-   558	
+   558
    559	        self.assertEqual(parsed, GOLDEN_REPORT)
    560	        self.assertEqual(regenerated.encode("utf-8"), generated.encode("utf-8"))
    561	        self.assertTrue(generated.endswith("\n"))
-   562	
+   562
    563	    def test_score_to_report_round_trip_and_invalid_mutations_fail_schema(self) -> None:
    564	        findings = {
    565	            "findings": [{
@@ -4519,7 +4519,7 @@ sed -n '2835,2876p' tools/checkyourself.py | nl -ba -v2835" in /Users/simongonza
    586	            )
    587	            self.assertEqual(backlog_result.returncode, 0, backlog_result.stderr)
    588	            backlog = json.loads(backlog_result.stdout)
-   589	
+   589
    590	            report = deepcopy(GOLDEN_REPORT)
    591	            report.update({
    592	                "score": score["score"],
@@ -4535,7 +4535,7 @@ sed -n '2835,2876p' tools/checkyourself.py | nl -ba -v2835" in /Users/simongonza
    602	            valid = self.run_cli("validate", "--kind", "report", str(report_path), "--format", "json")
    603	            self.assertEqual(valid.returncode, 0, valid.stderr)
    604	            self.assertTrue(json.loads(valid.stdout)["valid"])
-   605	
+   605
    606	            mutations = {
    607	                "missing score": lambda artifact: artifact.pop("score"),
    608	                "score above maximum": lambda artifact: artifact.__setitem__("score", 101),
@@ -4564,7 +4564,7 @@ sed -n '2835,2876p' tools/checkyourself.py | nl -ba -v2835" in /Users/simongonza
    738	                "score", "--findings", str(findings_path), "--coverage", str(coverage_path),
    739	                "--no-history", "--format", "json",
    740	            )
-   741	
+   741
    742	        self.assertEqual(result.returncode, 0, result.stderr)
    743	        score = json.loads(result.stdout)
    744	        c10 = next(category for category in score["per_category"] if category["id"] == "C10")
@@ -4580,7 +4580,7 @@ sed -n '2835,2876p' tools/checkyourself.py | nl -ba -v2835" in /Users/simongonza
   1892	            old_path.write_text(json.dumps(old), encoding="utf-8")
   1893	            new_path.write_text(json.dumps(new), encoding="utf-8")
   1894	            result = self.run_cli("diff", "--old", str(old_path), "--new", str(new_path), "--format", "json")
-  1895	
+  1895
   1896	        self.assertEqual(result.returncode, 0, result.stderr)
   1897	        diff = json.loads(result.stdout)
   1898	        self.assertEqual([finding["id"] for finding in diff["resolved"]], ["CY-TEST-001"])
@@ -4589,27 +4589,27 @@ sed -n '2835,2876p' tools/checkyourself.py | nl -ba -v2835" in /Users/simongonza
   1901	        self.assertEqual(diff["unchanged"], [])
   1902	        self.assertFalse(diff["regression"])
      1	# CheckYourself
-     2	
+     2
      3	> Local-first production-readiness audit for AI-built apps: read-only checks, 0–100 score, stable rule IDs, guided fixes.
-     4	
+     4
      5	## Getting Started
-     6	
+     6
      7	- [README.md](README.md) — overview, quick start, what it checks, CLI/MCP setup, FAQ
      8	- [START_HERE.md](START_HERE.md) — entry point for AI assistants starting a new audit session
      9	- [CONTEXT.md](CONTEXT.md) — project context file that orients the AI assistant to the audit workspace
     10	- [AGENTS.md](AGENTS.md) — agent behavioral rules, roast-lite voice, safety model, and approval gates
-    11	
+    11
     12	## Core Reference
-    13	
+    13
     14	- [rules.md](rules.md) — review, safety, evidence, and workflow rules for the diagnostic
     15	- [docs/cli.md](docs/cli.md) — canonical detector-rule registry and CLI command reference (scan, diagnostic, diff, score, coverage, backlog, next)
     16	- [docs/mcp.md](docs/mcp.md) — MCP server setup, tool list, scan-root confinement, expected agent flow
     17	- [CHANGELOG.md](CHANGELOG.md) — version history including the v1.7.0 diff command and stable rule IDs
-    18	
+    18
     19	## Schemas
-    20	
+    20
     21	The `schemas/` directory contains JSON schema contracts for every structured output:
-    22	
+    22
     23	- [schemas/scan.schema.json](schemas/scan.schema.json) — findings from a scan run
     24	- [schemas/diff.schema.json](schemas/diff.schema.json) — diff output (added/resolved/regressed findings)
     25	- [schemas/score-result.schema.json](schemas/score-result.schema.json) — scored report with severity caps
@@ -4617,17 +4617,17 @@ sed -n '2835,2876p' tools/checkyourself.py | nl -ba -v2835" in /Users/simongonza
     27	- [schemas/coverage.schema.json](schemas/coverage.schema.json) — coverage evidence structure
     28	- [schemas/backlog.schema.json](schemas/backlog.schema.json) — ranked fix backlog
     29	- [schemas/next-batch.schema.json](schemas/next-batch.schema.json) — next highest-severity batch; safety analysis remains with the diagnostic and reviewer
-    30	
+    30
     31	## Diagnostic Reference
-    32	
+    32
     33	- [02_RUN_DIAGNOSTIC/coverage-matrix.md](02_RUN_DIAGNOSTIC/coverage-matrix.md) — coverage surface matrix used during the diagnostic pass
-    34	
+    34
     35	## Advanced Hardening
-    36	
+    36
     37	- [90_ADVANCED/README.md](90_ADVANCED/README.md) — deep-dive hardening library; agents load sections on demand when a finding needs deeper guidance
-    38	
+    38
     39	## Agent Skill
-    40	
+    40
     41	- [skills/checkyourself/SKILL.md](skills/checkyourself/SKILL.md) — installable skill for Claude Code and Codex skill aggregators
      1	{
      2	  "name": "checkyourself",
@@ -4744,8 +4744,8 @@ sed -n '2835,2876p' tools/checkyourself.py | nl -ba -v2835" in /Users/simongonza
   2857	        print(f"Wrote coverage skeleton: {out_path}")
   2858	        print("Fill coverage.json with evidence, then re-run score.")
   2859	    return 0
-  2860	
-  2861	
+  2860
+  2861
   2862	def command_score(args: argparse.Namespace) -> int:
   2863	    findings_data = load_json_arg(args.findings)
   2864	    if args.coverage is not None:
@@ -4899,19 +4899,19 @@ sed -n '241,260p' docs/cli.md | nl -ba -v241" in /Users/simongonzalezdecruz/work
   2324	        },
   2325	    }
    241	finding IDs scored.
-   242	
+   242
    243	With `--coverage`, the result is `score_mode: "coverage-backed"`. A coverage
    244	entry marked `Pass` without `evidence_reviewed`, or `NotApplicable` without a
    245	reason, is downgraded to `Unknown`, and any surface omitted from the artifact
    246	counts as `Unknown` — so omitting or hand-waving a surface can never score
    247	better than honestly reporting it, and `confidence: "high"` requires all 20
    248	required surfaces present with real evidence.
-   249	
+   249
    250	Without `--coverage`, the CLI produces a `scan-derived-estimate` when the
    251	findings file is scan JSON, or a `finding-only-estimate` otherwise. Both keep
    252	confidence `low` and return `manual_evidence_needed` so nobody mistakes the
    253	estimate for launch permission.
-   254	
+   254
    255	Every score appends a receipt to `.checkyourself-score-history.json` beside the
    256	findings file by default. History timestamps are UTC so receipts from laptops
    257	and CI stay comparable, and a corrupt history file is preserved as

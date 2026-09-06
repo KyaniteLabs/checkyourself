@@ -72,7 +72,7 @@ Let's craft answer with some specifics. Need maybe cite file tree evidence. Let'
 Need perhaps phrase "surfaces/claims most likely to hide rot" as "rot hides in repository is all markdown, no runnable code".
 
 2. Public claims not checkable:
-List with "need external evidence or an executable." 
+List with "need external evidence or an executable."
 - "Production-ready score" — no calculator.
 - "P0 caps at 49, P1 at 74, missing critical evidence at 84" — no code/test proofs.
 - "Stable semantic rule IDs" — no inventory of IDs, no CI enforcement.

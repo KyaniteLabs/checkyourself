@@ -1,7 +1,7 @@
 # CheckYourself Code Review — Self-Dogfood
 
-Date: 2026-09-05  
-Reviewed revision: `636e475`-equivalent live `main` tree; challenge tree digest `2daf5786c3c0fee8cb695626c58a113622b265e8445586a16cd217d17d9c3a33`  
+Date: 2026-09-05
+Reviewed revision: `636e475`-equivalent live `main` tree; challenge tree digest `2daf5786c3c0fee8cb695626c58a113622b265e8445586a16cd217d17d9c3a33`
 Scope: `tools/checkyourself.py`, `tests/`, `skills/checkyourself/SKILL.md`, `schemas/`, and the executable scan/coverage/challenge/score workflow.
 
 ## Result

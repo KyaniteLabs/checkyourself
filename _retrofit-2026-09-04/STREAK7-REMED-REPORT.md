@@ -1,7 +1,7 @@
 # Streak 7 remediation report — per-surface artifact registry
 
-Date: 2026-09-05  
-Worker: `w-16dd-cy-streak7-remed`  
+Date: 2026-09-05
+Worker: `w-16dd-cy-streak7-remed`
 Scope: close Grok's registry-gap exploit for verifier receipts. No installs,
 network calls, commits, or pushes.
 
