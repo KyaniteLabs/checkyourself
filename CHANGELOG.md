@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### 2026-09-19 — npm packaging for the CLI/MCP surface
+
+- Added `package.json` (name `checkyourself`, version 1.7.0 tracking
+  `checkyourself.manifest.json`) and a `bin/checkyourself.mjs` trampoline that
+  forwards argv and stdio verbatim to `tools/checkyourself.py` (Python resolved
+  via `$CHECKYOURSELF_PYTHON`, `python3`, `python`). The npm package ships the
+  CLI, the stdio MCP server, the bundled schemas, and the manifest; the full
+  audit workspace remains the repo. Publishing itself is staged, not fired.
+
 The 2026-09-04/05 retrofit brought the local evidence contract through the
 gauntlet, an ASTRA adversarial review, verifier-owned challenges, hardening, and
 two independent final reviews. The documented boundary remains local evidence,
