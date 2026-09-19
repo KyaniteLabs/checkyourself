@@ -1,0 +1,41 @@
+{
+  "name": "checkyourself",
+  "version": "1.7.0",
+  "description": "Reviewable completion-evidence workflow, bounded scoring, guided hardening, and learning-plan system for AI-built apps. Stdlib-only Python CLI plus a stdio MCP server with 11 tools; no network, no telemetry, secret values never printed.",
+  "keywords": [
+    "checkyourself",
+    "mcp",
+    "model-context-protocol",
+    "ai-agents",
+    "claude",
+    "code-review",
+    "audit",
+    "completion-evidence",
+    "production-readiness",
+    "stdio"
+  ],
+  "license": "Apache-2.0",
+  "author": "Kyanite Labs",
+  "homepage": "https://github.com/KyaniteLabs/checkyourself#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KyaniteLabs/checkyourself.git"
+  },
+  "bin": {
+    "checkyourself": "bin/checkyourself.mjs"
+  },
+  "files": [
+    "bin/",
+    "tools/checkyourself.py",
+    "schemas/",
+    "checkyourself.manifest.json",
+    "NOTICE.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "python3 -m unittest discover -s tests",
+    "validate:public": "python3 tools/validate_public.py"
+  }
+}
