@@ -70,6 +70,21 @@ CheckYourself gives you reality **before production does the grading** — a cal
 
 > **No model lock-in. No required cloud account. No required command line.**
 
+### Install the CLI/MCP surface from npm (optional)
+
+The deterministic interface — the local CLI and the stdio MCP server — is also
+published as an npm package that wraps the same stdlib-only Python tool (Python 3
+required; Node is only used to launch it):
+
+```bash
+npm install checkyourself
+npx checkyourself --help          # same CLI as python3 tools/checkyourself.py
+npx checkyourself mcp             # stdio MCP server (11 tools)
+```
+
+The full audit workspace (this repository) remains the operating context your AI
+assistant loads; the npm package delivers the machine interface.
+
 ### Direct your assistant
 
 Once the folder is in place, tell your AI assistant how to operate within it:
