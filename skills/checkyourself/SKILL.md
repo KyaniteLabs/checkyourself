@@ -1,45 +1,94 @@
 ---
 name: checkyourself
-description: Evidence-backed pre-launch diagnostics, production scores, approval-gated fixes, learning plans, and optional dashboards for AI-built projects.
+description: >-
+  Use when completed work makes claims — "done", "tests pass", "it works", "ready
+  to launch" — that must be verified before they are believed. Re-derive each claim
+  from the work itself and report CONFIRMED / REFUTED / UNVERIFIABLE with evidence.
+  Fast claim-verification by default; the deterministic production-readiness CLI
+  when launch stakes justify it.
 ---
 
 # CheckYourself
 
-Evidence-first review: start read-only, inspect the launch surface, label
-observed/inferred/untested claims, write a bounded Production Reality Report,
-and ask before edits. Receipts improve reviewability, not safety.
+The job: independently re-derive the claims completed work makes about itself and
+report each as CONFIRMED, REFUTED, or UNVERIFIABLE with evidence — so "done" means
+proven, not asserted. Never grade your own homework from memory: the author's
+summary is a claim to check, never evidence for itself. When the verifier is the
+same agent that did the work, say so and discount accordingly — use a fresh context
+or a second agent for launch-critical claims.
 
-## Workflow
+## Protocol (both lanes)
 
-1. **Load context.** In this repo or a copied `checkyourself` folder, start
-   with `CONTEXT.md`, `AGENTS.md`, `rules.md`,
-   `02_RUN_DIAGNOSTIC/coverage-matrix.md`, and
-   `02_RUN_DIAGNOSTIC/scoring-method.md`; otherwise ask for the smallest missing
-   evidence. Infer stack, audience, data shape, deploy target, and risk; label
-   guesses.
-2. **Run safe deterministic checks.** Prefer read-only commands. Stable
-   semantic IDs (for example `CY-SECRET-001` and `CY-CONFIG-001`) support
-   suppression, diff, and citation.
+1. **Extract the claims.** From the completion report, commit message, diff, README,
+   doc, or the request. Make implicit claims explicit — "done" implies "it runs";
+   "shipped" implies "reachable at its destination"; "13 works, every one live"
+   implies each URL resolves.
+2. **Re-derive each claim from the work, in the consumer's frame.** Run the command,
+   open the page, read the file as shipped. Prefer the path a consumer would hit
+   over the path the author would show you.
+3. **Label with evidence:**
+   - **CONFIRMED** — what you ran and saw: command + output line, URL + selector +
+     observation, file:line quote.
+   - **REFUTED** — the evidence plus what is actually true.
+   - **UNVERIFIABLE** — what is missing to check it (access, tool, time,
+     credentials). Never silently dropped, never guessed.
+   - `n/a` only when the claim's subject genuinely does not exist in this work,
+     with the reason. "Not tested" is not a label.
+4. **Report verdict-first.** One line answering "is the claim of completion true?",
+   then X confirmed / Y refuted / Z unverifiable, then the per-claim evidence list.
+   Plain-English risk before technical detail. If a launch-critical claim is
+   REFUTED, say the work is not done in those words.
+5. **Stay read-only.** No edits, dependency installs, secret rotation, or
+   production changes without an explicitly approved named fix. After an approved
+   fix: smallest reversible change, re-derive the affected claims, update status,
+   rescore if evidence changed. Accepted or deferred findings stay visible as
+   residual risk with owner and trigger.
+6. **Safety.** No secrets, customer data, or unredacted `.env` values in output.
+   For regulated, financial, health, legal, life-safety, security-critical, or
+   high-volume systems, recommend qualified expert review.
 
-```bash
-python3 tools/checkyourself.py describe --format json
-python3 tools/checkyourself.py scan /path/to/project --deep --format json --no-write
-python3 tools/checkyourself.py coverage --emit            # fill with evidence, then:
-python3 tools/checkyourself.py score --findings scan.json --coverage coverage.json --format json
-python3 tools/checkyourself.py backlog --findings scan.json --format json
-python3 tools/checkyourself.py next --findings scan.json --format json
-python3 tools/checkyourself.py diff --old baseline.json --new current.json --ci   # regression gate
+## Fast lane (minutes)
+
+Claims → re-derive → verdict list. Examples: "tests pass" (run the suite; quote the
+summary line), "all links live" (fetch each; list statuses), "this doc matches the
+repo" (read the file as shipped at this revision), "the page says N items" (count
+them in the rendered DOM, not the source string). Label what cannot be checked in
+this harness UNVERIFIABLE with the reason — a scoped honest verdict beats a fake
+complete one.
+
+## Deep lane (launch / production readiness)
+
+When the question is "may this go to production", coverage must be swept, not
+sampled. Use the CheckYourself CLI (stdlib-only, read-only, no network, no
+telemetry):
+
+```
+CY=~/workspaces/checkyourself/tools/checkyourself.py
+python3 $CY describe --format json
+python3 $CY scan <path> --deep --format json --no-write
+python3 $CY coverage --emit            # fill with evidence, then:
+python3 $CY score --findings scan.json --coverage coverage.json --format json
+python3 $CY backlog --findings scan.json --format json
+python3 $CY next    --findings scan.json --format json
+python3 $CY diff --old baseline.json --new current.json --ci   # regression gate
 ```
 
-   Treat findings as local observations; do not invent another scoring/backlog
-   path. If Python is unavailable, sweep manually and label the score
-   hand-computed.
+If the CLI is missing (repo moved), sweep manually, reuse the registry IDs below,
+and label every score hand-computed. The score is always the CLI's — never invent
+or hand-wave a number: `min(base, cap)` with caps 49 (unresolved P0), 74 (unresolved
+P1), 84 (missing critical evidence), 90 (missing launch-gate evidence). **No
+findings is Unknown, never automatic Pass.**
 
-### Manual fallback contract
+Sweep the surfaces that matter to this artifact: purpose, frontend UX/accessibility,
+backend/API, auth, data/migrations, secrets/config, tests, CI/CD, dependencies,
+deploy/rollback, observability, performance, privacy, compliance, and AI/RAG/agent
+governance when relevant. Every claim needs Pass-with-evidence / Finding /
+Unknown / Not-applicable-with-reason.
 
-When the CLI is unavailable, use this canonical rule-ID registry and evidence rubric:
+Manual fallback registry — stable IDs for citation, suppression, and diff; never
+invent or renumber:
 
-| Rule ID | Canonical manual condition |
+| Rule ID | Condition (canonical) |
 |---|---|
 | `CY-MANUAL-AUTH-001` | Auth, permission, session, or admin behavior lacks verified server-side evidence. |
 | `CY-MANUAL-DATA-001` | Data storage, recovery, retention, or tenant isolation lacks verified evidence. |
@@ -48,92 +97,24 @@ When the CLI is unavailable, use this canonical rule-ID registry and evidence ru
 | `CY-MANUAL-RELEASE-001` | Deployment, rollback, CI/CD, or supply-chain behavior lacks a verified receipt. |
 | `CY-MANUAL-OBS-001` | Observability, alerting, or incident response lacks a verified receipt. |
 | `CY-MANUAL-AI-001` | AI/RAG/agent permissions, evaluation, or refusal behavior lacks verified evidence. |
-| `CY-MANUAL-OTHER-001` | A material gap does not match another registered manual condition. |
+| `CY-MANUAL-OTHER-001` | A material gap matching no other registered condition. |
 
-Reuse a detector ID from the [canonical detector-rule registry](../../docs/cli.md#canonical-detector-rule-registry)
-when it matches a shipped detector. Never invent or renumber this registry.
-
-Every manual finding needs registry ID, severity/category, exact dated evidence,
-plain-English risk, and status. `Pass` needs reviewer assertions plus a
-`checkyourself receipt` bound to one surface, source revision, command, claim,
-and result; content and binding hashes must verify. Receipts cannot be reused
-across surfaces/claims; caller-authored provenance is not proof. `Finding` needs
-evidence of gap and harm; `Unknown` needs an evidence request; `Not applicable`
-needs a concrete reason and the same verifier-captured delegation receipt
-contract. Without an inspectable artifact, label a low-confidence hand-computed
-estimate.
-
-### Deterministic score contract
-
-The executable score is `final_score = min(base_score, minimum_cap)`, where
-`base_score` is the rounded sum of clamped category awards after evidence and
-unresolved-finding penalties. The cap is the minimum of 100, 49 for unresolved
-P0, 74 for unresolved P1, 84 for missing critical evidence, and 90 for missing
-high-score launch-gate evidence. `NotApplicable` with a concrete reason and
-verified delegation receipt retains its category weight. Accepted/deferred
-dispositions do not close residual risk; `--claim` records an accepted claim
-without an independent challenge. See the [CLI scoring
-contract](../../docs/cli.md#scoring) and [executable
-implementation](../../tools/checkyourself.py).
-
-3. **Sweep the surface.** Cover product purpose, frontend UX/accessibility,
-   backend/API, auth, data/migrations, secrets/config, tests, CI/CD,
-   dependencies, deploy/rollback, observability, performance, privacy,
-   compliance, and AI/RAG/agent governance when relevant.
-4. **Write the report.** Include purpose; stack/confidence; unknowns;
-   Production Reality Score (0–100) with caps (P0 49, P1 74, missing critical
-   evidence 84, missing launch-gate evidence 90; no findings is Unknown, never
-   automatic Pass); complete Pass/Finding/Unknown/Not applicable coverage;
-   P0–P3 findings; evidence; complete backlog; safest first batch; questions;
-   and learning seeds.
-5. **Recommend before acting.** Each backlog item needs finding ID, severity,
-   fix, blast radius, reason, files/systems, verification, rollback, learning
-   value, and status. Do not edit until the user approves a named fix/batch.
-6. **Loop after approval.** Make the smallest reversible change, verify, update
-   status, rescore when evidence changes, and keep accepted-risk, deferred, and
-   suppressed dispositions visible as residual risk with owner and trigger.
-7. **Teach from findings.** Tie lessons to actual gaps/fixes; give next topics,
-   why, 7-day/30-day plans, project exercises, and what to ignore. Each top
-   priority gets a trusted written source and, when available, a relevant
-   YouTube video; record `source_type`, `authority_level`,
-   `why_this_source_is_trusted`, and `checked_at`; the written source is canonical.
-
-The report must sweep every relevant surface and explain plain-English risk
-before technical detail. Pass requires evidence; Finding evidence and risk;
-Unknown a question/evidence request; Not applicable a reason. The first batch
-is not the full scope.
+Every finding carries: rule/detector ID, severity, exact dated evidence,
+plain-English risk, and status. When a shipped detector matches, reuse its detector
+ID from the project's canonical registry instead of a manual one.
 
 ## Example prompts
 
 ```text
-Use $checkyourself to run a read-only production-readiness diagnostic for this app. Do not change code yet.
+Use $checkyourself to verify the claims in this completion report. Read-only;
+label each CONFIRMED / REFUTED / UNVERIFIABLE with evidence.
 ```
 
 ```text
-Use $checkyourself to score this MCP server before launch, list every blocking unknown, and propose the safest first fix batch.
+Use $checkyourself to run the production-readiness scan and score on this app
+before launch, list every blocking unknown, and propose the safest first fix
+batch. Do not change code.
 ```
 
-```text
-Use $checkyourself on this website repo. After the report, make a learning plan from the gaps you found. dashboard inline.
-```
-
-## Safety rules
-
-- Start read-only. Without explicit approval, do not change code, install
-  dependencies, rotate secrets, touch production, or rewrite architecture.
-- Do not invent evidence/inflate the score or paste secrets, customer data,
-  proprietary code, unredacted `.env` values, or unnecessary long artifacts.
-- For regulated, financial, health, legal, life-safety, security-critical, or
-  high-volume systems, recommend qualified expert review.
-
-## Dashboard modes
-
-- Default: no dashboard.
-- `dashboard inline`: compact Markdown dashboard.
-- `dashboard yes`: self-contained HTML/CSS dashboard from the existing report;
-  do not rerun the audit; use the canonical template and complete backlog.
-
-## Voice
-
-Be direct, useful, and evidence-first. Light reality-check tone may target
-project state, never the person; high-stakes findings stay blunt and calm.
+`dashboard inline` after a report adds a compact Markdown dashboard; there is no
+dashboard by default.
