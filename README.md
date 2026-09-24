@@ -77,9 +77,9 @@ published as an npm package that wraps the same stdlib-only Python tool (Python 
 required; Node is only used to launch it):
 
 ```bash
-npm install checkyourself
-npx checkyourself --help          # same CLI as python3 tools/checkyourself.py
-npx checkyourself mcp             # stdio MCP server (11 tools)
+npm install @puenteworks/checkyourself
+npx @puenteworks/checkyourself --help          # same CLI as python3 tools/checkyourself.py
+npx @puenteworks/checkyourself mcp             # stdio MCP server (11 tools)
 ```
 
 The full audit workspace (this repository) remains the operating context your AI
