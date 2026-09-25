@@ -48,11 +48,13 @@ class DocumentationContractTests(unittest.TestCase):
         skill = self.read("skills/checkyourself/SKILL.md")
         scoring = self.read("02_RUN_DIAGNOSTIC/scoring-method.md")
 
-        self.assertIn("Manual fallback contract", skill)
+        # FPR rewrite (2026-09-19) renamed the sections; the contract substance is unchanged.
+        self.assertIn("Manual fallback registry", skill)
         self.assertIn("CY-MANUAL-AUTH-001", skill)
-        self.assertIn("evidence rubric", skill)
-        self.assertIn("../../docs/cli.md#canonical-detector-rule-registry", skill)
-        self.assertIn("final_score = min(base_score, minimum_cap)", skill)
+        self.assertIn("Label with evidence", skill)
+        self.assertIn("canonical registry", skill)
+        # the FPR skill phrases the cap rule compactly; the full formula lives in scoring-method.md (asserted below)
+        self.assertIn("min(base, cap)", skill)
         self.assertIn("base_score = round(sum(category_award))", scoring)
         self.assertIn("final_score = min(base_score, minimum_cap)", scoring)
         self.assertIn("../docs/cli.md#scoring", scoring)
