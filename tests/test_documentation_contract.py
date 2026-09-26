@@ -48,7 +48,7 @@ class DocumentationContractTests(unittest.TestCase):
         skill = self.read("skills/checkyourself/SKILL.md")
         scoring = self.read("02_RUN_DIAGNOSTIC/scoring-method.md")
 
-        self.assertIn("Manual fallback contract", skill)
+        self.assertIn("Manual fallback registry", skill)
         self.assertIn("CY-MANUAL-AUTH-001", skill)
         self.assertIn("evidence rubric", skill)
         self.assertIn("../../docs/cli.md#canonical-detector-rule-registry", skill)
