@@ -20,11 +20,11 @@ not production-safety certification or independent external custody.
 
 - Waves 1–7 hardened score trust, schema enforcement, scanner completeness and
   safe writes, backlog/diff semantics, malformed-input handling, proven versus
-  merely detected evidence, and public validation. See [`WAVE1-REPORT.md`](_retrofit-2026-09-04/WAVE1-REPORT.md)
-  through [`WAVE7-REPORT.md`](_retrofit-2026-09-04/WAVE7-REPORT.md).
+  merely detected evidence, and public validation. See `WAVE1-REPORT.md`
+  through `WAVE7-REPORT.md`.
 - Waves 8–10 aligned public truth, current dogfood proof, and Apache-2.0
-  license surfaces. See [`WAVE8-REPORT.md`](_retrofit-2026-09-04/WAVE8-REPORT.md),
-  [`WAVE9-REPORT.md`](_retrofit-2026-09-04/WAVE9-REPORT.md), and [`WAVE10-REPORT.md`](_retrofit-2026-09-04/WAVE10-REPORT.md).
+  license surfaces. See `WAVE8-REPORT.md`,
+  `WAVE9-REPORT.md`, and `WAVE10-REPORT.md`.
 
 ### 2026-09-04 — ASTRA adversarial review
 
@@ -32,14 +32,14 @@ not production-safety certification or independent external custody.
   non-applicability, residual-risk laundering, unknown/finding folding,
   unsupported report verdicts, broad discovery claims, and missing claim
   binding. The findings and executable repros are recorded in
-  [`ASTRA-REVIEW.md`](_retrofit-2026-09-04/ASTRA-REVIEW.md).
+  `ASTRA-REVIEW.md`.
 
 ### 2026-09-04 — ASTRA fixes and claim binding
 
 - Closed the eight ASTRA findings with verifier-captured evidence, delegation
   receipts, residual-risk separation, independent unknown tracking, semantic
   report validation, and `--claim` evidence binding. Schema validity is now
-  distinct from recomputed verdict consistency. See [`ASTRA-FIX-REPORT.md`](_retrofit-2026-09-04/ASTRA-FIX-REPORT.md).
+  distinct from recomputed verdict consistency. See `ASTRA-FIX-REPORT.md`.
 
 ### 2026-09-04 — Verifier-owned challenge runner
 
@@ -47,7 +47,7 @@ not production-safety certification or independent external custody.
   Definitions use argv-only commands and bounded timeouts; failed and timed-out
   runs fail closed. Only successful verifier-executed `EXECUTED` receipts can
   receive full credit; caller-issued receipts are explicitly `UNVERIFIED` and
-  capped. See [`CHALLENGE-RUNNER-REPORT.md`](_retrofit-2026-09-04/CHALLENGE-RUNNER-REPORT.md).
+  capped. See `CHALLENGE-RUNNER-REPORT.md`.
 
 ### 2026-09-05 — Runner hardening and semantic vacuity
 
@@ -55,31 +55,31 @@ not production-safety certification or independent external custody.
   a project-local HMAC, and checks source, capture, exit, timeout, execution,
   and semantic output state. The HMAC is tamper evidence, not proof of
   independent issuance; external custody remains future work. See
-  [`RUNNER-HARDEN-REPORT.md`](_retrofit-2026-09-04/RUNNER-HARDEN-REPORT.md).
+  `RUNNER-HARDEN-REPORT.md`.
 - Verifier-owned per-surface minimum contracts reject or cap no-op, echo,
-  print-only, hollow-runner, and trivial-regex challenges. See [`VACUITY-REPORT.md`](_retrofit-2026-09-04/VACUITY-REPORT.md).
+  print-only, hollow-runner, and trivial-regex challenges. See `VACUITY-REPORT.md`.
 
 ### 2026-09-05 — Semantic re-execution normalization
 
 - Fresh challenge runs now compare a semantic output digest that normalizes
   volatile durations, timestamps, and absolute paths while retaining raw capture
   hashing for tamper evidence. The final repository proof records 150 tests and
-  88 subtests passed. See [`REEXEC-NORM-REPORT.md`](_retrofit-2026-09-04/REEXEC-NORM-REPORT.md).
+  88 subtests passed. See `REEXEC-NORM-REPORT.md`.
 
 ### 2026-09-05 — Final independent green pair at `cd9cf85`
 
 - Grok and Sol independently reviewed pinned `cd9cf85`; both reported fully
   green after ASTRA, challenge-runner, hardening, and normalization work. The
-  receipts are [`FINAL-grok.md`](_retrofit-2026-09-04/FINAL-grok.md) and [`FINAL-sol.md`](_retrofit-2026-09-04/FINAL-sol.md).
+  receipts are `FINAL-grok.md` and `FINAL-sol.md`.
 
 ### 2026-09-05 — Documentation and token-density passes
 
 - Public docs updated across Forgejo and GitHub: README, `llms.txt`, and this
   changelog reflect the challenge runner, score-time re-execution, semantic
   vacuity rejection, local-integrity binding, `--claim` binding, and the ASTRA
-  arc (see [`DOCS2-REPORT.md`](_retrofit-2026-09-04/DOCS2-REPORT.md)).
+  arc (see `DOCS2-REPORT.md`).
 - Token-density pass (caveman + ponytail compression; protected-verbatim
-  classes untouched), per [`DENSITY-PASS-REPORT.md`](_retrofit-2026-09-04/DENSITY-PASS-REPORT.md):
+  classes untouched), per `DENSITY-PASS-REPORT.md`:
 
   | Scope | Before (chars / tokens) | After (chars / tokens) | Reduction |
   |---|---|---|---|
