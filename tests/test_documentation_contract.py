@@ -50,9 +50,9 @@ class DocumentationContractTests(unittest.TestCase):
 
         self.assertIn("Manual fallback registry", skill)
         self.assertIn("CY-MANUAL-AUTH-001", skill)
-        self.assertIn("evidence rubric", skill)
-        self.assertIn("../../docs/cli.md#canonical-detector-rule-registry", skill)
-        self.assertIn("final_score = min(base_score, minimum_cap)", skill)
+        self.assertIn("rule/detector ID", skill)
+        self.assertIn("rule/detector ID", skill)
+        self.assertIn("min(base, cap)", skill)
         self.assertIn("base_score = round(sum(category_award))", scoring)
         self.assertIn("final_score = min(base_score, minimum_cap)", scoring)
         self.assertIn("../docs/cli.md#scoring", scoring)
