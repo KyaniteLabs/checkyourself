@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CheckYourself Challenge Result",
+  "type": "object",
+  "required": ["tool", "schema", "generated_at", "project", "source_revision", "complete", "surfaces", "receipts", "findings"],
+  "properties": {
+    "tool": { "type": "string" },
+    "schema": { "type": "string", "const": "checkyourself-challenge/1" },
+    "generated_at": { "type": "string", "minLength": 1 },
+    "project": { "type": "string", "minLength": 1 },
+    "source_revision": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "complete": { "type": "boolean" },
+    "surfaces": { "type": "array", "items": { "type": "object" } },
+    "receipts": { "type": "array", "items": { "type": "object" } },
+    "findings": { "type": "array", "items": { "type": "object" } }
+  },
+  "additionalProperties": false
+}
