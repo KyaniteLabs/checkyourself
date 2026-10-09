@@ -63,14 +63,17 @@ sampled. Use the CheckYourself CLI (stdlib-only, read-only, no network, no
 telemetry):
 
 ```
-CY=~/workspaces/checkyourself/tools/checkyourself.py
-python3 $CY describe --format json
-python3 $CY scan <path> --deep --format json --no-write
-python3 $CY coverage --emit            # fill with evidence, then:
-python3 $CY score --findings scan.json --coverage coverage.json --format json
-python3 $CY backlog --findings scan.json --format json
-python3 $CY next    --findings scan.json --format json
-python3 $CY diff --old baseline.json --new current.json --ci   # regression gate
+# Run this setup from the directory containing this installed SKILL.md.
+# Keep the project scan target explicit; do not scan the plugin by accident.
+CY_PLUGIN_ROOT="$(cd ../.. && pwd)"
+CY="$CY_PLUGIN_ROOT/tools/checkyourself.py"
+python3 "$CY" describe --format json
+python3 "$CY" scan <path> --deep --format json --no-write
+python3 "$CY" coverage --emit            # fill with evidence, then:
+python3 "$CY" score --findings scan.json --coverage coverage.json --format json
+python3 "$CY" backlog --findings scan.json --format json
+python3 "$CY" next    --findings scan.json --format json
+python3 "$CY" diff --old baseline.json --new current.json --ci   # regression gate
 ```
 
 If the CLI is missing (repo moved), sweep manually, reuse the registry IDs below,

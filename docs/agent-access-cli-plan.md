@@ -17,6 +17,10 @@ It is grounded in the existing system: `02_RUN_DIAGNOSTIC/scoring-method.md`,
 
 ---
 
+## Diagnostic access boundary
+
+The local CLI does not collect the host environment or forward credentials. Do not enumerate process environment values, shell exports, keychains, provider tokens, or credential files to discover capabilities. Use the bundled `describe` command and approved project configuration instead. Check environment configuration through variable names and presence only; never include values in evidence. Do not transmit diagnostic inputs or outputs to a remote service. Any separately requested external research must use public, non-sensitive queries and must not carry project content, credentials, or environment values.
+
 ## 1. Guiding principle: split judgment from determinism
 
 The single design idea behind everything below:
