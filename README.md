@@ -77,9 +77,9 @@ published as an npm package that wraps the same stdlib-only Python tool (Python 
 required; Node is only used to launch it):
 
 ```bash
-npm install checkyourself
-npx checkyourself --help          # same CLI as python3 tools/checkyourself.py
-npx checkyourself mcp             # stdio MCP server (11 tools)
+npm install @puenteworks/checkyourself
+npx @puenteworks/checkyourself --help   # same CLI as python3 tools/checkyourself.py
+npx @puenteworks/checkyourself mcp      # stdio MCP server (11 tools)
 ```
 
 The full audit workspace (this repository) remains the operating context your AI
@@ -137,7 +137,7 @@ At score time, stored executed receipts survive only a fresh verifier run that a
 
 The local integrity HMAC is project-local tamper evidence. It is **not** proof of independent issuance, operator identity, or external custody; externally controlled custody is future work. `--claim` records the accepted completion claim and labels evidence rows as claim-bound or unbound. Report validation labels schema validity separately from semantic verdict consistency and recomputes the verdict rather than trusting the supplied score.
 
-The ASTRA adversarial review found eight findings and the retrofit closed them; the evidence trail is `ASTRA-REVIEW.md` and `ASTRA-FIX-REPORT.md`.
+The ASTRA adversarial review found eight findings and the retrofit closed them; the ASTRA review and fix reports are not included in this repository.
 
 ---
 
@@ -335,7 +335,7 @@ Apache License, Version 2.0 — free and open source. See [`LICENSE`](LICENSE).
 | **Category** | Local-first completion-evidence review for apps built with AI |
 | **Best for** | founders and engineers shipping AI-generated apps |
 | **Not** | a generic linter or code formatter |
-| **Source** | [GitHub](https://github.com/KyaniteLabs/checkyourself) · [Forgejo](https://git.kyanitelabs.tech/KyaniteLabs/checkyourself) |
+| **Source** | [GitHub](https://github.com/KyaniteLabs/checkyourself) · [Forgejo](https://git.kyanitelabs.tech/KyaniteLabs/checkyourself) (private, maintainers only) |
 | **Keywords** | AI app completion evidence, verifier-owned challenge, pre-launch review |
 
 ## Who it's for
@@ -366,7 +366,7 @@ Treat the README status and release tags as source of truth for maturity. Valida
 
 - Maintained as of 2026 on the default branch
 - Prefer release tags when pinning dependencies
-- Report issues on the canonical remote listed above
+- Report issues on [GitHub](https://github.com/KyaniteLabs/checkyourself/issues)
 
 ## Agent surface
 
@@ -376,7 +376,7 @@ Treat the README status and release tags as source of truth for maturity. Valida
 
 ## Contributing
 
-Issues and PRs welcome on the canonical remote. Keep public docs free of secrets and machine-local paths.
+Issues and PRs welcome on [GitHub](https://github.com/KyaniteLabs/checkyourself). Keep public docs free of secrets and machine-local paths.
 
 ## License
 
