@@ -1,0 +1,414 @@
+schema_version: 1
+pack_id: prodhardening.fullstack.production
+name: Full-Stack Production Hardening Capability Pack
+version: 1.0.0
+status: stable
+model_agnostic: true
+description: >
+  A vendor-neutral capability/skill set for taking full-stack applications from functional prototype to production-ready system.
+principles:
+  - Production is a system property, not a frontend/backend checkbox.
+  - Capabilities are task-oriented and triggered by work to be done, not by document chapters.
+  - Mandatory safety controls belong in tools, tests, policy-as-code, CI/CD, and approval gates, not only in model instructions.
+  - Progressive disclosure keeps each capability concise while references and templates carry deeper detail.
+capabilities:
+  - id: prodhardening.orchestrator
+    name: production-hardening-orchestrator
+    layer: "00 Operating Model"
+    path: capabilities/00-production-hardening-orchestrator/SKILL.md
+    summary: "Classify full-stack requests, route to the right capabilities, and synthesize production-readiness decisions."
+    triggers:
+      - "production ready"
+      - "hardening"
+      - "launch checklist"
+      - "review the stack"
+      - "full-stack"
+      - "ship"
+      - "architecture audit"
+      - "what am I missing"
+      - "vibe coding"
+      - "production reality"
+  - id: prodhardening.spec_driven_delivery
+    name: spec-driven-delivery
+    layer: "01 Product Intent & Contracts"
+    path: capabilities/01-spec-driven-delivery/SKILL.md
+    summary: "Convert ambiguous product intent into machine-checkable specs, acceptance criteria, and change plans."
+    triggers:
+      - "requirements"
+      - "user story"
+      - "acceptance criteria"
+      - "OpenAPI"
+      - "AsyncAPI"
+      - "JSON Schema"
+      - "ADR"
+      - "RFC"
+      - "spec"
+      - "contract"
+      - "roadmap"
+      - "feature plan"
+  - id: prodhardening.frontend_experience
+    name: frontend-experience
+    layer: "02 Frontend"
+    path: capabilities/02-frontend-experience/SKILL.md
+    summary: "Build and harden user interfaces for accessibility, performance, resilience, and secure client behavior."
+    triggers:
+      - "frontend"
+      - "UI"
+      - "component"
+      - "React"
+      - "Vue"
+      - "Angular"
+      - "Svelte"
+      - "a11y"
+      - "WCAG"
+      - "form"
+      - "routing"
+      - "lazy loading"
+      - "bundle"
+      - "hydration"
+      - "Core Web Vitals"
+  - id: prodhardening.api_backend_services
+    name: api-backend-services
+    layer: "03 APIs & Backend Logic"
+    path: capabilities/03-api-backend-services/SKILL.md
+    summary: "Design and harden APIs, service boundaries, validation, business logic, and integration contracts."
+    triggers:
+      - "API"
+      - "endpoint"
+      - "REST"
+      - "GraphQL"
+      - "gRPC"
+      - "webhook"
+      - "controller"
+      - "service"
+      - "middleware"
+      - "validation"
+      - "idempotency"
+      - "pagination"
+      - "OpenAPI"
+      - "status code"
+      - "queue"
+      - "job"
+  - id: prodhardening.data_storage_migrations
+    name: data-storage-migrations
+    layer: "04 Database & Storage"
+    path: capabilities/04-data-storage-migrations/SKILL.md
+    summary: "Design schemas, migrations, queries, indexes, transactions, storage selection, and data lifecycle controls."
+    triggers:
+      - "database"
+      - "schema"
+      - "migration"
+      - "index"
+      - "SQL"
+      - "PostgreSQL"
+      - "MySQL"
+      - "MongoDB"
+      - "Redis"
+      - "ORM"
+      - "transaction"
+      - "backup"
+      - "retention"
+      - "data model"
+      - "object storage"
+  - id: prodhardening.identity_access_control
+    name: identity-access-control
+    layer: "05 Auth & Permissions"
+    path: capabilities/05-identity-access-control/SKILL.md
+    summary: "Design and harden authentication, authorization, sessions, tokens, identity federation, and permission models."
+    triggers:
+      - "auth"
+      - "authentication"
+      - "authorization"
+      - "login"
+      - "signup"
+      - "JWT"
+      - "OAuth"
+      - "OIDC"
+      - "SSO"
+      - "session"
+      - "cookie"
+      - "role"
+      - "permission"
+      - "RBAC"
+      - "ABAC"
+      - "MFA"
+      - "service account"
+  - id: prodhardening.multitenancy_rls_isolation
+    name: multitenancy-rls-isolation
+    layer: "06 Tenant Isolation & RLS"
+    path: capabilities/06-multitenancy-rls-isolation/SKILL.md
+    summary: "Harden multi-tenant systems with database-enforced isolation, tenant-aware caches, and cross-tenant negative tests."
+    triggers:
+      - "multi-tenant"
+      - "tenant isolation"
+      - "RLS"
+      - "row-level security"
+      - "shared schema"
+      - "tenant_id"
+      - "workspace"
+      - "organization"
+      - "B2B SaaS"
+      - "cross-tenant"
+      - "policy"
+  - id: prodhardening.security_privacy_threat_modeling
+    name: security-privacy-threat-modeling
+    layer: "07 Security & Privacy"
+    path: capabilities/07-security-privacy-threat-modeling/SKILL.md
+    summary: "Find and reduce application, API, infrastructure, privacy, and AI security risks before release."
+    triggers:
+      - "security"
+      - "threat model"
+      - "OWASP"
+      - "XSS"
+      - "CSRF"
+      - "SQL injection"
+      - "SSRF"
+      - "CSP"
+      - "CORS"
+      - "encryption"
+      - "secrets"
+      - "privacy"
+      - "PII"
+      - "audit log"
+      - "vulnerability"
+      - "secure code"
+  - id: prodhardening.config_secrets_runtime
+    name: config-secrets-runtime
+    layer: "08 Configuration, Secrets & Runtime"
+    path: capabilities/08-config-secrets-runtime/SKILL.md
+    summary: "Harden environment configuration, secret management, feature flags, runtime policy, and safe defaults."
+    triggers:
+      - "env"
+      - "environment variable"
+      - "config"
+      - "secret"
+      - "API key"
+      - "credentials"
+      - "feature flag"
+      - "toggle"
+      - "runtime"
+      - "rotation"
+      - "staging"
+      - "dotenv"
+      - "config drift"
+  - id: prodhardening.testing_quality_engineering
+    name: testing-quality-engineering
+    layer: "09 Testing & Quality Gates"
+    path: capabilities/09-testing-quality-engineering/SKILL.md
+    summary: "Create test strategies and quality gates that prove correctness, compatibility, security, performance, and operational safety."
+    triggers:
+      - "test"
+      - "QA"
+      - "coverage"
+      - "flaky"
+      - "regression"
+      - "e2e"
+      - "integration test"
+      - "contract test"
+      - "unit test"
+      - "eval"
+      - "benchmark"
+      - "acceptance test"
+      - "quality gate"
+  - id: prodhardening.ci_cd_supply_chain
+    name: ci-cd-supply-chain
+    layer: "10 CI/CD & Version Control"
+    path: capabilities/10-ci-cd-supply-chain/SKILL.md
+    summary: "Harden repositories, pull requests, CI/CD pipelines, releases, provenance, dependencies, and artifact integrity."
+    triggers:
+      - "CI"
+      - "CD"
+      - "pipeline"
+      - "Git"
+      - "branch"
+      - "PR"
+      - "release"
+      - "dependency"
+      - "SBOM"
+      - "provenance"
+      - "SLSA"
+      - "signing"
+      - "artifact"
+      - "container scan"
+      - "versioning"
+      - "lockfile"
+  - id: prodhardening.hosting_deployment_release
+    name: hosting-deployment-release
+    layer: "11 Hosting & Deployment"
+    path: capabilities/11-hosting-deployment-release/SKILL.md
+    summary: "Choose hosting and deployment patterns, design safe releases, configure health checks, and plan rollbacks."
+    triggers:
+      - "hosting"
+      - "deploy"
+      - "deployment"
+      - "serverless"
+      - "container"
+      - "Docker"
+      - "domain"
+      - "DNS"
+      - "TLS"
+      - "staging"
+      - "production"
+      - "blue-green"
+      - "canary"
+      - "rolling"
+      - "health check"
+      - "smoke test"
+      - "rollback"
+  - id: prodhardening.cloud_infrastructure_iac
+    name: cloud-infrastructure-iac
+    layer: "12 Cloud & Compute"
+    path: capabilities/12-cloud-infrastructure-iac/SKILL.md
+    summary: "Design cloud infrastructure, networking, IAM, compute, storage, policy-as-code, cost controls, and IaC workflows."
+    triggers:
+      - "cloud"
+      - "infrastructure"
+      - "IaC"
+      - "Terraform"
+      - "OpenTofu"
+      - "Pulumi"
+      - "Kubernetes"
+      - "K8s"
+      - "VPC"
+      - "network"
+      - "IAM"
+      - "compute"
+      - "storage"
+      - "managed database"
+      - "queue"
+      - "cost"
+      - "drift"
+      - "policy-as-code"
+  - id: prodhardening.performance_caching_rate_limits
+    name: performance-caching-rate-limits
+    layer: "13 Performance, Caching & Rate Limits"
+    path: capabilities/13-performance-caching-rate-limits/SKILL.md
+    summary: "Improve latency and throughput with measurement, caching, CDN strategy, rate limits, backpressure, and abuse controls."
+    triggers:
+      - "performance"
+      - "latency"
+      - "throughput"
+      - "load test"
+      - "k6"
+      - "JMeter"
+      - "Locust"
+      - "cache"
+      - "Redis"
+      - "CDN"
+      - "Cache-Control"
+      - "invalidation"
+      - "rate limit"
+      - "quota"
+      - "token bucket"
+      - "429"
+      - "abuse"
+      - "throttle"
+  - id: prodhardening.scaling_load_resilience
+    name: scaling-load-resilience
+    layer: "14 Load Balancing & Scaling"
+    path: capabilities/14-scaling-load-resilience/SKILL.md
+    summary: "Design scalable, fault-tolerant runtime architectures with load balancing, autoscaling, queues, circuit breakers, and chaos validation."
+    triggers:
+      - "load balancer"
+      - "autoscale"
+      - "horizontal scaling"
+      - "capacity"
+      - "queue"
+      - "worker"
+      - "circuit breaker"
+      - "retry"
+      - "timeout"
+      - "backpressure"
+      - "bulkhead"
+      - "thundering herd"
+      - "degrade"
+      - "chaos"
+      - "resilience"
+  - id: prodhardening.observability_sre_incident_response
+    name: observability-sre-incident-response
+    layer: "15 Error Tracking, Logs & Incidents"
+    path: capabilities/15-observability-sre-incident-response/SKILL.md
+    summary: "Instrument systems with logs, metrics, traces, alerts, dashboards, runbooks, incident response, and root-cause analysis."
+    triggers:
+      - "logs"
+      - "logging"
+      - "metrics"
+      - "traces"
+      - "OpenTelemetry"
+      - "observability"
+      - "error tracking"
+      - "correlation ID"
+      - "dashboard"
+      - "alert"
+      - "SLO"
+      - "incident"
+      - "RCA"
+      - "postmortem"
+      - "on-call"
+      - "runbook"
+  - id: prodhardening.availability_recovery_continuity
+    name: availability-recovery-continuity
+    layer: "16 Availability & Recovery"
+    path: capabilities/16-availability-recovery-continuity/SKILL.md
+    summary: "Define SLOs, error budgets, backup/restore, disaster recovery, failover, business continuity, and game-day exercises."
+    triggers:
+      - "availability"
+      - "SLA"
+      - "SLO"
+      - "SLI"
+      - "error budget"
+      - "backup"
+      - "restore"
+      - "RTO"
+      - "RPO"
+      - "failover"
+      - "multi-region"
+      - "DR"
+      - "disaster recovery"
+      - "business continuity"
+      - "game day"
+      - "uptime"
+      - "downtime"
+  - id: prodhardening.ai_agent_rag_governance
+    name: ai-agent-rag-governance
+    layer: "17 AI/RAG & Agent Governance"
+    path: capabilities/17-ai-agent-rag-governance/SKILL.md
+    summary: "Harden AI features and AI coding workflows with evals, retrieval grounding, prompt-injection defenses, sandboxing, audit logs, and graded autonomy."
+    triggers:
+      - "AI"
+      - "LLM"
+      - "RAG"
+      - "citation"
+      - "retrieval"
+      - "eval"
+      - "hallucination"
+      - "prompt injection"
+      - "agent"
+      - "tool use"
+      - "sandbox"
+      - "autonomy"
+      - "human approval"
+      - "model agnostic"
+      - "coding agent"
+  - id: prodhardening.privacy_compliance_data_governance
+    name: privacy-compliance-data-governance
+    layer: "18 Privacy, Compliance & Data Governance"
+    path: capabilities/18-privacy-compliance-data-governance/SKILL.md
+    summary: "Operationalize privacy, compliance, data classification, retention, consent, deletion, auditability, and evidence management."
+    triggers:
+      - "privacy"
+      - "compliance"
+      - "PII"
+      - "PHI"
+      - "PCI"
+      - "GDPR"
+      - "CCPA"
+      - "consent"
+      - "retention"
+      - "deletion"
+      - "DSAR"
+      - "data export"
+      - "data classification"
+      - "data residency"
+      - "audit evidence"
+      - "privacy review"
