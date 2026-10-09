@@ -3,6 +3,10 @@
 The diagnostic is read-only. Its job is to create a Production Reality Report:
 the honest pre-launch reality check before production does the grading.
 
+## Evidence privacy boundary
+
+Inspect only the user-approved project and keep evidence local. For secrets and environment configuration, report file paths, variable names, presence, and redacted findings; never collect or reproduce secret values, credentials, session cookies, complete environment dumps, or raw credential files. Do not upload project files, logs, environment data, findings, or reports to any service. If a user asks to share a report, first produce a redacted local copy for their review and obtain explicit approval for the named destination and exact content. General permission to diagnose is not permission for external transmission.
+
 ## Diagnostic phases
 
 1. **Map the app** - purpose, users, data, stack, deployment path.
