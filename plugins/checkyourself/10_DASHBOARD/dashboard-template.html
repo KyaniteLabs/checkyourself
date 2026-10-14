@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="{{PRIMARY_LANGUAGE}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CheckYourself Dashboard - {{PROJECT_NAME}}</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --void: #05070b;
+    --void-2: #070a10;
+    --basalt: #0b131d;
+    --basalt-2: #0e1b29;
+    --basalt-3: #122335;
+    --field: #07111b;
+    --panel: #08141f;
+    --panel-strong: #0b1a29;
+    --line: #496174;
+    --line-strong: #7fa2b7;
+    --text: #f7fbff;
+    --text-2: #e5eef7;
+    --muted: #c7d8e8;
+    --cyan: #5edce8;
+    --cyan-2: #2aaec1;
+    --magenta: #e85682;
+    --amber: #e9c960;
+    --green: #7edba5;
+    --red: #ff5c70;
+    --radius: 8px;
+    --max: 1180px;
+    --body-font: "Plus Jakarta Sans", "Atkinson Hyperlegible", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono-font: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html {
+    background: var(--void);
+    scroll-behavior: auto;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    color: var(--text);
+    background: #05070b;
+    font-family: var(--body-font);
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body::before {
+    display: none;
+  }
+
+  a { color: var(--cyan); text-underline-offset: 0.18em; }
+  a:hover, a:focus-visible { color: #dcfbff; }
+  a:focus-visible, button:focus-visible { outline: 3px solid var(--amber); outline-offset: 3px; }
+
+  .skip-link {
+    position: absolute;
+    top: -100px;
+    left: 16px;
+    z-index: 10;
+    padding: 10px 14px;
+    border-radius: 0 0 var(--radius) var(--radius);
+    background: var(--amber);
+    color: #07111b;
+    font-weight: 800;
+  }
+
+  .skip-link:focus { top: 0; }
+
+  main {
+    position: relative;
+    width: min(var(--max), calc(100% - 32px));
+    margin: 0 auto;
+    padding: 28px 0 56px;
+  }
+
+  header {
+    display: grid;
+    grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.55fr);
+    gap: 16px;
+    align-items: stretch;
+    margin-bottom: 16px;
+  }
+
+  section { margin-top: 16px; }
+
+  .panel {
+    position: relative;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--panel);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 22px 60px rgba(0,0,0,0.34);
+    padding: 20px;
+  }
+
+  .panel::before {
+    content: "";
+    position: absolute;
+    left: 16px;
+    top: -1px;
+    width: 18px;
+    height: 2px;
+    background: var(--cyan);
+    box-shadow: 24px 0 0 var(--amber), 48px 0 0 var(--magenta);
+  }
+
+  .hero {
+    min-height: 320px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 24px;
+  }
+
+  .eyebrow, .mono, th, .badge, .status, .metric-label {
+    font-family: var(--mono-font);
+  }
+
+  .eyebrow {
+    margin: 0 0 16px;
+    color: var(--amber);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+  }
+
+  h1, h2, h3, p { margin-top: 0; }
+
+  h1 {
+    margin-bottom: 14px;
+    font-size: 3rem;
+    line-height: 1.04;
+    letter-spacing: 0;
+  }
+
+  h2 {
+    margin-bottom: 12px;
+    font-size: 1.35rem;
+    line-height: 1.2;
+    letter-spacing: 0;
+  }
+
+  h3 {
+    margin-bottom: 8px;
+    color: var(--text);
+    font-size: 1.05rem;
+    line-height: 1.25;
+  }
+
+  p { color: var(--text-2); max-width: 78ch; }
+
+  .language-note {
+    margin-bottom: 0;
+    color: var(--muted);
+    font-size: 0.96rem;
+  }
+
+  .stack {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 18px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .badge, .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 32px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 5px 9px;
+    background: #06131e;
+    color: var(--text);
+    font-size: 0.78rem;
+  }
+
+  .score-panel {
+    display: grid;
+    align-content: space-between;
+    gap: 16px;
+  }
+
+  .score {
+    font-family: var(--mono-font);
+    font-size: 4.8rem;
+    line-height: 1;
+    font-weight: 800;
+    color: var(--text);
+  }
+
+  .score small {
+    color: var(--muted);
+    font-size: 1rem;
+    font-weight: 700;
+  }
+
+  .score-bar {
+    height: 14px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: #030a12;
+    overflow: hidden;
+  }
+
+  .score-bar > div {
+    height: 100%;
+    width: {{SCORE}}%;
+    background: linear-gradient(90deg, var(--red), var(--amber), var(--cyan), var(--green));
+  }
+
+  .risk-grid, .two-col, .three-col {
+    display: grid;
+    gap: 12px;
+  }
+
+  .risk-grid { grid-template-columns: repeat(5, 1fr); }
+  .two-col { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .three-col { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+  .metric {
+    min-height: 112px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 14px;
+    background: #06131e;
+  }
+
+  .metric strong {
+    display: block;
+    font-family: var(--mono-font);
+    font-size: 2.15rem;
+    line-height: 1;
+  }
+
+  .metric-label {
+    display: block;
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .p0 { color: #ffd0d7; border-color: rgba(255,92,112,0.48); }
+  .p1 { color: #ffe8a6; border-color: rgba(233,201,96,0.54); }
+  .p2 { color: #c8f7ff; border-color: rgba(94,220,232,0.48); }
+  .p3 { color: #d2ffe3; border-color: rgba(126,219,165,0.45); }
+  .unknown { color: #e7d3ff; border-color: rgba(232,86,130,0.5); }
+  .pass { color: #d2ffe3; border-color: rgba(126,219,165,0.45); }
+  .finding { color: #ffe8a6; border-color: rgba(233,201,96,0.54); }
+  .neutral { color: var(--text-2); border-color: var(--line); }
+
+  .callout {
+    border-left: 4px solid var(--amber);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    background: #19190f;
+  }
+
+  .callout p:last-child { margin-bottom: 0; }
+
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+  }
+  .table-wrap:focus-visible {
+    outline: 3px solid var(--amber);
+    outline-offset: 3px;
+  }
+
+  table {
+    width: 100%;
+    min-width: 760px;
+    border-collapse: collapse;
+  }
+
+  th, td {
+    padding: 12px 11px;
+    border-bottom: 1px solid #34495a;
+    vertical-align: top;
+    text-align: left;
+  }
+
+  th {
+    color: var(--text);
+    background: #06131e;
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  td { color: var(--text-2); font-size: 0.94rem; }
+  tr:last-child td { border-bottom: 0; }
+
+  .learning-list {
+    display: grid;
+    gap: 12px;
+  }
+
+  .learning-item {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: #06131e;
+    padding: 15px;
+  }
+
+  .learning-item p { margin-bottom: 8px; }
+
+  .resources {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .resources a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    padding: 5px 10px;
+    background: #072532;
+  }
+
+  .access-list {
+    margin: 0;
+    padding-left: 20px;
+    color: var(--text-2);
+  }
+
+  footer {
+    margin-top: 18px;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  @media (max-width: 940px) {
+    header, .two-col, .three-col { grid-template-columns: 1fr; }
+    .risk-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    h1 { font-size: 2.25rem; }
+    .score { font-size: 3.7rem; }
+  }
+
+  @media (max-width: 560px) {
+    body { font-size: 16px; }
+    main { width: min(100% - 20px, var(--max)); padding-top: 16px; }
+    .panel { padding: 16px; }
+    .risk-grid { grid-template-columns: 1fr; }
+    table { min-width: 680px; }
+  }
+
+  @media print {
+    body { background: #fff; color: #000; }
+    body::before { display: none; }
+    .panel, .metric, .learning-item, .table-wrap { box-shadow: none; background: #fff; color: #000; border-color: #999; }
+    p, td, .muted, .language-note { color: #222; }
+    a { color: #0645ad; }
+  }
+</style>
+<style id="checkyourself-refinements">
+  /* Tasteful, static fine touches layered over the base instrument design.
+     No motion is introduced, in keeping with the dashboard's accessibility promise. */
+
+  /* Keep the surface deterministic for WCAG scanners; use accents, not translucent text backdrops. */
+  body {
+    background: #05070b;
+    font-variant-numeric: tabular-nums;
+  }
+  body::before {
+    display: none;
+  }
+
+  ::selection { background: rgba(94, 220, 232, 0.32); color: #fff; }
+
+  /* Panels: a subtle top sheen and a deeper, tighter shadow for separation. */
+  .panel {
+    background: var(--panel);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.07),
+      0 1px 0 rgba(0, 0, 0, 0.4),
+      0 26px 60px -30px rgba(0, 0, 0, 0.75);
+  }
+
+  /* Eyebrow gets a small leading tick; section headings get a cyan→magenta accent rule. */
+  .eyebrow { display: inline-flex; align-items: center; gap: 9px; }
+  .eyebrow::before { content: ""; width: 14px; height: 2px; background: var(--amber); }
+  .panel > h2 { position: relative; padding-bottom: 11px; }
+  .panel > h2::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 34px;
+    height: 2px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--cyan), var(--magenta));
+  }
+
+  /* Score: tabular figures and a soft cyan halo; the meter fill gets a matching glow. */
+  .score { font-variant-numeric: tabular-nums; letter-spacing: -0.01em; text-shadow: 0 0 28px rgba(94, 220, 232, 0.28); }
+  .score-bar { box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6); }
+  .score-bar > div { box-shadow: 0 0 14px rgba(94, 220, 232, 0.45); }
+
+  /* Metric cards: a colored top edge per severity and aligned, condensed figures. */
+  .metric strong { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .metric.p0 { box-shadow: inset 0 3px 0 var(--red); }
+  .metric.p1 { box-shadow: inset 0 3px 0 var(--amber); }
+  .metric.p2 { box-shadow: inset 0 3px 0 var(--cyan); }
+  .metric.p3 { box-shadow: inset 0 3px 0 var(--green); }
+  .metric.unknown { box-shadow: inset 0 3px 0 var(--magenta); }
+
+  /* Tables: sticky header without translucent row backgrounds. */
+  thead th { position: sticky; top: 0; z-index: 1; background: #07151f; }
+
+  /* Status chips: a glowing dot in the chip's own color. */
+  .status { position: relative; }
+  .status::before {
+    content: "";
+    flex: 0 0 auto;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 8px currentColor;
+  }
+
+  /* Resource links read as outbound. */
+  .resources a::after { content: " \2197"; opacity: 0.7; }
+
+  /* Footer sits below a hairline divider. */
+  footer { border-top: 1px solid var(--line); padding-top: 14px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+
+  @media print {
+    body { background: #fff !important; }
+    body::before { display: none !important; }
+    .score-bar > div { box-shadow: none; }
+    .panel > h2::after { background: #999; }
+  }
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">{{SKIP_LINK_LABEL}}</a>
+<main id="main">
+  <header>
+    <section class="panel hero" aria-labelledby="dashboard-title">
+      <div>
+        <p class="eyebrow">CheckYourself // Production Reality</p>
+        <h1 id="dashboard-title">{{PROJECT_NAME}}</h1>
+        <p>{{ONE_SENTENCE_APP_SUMMARY}}</p>
+        <p class="language-note">{{LANGUAGE_NOTE}}</p>
+        <ul class="stack" aria-label="Detected stack">{{DETECTED_STACK_BADGES}}</ul>
+      </div>
+      <div class="callout">
+        <p><strong>{{SHIP_STATUS_LABEL}}:</strong> {{SHIP_STATUS}}</p>
+        <p><strong>{{NEXT_DECISION_LABEL}}:</strong> {{NEXT_USER_DECISION}}</p>
+      </div>
+    </section>
+
+    <aside class="panel score-panel" aria-labelledby="score-title">
+      <div>
+        <p class="eyebrow">{{SCORE_LABEL}}</p>
+        <h2 id="score-title">{{PRODUCTION_REALITY_SCORE_LABEL}}</h2>
+        <div class="score">{{SCORE}}<small>/100</small></div>
+        <div class="score-bar" role="meter" aria-label="{{SCORE_METER_LABEL}}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{SCORE}}"><div></div></div>
+      </div>
+      <p><strong>{{CONFIDENCE_LABEL}}:</strong> {{CONFIDENCE}}</p>
+      <p>{{SCORE_CAPS}}</p>
+    </aside>
+  </header>
+
+  <section class="risk-grid" aria-label="{{RISK_COUNTS_LABEL}}">
+    <div class="metric p0"><strong>{{P0_COUNT}}</strong><span class="metric-label">{{P0_LABEL}}</span></div>
+    <div class="metric p1"><strong>{{P1_COUNT}}</strong><span class="metric-label">{{P1_LABEL}}</span></div>
+    <div class="metric p2"><strong>{{P2_COUNT}}</strong><span class="metric-label">{{P2_LABEL}}</span></div>
+    <div class="metric p3"><strong>{{P3_COUNT}}</strong><span class="metric-label">{{P3_LABEL}}</span></div>
+    <div class="metric unknown"><strong>{{UNKNOWN_COUNT}}</strong><span class="metric-label">{{UNKNOWN_LABEL}}</span></div>
+  </section>
+
+  <section class="two-col">
+    <div class="panel">
+      <h2>{{DO_NOT_SHIP_LABEL}}</h2>
+      <div class="callout">{{DO_NOT_SHIP_FLAGS}}</div>
+    </div>
+    <div class="panel">
+      <h2>{{ACCESSIBLE_READING_LABEL}}</h2>
+      <ul class="access-list">
+        {{ACCESSIBILITY_NOTES}}
+      </ul>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="coverage-title">
+    <h2 id="coverage-title">{{COVERAGE_LABEL}}</h2>
+    <p>{{COVERAGE_SUMMARY}}</p>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="{{COVERAGE_TABLE_LABEL}}">
+      <table>
+        <thead><tr><th>{{SURFACE_LABEL}}</th><th>{{STATUS_LABEL}}</th><th>{{EVIDENCE_LABEL}}</th><th>{{FINDINGS_LABEL}}</th></tr></thead>
+        <tbody>
+          {{COVERAGE_ROWS}}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="backlog-title">
+    <h2 id="backlog-title">{{BACKLOG_LABEL}}</h2>
+    <p>{{BACKLOG_SUMMARY}}</p>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="{{BACKLOG_TABLE_LABEL}}">
+      <table>
+        <thead><tr><th>{{ORDER_LABEL}}</th><th>{{ID_LABEL}}</th><th>{{SEVERITY_LABEL}}</th><th>{{FINDING_LABEL}}</th><th>{{STATUS_LABEL}}</th><th>{{NEXT_STEP_LABEL}}</th></tr></thead>
+        <tbody>
+          {{BACKLOG_ROWS}}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="two-col">
+    <div class="panel">
+      <h2>{{REMEDIATION_WAVES_LABEL}}</h2>
+      {{REMEDIATION_WAVES}}
+    </div>
+    <div class="panel">
+      <h2>{{CURRENT_APPROVAL_BATCH_LABEL}}</h2>
+      <p>{{APPROVAL_BATCH_SUMMARY}}</p>
+      {{APPROVAL_BATCH_CARDS}}
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="learning-title">
+    <h2 id="learning-title">{{LEARNING_PRIORITIES_LABEL}}</h2>
+    <p>{{LEARNING_SUMMARY}}</p>
+    <div class="learning-list">
+      {{LEARNING_PLAN_ITEMS}}
+    </div>
+  </section>
+
+  <footer>
+    {{DASHBOARD_FOOTER}}
+  </footer>
+</main>
+</body>
+</html>

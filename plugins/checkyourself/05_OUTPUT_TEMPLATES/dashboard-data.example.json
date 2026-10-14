@@ -1,0 +1,86 @@
+{
+  "project": "Example App",
+  "summary": "Replace this sample data with your diagnostic output.",
+  "score": 52,
+  "confidence": "medium",
+  "generated_at": "",
+  "status": "Needs improvement",
+  "counts": {
+    "P0": 2,
+    "P1": 4,
+    "P2": 6,
+    "P3": 3
+  },
+  "do_not_ship": [
+    {
+      "id": "F-001",
+      "title": "Server-side authorization is not proven",
+      "risk": "Users may be able to access data or actions they should not have."
+    },
+    {
+      "id": "F-002",
+      "title": "Secrets handling is unclear",
+      "risk": "Private keys or tokens may leak into logs, client bundles, or source control."
+    }
+  ],
+  "coverage": [
+    {
+      "surface": "Auth and permissions",
+      "status": "Finding",
+      "evidence": "Routes found; server-side checks not yet proven",
+      "finding_ids": [
+        "F-001"
+      ]
+    },
+    {
+      "surface": "Secrets and runtime config",
+      "status": "Finding",
+      "evidence": ".env references detected; no documented secret policy",
+      "finding_ids": [
+        "F-002"
+      ]
+    }
+  ],
+  "backlog": [
+    {
+      "order": 1,
+      "id": "F-001",
+      "severity": "P0",
+      "fix": "Add server-side authorization checks to protected routes",
+      "status": "proposed",
+      "verification": "Negative access tests"
+    },
+    {
+      "order": 2,
+      "id": "F-002",
+      "severity": "P0",
+      "fix": "Document secret boundaries and verify no secret values are exposed",
+      "status": "proposed",
+      "verification": "Secret scan and runtime check"
+    }
+  ],
+  "learning_plan": [
+    {
+      "concept": "Authorization vs authentication",
+      "plain_english": "Logging in proves who someone is. Authorization proves what they are allowed to do after they log in.",
+      "secondary_language": "confirmed-secondary-language-name",
+      "plain_secondary_language": "Confirmed second-language explanation goes here after the user chooses that language.",
+      "why": "Your app needs proof that logged-in users can only do allowed actions.",
+      "practice": "Write one negative test where User A tries to access User B's data.",
+      "triggered_by": ["F-001"],
+      "do_this_next": "Find one protected action and describe who is allowed to perform it.",
+      "do_this_next_secondary_language": "Confirmed second-language next action goes here after user confirmation.",
+      "success_signal": "The app blocks a user from seeing or changing someone else's data.",
+      "source_title": "OWASP: Authorization Cheat Sheet",
+      "source_url": "https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html",
+      "source_type": "standards body documentation",
+      "authority_level": "high",
+      "why_this_source_is_trusted": "OWASP is a widely used application-security standards community.",
+      "checked_at": "YYYY-MM-DD",
+      "youtube_title": "Broken Access Control Explained: OWASP Top 10 A01 Explained with Examples",
+      "youtube_url": "https://www.youtube.com/watch?v=vUFVxoV5y_I",
+      "video_trust_note": "Established application-security educator; verify fit during live generation.",
+      "video_authority_level": "supplemental"
+    }
+  ]
+}
