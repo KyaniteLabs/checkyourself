@@ -9,7 +9,7 @@
   (constants, errors, models, util, config, challenge_config, challenge_run,
   scanning, detectors, scan, report, coverage, receipts, jsonlite,
   validation, scoring, planning, describe, output, project, cli, mcp), a
-  re-export-only facade (`__init__.py`, 404 lines), and a 24-line
+  re-export-only facade (`__init__.py`, 573 lines), and a 25-line
   compatibility launcher at `tools/checkyourself.py` so every documented
   invocation (`python3 tools/checkyourself.py <verb>`, the npm bin wrapper,
   CI, and file-path module loaders) keeps working verbatim. The 11-tool MCP
