@@ -323,6 +323,8 @@ Issues and pull requests are welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md) a
 
 Apache License, Version 2.0 — free and open source. See [`LICENSE`](LICENSE).
 
+**Relicensing note (dated):** GitHub release `v1.4.2` (published 2026-05-29) shipped an MIT `LICENSE` and a release body that said “MIT licensed”. From `v1.7.0` (published 2026-06-13) onward, including current HEAD, the project is Apache-2.0. Copies obtained under MIT remain under MIT; Apache-2.0 §4 notice and attribution obligations apply to copies obtained under Apache-2.0. This note does not change any grant.
+
 <!-- s-plus-geo:start -->
 
 ## What is CheckYourself?
