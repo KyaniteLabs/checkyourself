@@ -4,6 +4,7 @@
 This script uses only the Python standard library so it can run locally or in
 GitHub Actions without dependency installation.
 """
+
 from __future__ import annotations
 
 import json
@@ -155,9 +156,19 @@ def is_ignored(patterns: set[str], rel: str) -> bool:
 
 
 IGNORED_DIR_NAMES = {
-    ".git", ".omx", ".omc", "checkyourself-creator-launch-kit copy",
-    "node_modules", "dist", "build", ".venv", "venv", "__pycache__",
-    ".pytest_cache", ".ruff_cache", ".worktrees",
+    ".git",
+    ".omx",
+    ".omc",
+    "checkyourself-creator-launch-kit copy",
+    "node_modules",
+    "dist",
+    "build",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".worktrees",
 }
 MAX_VALIDATED_FILE_BYTES = 5_000_000
 
@@ -496,7 +507,11 @@ def validate_public_text(root: Path, errors: list[str]) -> None:
         errors.append("10_DASHBOARD/CONTEXT.md must identify the canonical HTML/CSS dashboard path")
     if "inline Markdown fallback" not in dashboard_context:
         errors.append("10_DASHBOARD/CONTEXT.md must identify the inline Markdown fallback")
-    dashboard_prompt = text(root / "05_OUTPUT_TEMPLATES/dashboard-prompt.md") if (root / "05_OUTPUT_TEMPLATES/dashboard-prompt.md").exists() else ""
+    dashboard_prompt = (
+        text(root / "05_OUTPUT_TEMPLATES/dashboard-prompt.md")
+        if (root / "05_OUTPUT_TEMPLATES/dashboard-prompt.md").exists()
+        else ""
+    )
     if "single canonical HTML/CSS dashboard" not in dashboard_prompt:
         errors.append("05_OUTPUT_TEMPLATES/dashboard-prompt.md must identify the single canonical dashboard")
     if "inline Markdown fallback" not in dashboard_prompt:
@@ -517,7 +532,11 @@ def validate_public_text(root: Path, errors: list[str]) -> None:
     if "ask the user" not in agent_instructions:
         errors.append("AGENTS.md must require asking before using an inferred second language")
 
-    learning_template = text(root / "05_OUTPUT_TEMPLATES/bespoke-learning-plan.md") if (root / "05_OUTPUT_TEMPLATES/bespoke-learning-plan.md").exists() else ""
+    learning_template = (
+        text(root / "05_OUTPUT_TEMPLATES/bespoke-learning-plan.md")
+        if (root / "05_OUTPUT_TEMPLATES/bespoke-learning-plan.md").exists()
+        else ""
+    )
     for phrase in ["why_this_source_is_trusted", "authority_level", "checked_at"]:
         if phrase not in learning_template:
             errors.append(f"bespoke learning plan template missing source reliability field: {phrase}")
@@ -540,7 +559,9 @@ def validate_public_text(root: Path, errors: list[str]) -> None:
         body = text(path)
         for phrase in ["plain_other_language", "do_this_next_other_language"]:
             if phrase in body:
-                errors.append(f"non-dogfood example must use runtime-neutral secondary-language fields in {rel}: {phrase}")
+                errors.append(
+                    f"non-dogfood example must use runtime-neutral secondary-language fields in {rel}: {phrase}"
+                )
 
 
 def main() -> int:

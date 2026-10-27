@@ -94,9 +94,7 @@ class ValidatePublicTests(unittest.TestCase):
                 with tempfile.TemporaryDirectory() as tmp:
                     samples = Path(tmp) / "samples"
                     samples.mkdir()
-                    (samples / "sample-dashboard-data.json").write_text(
-                        json.dumps(payload), encoding="utf-8"
-                    )
+                    (samples / "sample-dashboard-data.json").write_text(json.dumps(payload), encoding="utf-8")
                     result = self.run_validator(tmp)
                 if should_error:
                     self.assertIn(message, result.stdout)
@@ -108,14 +106,16 @@ class ValidatePublicTests(unittest.TestCase):
             project = Path(tmp)
             (project / "real.md").write_text("# real\n", encoding="utf-8")
             (project / "doc.md").write_text(
-                "\n".join([
-                    "# Doc",
-                    "",
-                    "[good](real.md)",
-                    "[external](https://example.com/page)",
-                    "[missing](does-not-exist.md)",
-                    "",
-                ]),
+                "\n".join(
+                    [
+                        "# Doc",
+                        "",
+                        "[good](real.md)",
+                        "[external](https://example.com/page)",
+                        "[missing](does-not-exist.md)",
+                        "",
+                    ]
+                ),
                 encoding="utf-8",
             )
             result = self.run_validator(tmp)
@@ -145,12 +145,14 @@ class ValidatePublicTests(unittest.TestCase):
             (project / "target.md").write_text("# target\n", encoding="utf-8")
             (project / "a(b).md").write_text("# escaped\n", encoding="utf-8")
             (project / "doc.md").write_text(
-                "\n".join([
-                    '[quoted](target.md "a title")',
-                    "[angle](<target.md> 'another title')",
-                    r"[escaped](a\(b\).md \"title\")",
-                    "",
-                ]),
+                "\n".join(
+                    [
+                        '[quoted](target.md "a title")',
+                        "[angle](<target.md> 'another title')",
+                        r"[escaped](a\(b\).md \"title\")",
+                        "",
+                    ]
+                ),
                 encoding="utf-8",
             )
             result = self.run_validator(project)
@@ -203,8 +205,7 @@ class ValidatePublicTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 1)
         self.assertIn(
-            "auto-bilingual instruction must ask for confirmation first in plan.md: "
-            "make the plan bilingual",
+            "auto-bilingual instruction must ask for confirmation first in plan.md: make the plan bilingual",
             result.stdout,
         )
         # Generated user outputs are allowed to contain the phrase.
@@ -308,13 +309,15 @@ class ValidatePublicTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             result_without = self.run_validator(tmp)
             (Path(tmp) / ".gitignore").write_text(
-                "\n".join([
-                    "checkyourself-creator-launch-kit copy/",
-                    ".omx/",
-                    ".DS_Store",
-                    "CHECKYOURSELF_PROJECT_CONTEXT.generated.md",
-                    "",
-                ]),
+                "\n".join(
+                    [
+                        "checkyourself-creator-launch-kit copy/",
+                        ".omx/",
+                        ".DS_Store",
+                        "CHECKYOURSELF_PROJECT_CONTEXT.generated.md",
+                        "",
+                    ]
+                ),
                 encoding="utf-8",
             )
             result_with = self.run_validator(tmp)

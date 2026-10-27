@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+### 2026-10-27 — Architecture split behind a facade + enforced size lint + retry re-invocations (1.8.0 staged, not published)
+
+- Split the 5,519-line `tools/checkyourself.py` single-file dump into the
+  `tools/checkyourself/` package: 22 engine modules split by verb
+  (constants, errors, models, util, config, challenge_config, challenge_run,
+  scanning, detectors, scan, report, coverage, receipts, jsonlite,
+  validation, scoring, planning, describe, output, project, cli, mcp), a
+  re-export-only facade (`__init__.py`, 404 lines), and a 24-line
+  compatibility launcher at `tools/checkyourself.py` so every documented
+  invocation (`python3 tools/checkyourself.py <verb>`, the npm bin wrapper,
+  CI, and file-path module loaders) keeps working verbatim. The 11-tool MCP
+  surface serves byte-identical tool schemas, and the full suite reproduces
+  152 tests + 88 subtests green before and after.
+- Enforced size discipline in CI: `ruff.toml` now selects E5 so the
+  line-length 120 limit is enforced (not just configured), CI runs
+  `ruff check` + `ruff format --check` with ruff pinned to 0.16.5, and the
+  new `tools/lint_sizes.py` gates facade ≤ 600 lines, module ≤ 1,000 lines,
+  and function ≤ 250 lines across production Python.
+- Every user-facing error path now carries a concrete retry re-invocation
+  (kinocut `errors.py::retry_message` pattern): `errors.py` maps each verb to
+  a runnable MCP `tools/call` and CLI command, CLI errors print and JSON-emit
+  a `retry` field, argparse usage errors append a retry line, and every MCP
+  error (-32700/-32600/-32602/-32601) plus tool-call error results name the
+  exact re-invocation.
+- npm packaging now ships `tools/checkyourself/` alongside the launcher.
+  The 1.8.0 release is staged here only; publishing to npm remains a
+  separate, CEO-gated act and has not been performed.
+
 ### 2026-10-27 — Test-suite count re-verification
 
 - Re-verified the public test-count claims against the current repository
