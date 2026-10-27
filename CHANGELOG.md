@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### 2026-10-27 — Test-suite count re-verification
+
+- Re-verified the public test-count claims against the current repository
+  state: `python3 -m unittest discover -s tests` runs 152 tests plus 88
+  subtests, all green, and `python3 tools/validate_public.py .` passes
+  (also `python3 -m pytest tests/ -q`: 152 passed). README and `llms.txt`
+  now cite these measured counts in place of the 2026-09-05 checkpoint
+  figures. The earlier "150 tests and 88 subtests" was accurate for the
+  retrofit checkpoint; two post-checkpoint hardening tests (symlinked-parent
+  escape rejection, challenge-timeout process-group teardown) raised the
+  count to 152. Caveat for anyone re-running history: the
+  `retrofit-2026-09-05` tag fails its own link-validation test today
+  because the tag-point privacy sanitize removed
+  `_retrofit-2026-09-04/ASTRA-REVIEW.md` while three markdown links still
+  referenced it; `main` is green because those links were since de-linked.
+
 ### 2026-09-19 — npm packaging for the CLI/MCP surface
 
 - Added `package.json` (name `checkyourself`, version 1.7.0 tracking
