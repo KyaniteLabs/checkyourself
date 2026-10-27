@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### 2026-10-27 — Licence-history note (wording only; terms unchanged)
+
+- Recorded the dated relicensing: GitHub release `v1.4.2` (2026-05-29) shipped MIT; `v1.7.0` (2026-06-13) and later, including current HEAD, are Apache-2.0. Copies obtained under MIT remain under MIT. No licence file or grant was changed.
+
 ### 2026-10-27 — Architecture split behind a facade + enforced size lint + retry re-invocations (1.8.0 staged, not published)
 
 - Split the 5,519-line `tools/checkyourself.py` single-file dump into the
