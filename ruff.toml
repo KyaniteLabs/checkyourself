@@ -1,7 +1,16 @@
 # Ruff config of record (FJ CI + local must agree — rule drift between runner
 # versions caused 258 phantom errors on 2026-09-06; pin select+version in-repo)
+# 2026-10: E5 added so the line-length=120 limit is enforced, not just configured
+# (L4#10); W added for whitespace hygiene. File/function size discipline lives in
+# tools/lint_sizes.py and runs in the same CI lint step.
 line-length = 120
 target-version = "py311"
 
 [lint]
-select = ["E4", "E7", "E9", "F"]
+select = ["E4", "E5", "E7", "E9", "F", "W"]
+
+[lint.per-file-ignores]
+# The facade re-exports the full engine surface on purpose.
+"tools/checkyourself/__init__.py" = ["F401"]
+# The compatibility launcher star-imports the facade on purpose.
+"tools/checkyourself.py" = ["F401", "F403", "E402"]
