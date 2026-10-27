@@ -13,7 +13,7 @@ For AI app builders, CheckYourself runs local challenges to test claimed work, r
 
 Under the hood it is a staged engineering system, not a single canned prompt: an ICM-style context workspace that routes the agent through each stage, an evidence-based 0–100 scoring method with severity caps, verifier-owned challenges across 20 canonical surfaces and 10 scored categories, a 19-capability production-hardening engine spanning auth, data, secrets, CI/CD, observability, privacy, and AI governance, JSON output schemas, report and risk templates, and a public validation suite. You install it as your AI assistant's operating context — no SaaS, no account, no lock-in to any one model.
 
-The 2026-09-05 retrofit checkpoint is backed by **150 tests and 88 subtests**, and `python3 tools/validate_public.py .` passes. These are repository checks, not a production-safety certification.
+The repository is backed by **152 tests and 88 subtests** — re-verified 2026-10-27: `python3 -m unittest discover -s tests` is all green (`python3 -m pytest tests/ -q` reports 152 passed) — and `python3 tools/validate_public.py .` passes. These are repository checks, not a production-safety certification.
 
 ---
 

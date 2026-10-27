@@ -54,7 +54,7 @@ The `schemas/` directory contains JSON schema contracts for every structured out
 ## Current repository facts
 
 - 20 canonical coverage surfaces across 10 scored categories.
-- `python3 -m pytest tests/ -q`: 150 tests passed and 88 subtests passed.
+- `python3 -m unittest discover -s tests`: 152 tests passed and 88 subtests passed (re-verified 2026-10-27; `python3 -m pytest tests/ -q` reports 152 passed).
 - `python3 tools/validate_public.py .`: passed.
 - Apache License 2.0 is the license of record; see [`LICENSE`](LICENSE).
 
