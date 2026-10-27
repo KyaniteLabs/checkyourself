@@ -253,13 +253,21 @@ class CheckYourselfCliTests(unittest.TestCase):
     def test_scoring_contract_covers_all_documented_caps(self) -> None:
         cases = {
             "unresolved P0": (
-                {"findings": [{"id": "F-P0", "severity": "P0", "category": "C4", "finding": "P0 risk", "status": "open"}]},
+                {
+                    "findings": [
+                        {"id": "F-P0", "severity": "P0", "category": "C4", "finding": "P0 risk", "status": "open"}
+                    ]
+                },
                 None,
                 49,
                 49,
             ),
             "unresolved P1": (
-                {"findings": [{"id": "F-P1", "severity": "P1", "category": "C4", "finding": "P1 risk", "status": "open"}]},
+                {
+                    "findings": [
+                        {"id": "F-P1", "severity": "P1", "category": "C4", "finding": "P1 risk", "status": "open"}
+                    ]
+                },
                 None,
                 74,
                 74,
@@ -305,6 +313,7 @@ class CheckYourselfCliTests(unittest.TestCase):
 
     def test_nonfinite_numbers_are_rejected_across_schema_and_scoring_paths(self) -> None:
         from importlib import util as _util
+
         spec = _util.spec_from_file_location("cy", CLI)
         cy = _util.module_from_spec(spec)
         spec.loader.exec_module(cy)
@@ -319,14 +328,18 @@ class CheckYourselfCliTests(unittest.TestCase):
             with self.subTest(kind="penalty", value=repr(bad)):
                 with mock.patch.dict(cy.SEVERITY_PENALTIES, {"P1": bad}):
                     with self.assertRaisesRegex(cy.CliError, "invalid severity penalty"):
-                        cy.score_from_inputs({
-                            "findings": [{
-                                "id": "F-NONFINITE",
-                                "severity": "P1",
-                                "category": "C1",
-                                "finding": "finite input",
-                            }]
-                        })
+                        cy.score_from_inputs(
+                            {
+                                "findings": [
+                                    {
+                                        "id": "F-NONFINITE",
+                                        "severity": "P1",
+                                        "category": "C1",
+                                        "finding": "finite input",
+                                    }
+                                ]
+                            }
+                        )
 
         with tempfile.TemporaryDirectory() as tmp:
             artifact = Path(tmp) / "nonfinite.json"
@@ -420,8 +433,14 @@ class CheckYourselfCliTests(unittest.TestCase):
             findings = project / "findings.json"
             findings.write_text('{"findings": []}', encoding="utf-8")
             result = self.run_cli(
-                "score", "--findings", str(findings), "--coverage", str(coverage),
-                "--no-history", "--format", "json",
+                "score",
+                "--findings",
+                str(findings),
+                "--coverage",
+                str(coverage),
+                "--no-history",
+                "--format",
+                "json",
             )
             self.assertEqual(result.returncode, 2, result.stderr)
             self.assertEqual(json.loads(result.stdout)["code"], 2)
@@ -429,6 +448,7 @@ class CheckYourselfCliTests(unittest.TestCase):
 
     def test_atomic_generated_writes_preserve_previous_contents_on_interruption(self) -> None:
         from importlib import util as _util
+
         spec = _util.spec_from_file_location("cy", CLI)
         cy = _util.module_from_spec(spec)
         spec.loader.exec_module(cy)
@@ -556,6 +576,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
 
     def test_report_parser_and_regenerator_are_byte_stable(self) -> None:
         from importlib import util as _util
+
         spec = _util.spec_from_file_location("cy", CLI)
         cy = _util.module_from_spec(spec)
         spec.loader.exec_module(cy)
@@ -570,41 +591,54 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
 
     def test_score_to_report_round_trip_and_invalid_mutations_fail_schema(self) -> None:
         findings = {
-            "findings": [{
-                "id": "F-ROUNDTRIP",
-                "severity": "P1",
-                "category": "C5",
-                "finding": "Generated report test gap",
-                "plain_english_risk": "The report must preserve the score contract.",
-                "evidence": ["tests/test_checkyourself_cli.py:1"],
-                "status": "open",
-            }]
+            "findings": [
+                {
+                    "id": "F-ROUNDTRIP",
+                    "severity": "P1",
+                    "category": "C5",
+                    "finding": "Generated report test gap",
+                    "plain_english_risk": "The report must preserve the score contract.",
+                    "evidence": ["tests/test_checkyourself_cli.py:1"],
+                    "status": "open",
+                }
+            ]
         }
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             findings_path = project / "findings.json"
             findings_path.write_text(json.dumps(findings), encoding="utf-8")
             score_result = self.run_cli(
-                "score", "--findings", str(findings_path), "--no-history", "--format", "json",
+                "score",
+                "--findings",
+                str(findings_path),
+                "--no-history",
+                "--format",
+                "json",
             )
             self.assertEqual(score_result.returncode, 0, score_result.stderr)
             score = json.loads(score_result.stdout)
             backlog_result = self.run_cli(
-                "backlog", "--findings", str(findings_path), "--format", "json",
+                "backlog",
+                "--findings",
+                str(findings_path),
+                "--format",
+                "json",
             )
             self.assertEqual(backlog_result.returncode, 0, backlog_result.stderr)
             backlog = json.loads(backlog_result.stdout)
 
             report = deepcopy(GOLDEN_REPORT)
-            report.update({
-                "score": score["score"],
-                "confidence": score["confidence"],
-                "score_breakdown": score["per_category"],
-                "score_caps": score["caps_applied"],
-                "findings": findings["findings"],
-                "remediation_backlog": backlog["remediation_backlog"],
-                "first_approval_batch": backlog["first_approval_batch"],
-            })
+            report.update(
+                {
+                    "score": score["score"],
+                    "confidence": score["confidence"],
+                    "score_breakdown": score["per_category"],
+                    "score_caps": score["caps_applied"],
+                    "findings": findings["findings"],
+                    "remediation_backlog": backlog["remediation_backlog"],
+                    "first_approval_batch": backlog["first_approval_batch"],
+                }
+            )
             report_path = project / "report.json"
             report_path.write_text(json.dumps(report), encoding="utf-8")
             valid = self.run_cli("validate", "--kind", "report", str(report_path), "--format", "json")
@@ -628,16 +662,27 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
 
     def test_diff_ci_treats_line_endings_as_noop_and_reports_real_changes(self) -> None:
         old = {
-            "findings": [{
-                "id": "CY-LINE-001", "severity": "P2", "category": "C6",
-                "finding": "Line ending fixture", "status": "open",
-            }]
+            "findings": [
+                {
+                    "id": "CY-LINE-001",
+                    "severity": "P2",
+                    "category": "C6",
+                    "finding": "Line ending fixture",
+                    "status": "open",
+                }
+            ]
         }
         added = {
-            "findings": old["findings"] + [{
-                "id": "CY-REAL-001", "severity": "P1", "category": "C5",
-                "finding": "Actual regression", "status": "open",
-            }]
+            "findings": old["findings"]
+            + [
+                {
+                    "id": "CY-REAL-001",
+                    "severity": "P1",
+                    "category": "C5",
+                    "finding": "Actual regression",
+                    "status": "open",
+                }
+            ]
         }
 
         def ending_variant(body: str, mode: str) -> str:
@@ -653,18 +698,30 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             old_path.write_text(json.dumps(old, indent=2) + "\n", encoding="utf-8", newline="")
             new_path.write_bytes(ending_variant(json.dumps(old, indent=2), "crlf").encode("utf-8"))
             no_change = self.run_cli(
-                "diff", "--old", str(old_path), "--new", str(new_path), "--ci", "--format", "json",
+                "diff",
+                "--old",
+                str(old_path),
+                "--new",
+                str(new_path),
+                "--ci",
+                "--format",
+                "json",
             )
             self.assertEqual(no_change.returncode, 0, no_change.stderr)
             no_change_data = json.loads(no_change.stdout)
             self.assertFalse(no_change_data["regression"])
             self.assertEqual(no_change_data["unchanged"], ["CY-LINE-001"])
 
-            new_path.write_bytes(
-                ("\ufeff" + json.dumps(old, indent=2) + "\n \t").encode("utf-8")
-            )
+            new_path.write_bytes(("\ufeff" + json.dumps(old, indent=2) + "\n \t").encode("utf-8"))
             bom_trailing = self.run_cli(
-                "diff", "--old", str(old_path), "--new", str(new_path), "--ci", "--format", "json",
+                "diff",
+                "--old",
+                str(old_path),
+                "--new",
+                str(new_path),
+                "--ci",
+                "--format",
+                "json",
             )
             self.assertEqual(bom_trailing.returncode, 0, bom_trailing.stderr)
             bom_trailing_data = json.loads(bom_trailing.stdout)
@@ -673,14 +730,28 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
 
             new_path.write_bytes(ending_variant(json.dumps(added, indent=2), "mixed").encode("utf-8"))
             changed = self.run_cli(
-                "diff", "--old", str(old_path), "--new", str(new_path), "--ci", "--format", "json",
+                "diff",
+                "--old",
+                str(old_path),
+                "--new",
+                str(new_path),
+                "--ci",
+                "--format",
+                "json",
             )
             self.assertEqual(changed.returncode, 1)
             changed_data = json.loads(changed.stdout)
             self.assertEqual([item["id"] for item in changed_data["added"]], ["CY-REAL-001"])
-            self.assertEqual(changed_data["regressions"], [{
-                "id": "CY-REAL-001", "type": "newly_open", "severity": "P1",
-            }])
+            self.assertEqual(
+                changed_data["regressions"],
+                [
+                    {
+                        "id": "CY-REAL-001",
+                        "type": "newly_open",
+                        "severity": "P1",
+                    }
+                ],
+            )
 
     def test_unicode_empty_and_huge_strings_survive_scan_and_receipt_commands(self) -> None:
         huge = "x" * 200_001
@@ -726,7 +797,13 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             same_path = project / "same-edge-findings.json"
             same_path.write_text(json.dumps({"findings": [finding]}), encoding="utf-8")
             diff_result = self.run_cli(
-                "diff", "--old", str(findings_path), "--new", str(same_path), "--format", "json",
+                "diff",
+                "--old",
+                str(findings_path),
+                "--new",
+                str(same_path),
+                "--format",
+                "json",
             )
             self.assertEqual(diff_result.returncode, 0, diff_result.stderr)
             diff = json.loads(diff_result.stdout)
@@ -747,20 +824,44 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             delegation = self._verification_artifact(project, "S19", suffix="delegation")
-            row["delegation_receipts"] = [self._receipt(delegation, project, "provider contract", "temporary test tree", "delegated responsibility documented", surface_id="S19")]
+            row["delegation_receipts"] = [
+                self._receipt(
+                    delegation,
+                    project,
+                    "provider contract",
+                    "temporary test tree",
+                    "delegated responsibility documented",
+                    surface_id="S19",
+                )
+            ]
             for item in coverage["surfaces"]:
                 if item["id"] == "S19":
                     continue
                 evidence = self._verification_artifact(project, item["id"])
                 item["evidence_reviewed"] = [evidence.relative_to(project).as_posix()]
-                item["evidence_receipts"] = [self._receipt(evidence, project, "fixture verifier", "temporary test tree", "non-empty artifact observed", surface_id=item["id"])]
+                item["evidence_receipts"] = [
+                    self._receipt(
+                        evidence,
+                        project,
+                        "fixture verifier",
+                        "temporary test tree",
+                        "non-empty artifact observed",
+                        surface_id=item["id"],
+                    )
+                ]
             findings_path = project / "findings.json"
             coverage_path = project / "coverage.json"
             findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
             coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
             result = self.run_cli(
-                "score", "--findings", str(findings_path), "--coverage", str(coverage_path),
-                "--no-history", "--format", "json",
+                "score",
+                "--findings",
+                str(findings_path),
+                "--coverage",
+                str(coverage_path),
+                "--no-history",
+                "--format",
+                "json",
             )
 
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -781,8 +882,14 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
             coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
             result = self.run_cli(
-                "score", "--findings", str(findings_path), "--coverage", str(coverage_path),
-                "--no-history", "--format", "json",
+                "score",
+                "--findings",
+                str(findings_path),
+                "--coverage",
+                str(coverage_path),
+                "--no-history",
+                "--format",
+                "json",
             )
             coverage_check = self.run_cli("coverage", "--check", str(coverage_path), "--format", "json")
             self.assertEqual(coverage_check.returncode, 1, coverage_check.stderr)
@@ -842,11 +949,14 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             src = project / "src" / "dispatcher"
             src.mkdir(parents=True)
             (src / "tool-registry.ts").write_text(
-                "\n".join([
-                    f'const {feedback_token}Field = {{ type: "string", description: "Token for recording actual hours" }};',
-                    f'const schema = {{ {feedback_token}: "aaaaaaaaaaaaaaaaaaaaaaaa" }};',
-                    "",
-                ]),
+                "\n".join(
+                    [
+                        f'const {feedback_token}Field = {{ type: "string", '
+                        'description: "Token for recording actual hours" }};',
+                        f'const schema = {{ {feedback_token}: "aaaaaaaaaaaaaaaaaaaaaaaa" }};',
+                        "",
+                    ]
+                ),
                 encoding="utf-8",
             )
             result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
@@ -865,11 +975,13 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             (project / ".env.dogfood.example").write_text(
-                "\n".join([
-                    f"# {llm_key}=your_llm_api_key_here",
-                    f"{minimax_key}=replace_me_with_your_key",
-                    "",
-                ]),
+                "\n".join(
+                    [
+                        f"# {llm_key}=your_llm_api_key_here",
+                        f"{minimax_key}=replace_me_with_your_key",
+                        "",
+                    ]
+                ),
                 encoding="utf-8",
             )
             result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
@@ -941,9 +1053,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             (project / "app.py").write_text(f'API_KEY = "{token}"\n', encoding="utf-8")
-            (project / ".checkyourself.json").write_text(
-                json.dumps({"suppress": [None]}), encoding="utf-8"
-            )
+            (project / ".checkyourself.json").write_text(json.dumps({"suppress": [None]}), encoding="utf-8")
             result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
 
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -961,16 +1071,18 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             project = Path(tmp)
             (project / "app.py").write_text(f'API_KEY = "{token}"\n', encoding="utf-8")
             (project / ".checkyourself.yml").write_text(
-                "\n".join([
-                    "version: 1",
-                    "suppress:",
-                    "  - id: CY-SECRET-001",
-                    "    reason: test fixture uses a fake credential shape",
-                    '    files: ["app.py"]',
-                    "    reviewed_by: unit-test",
-                    '    reviewed_at: "2026-05-29"',
-                    "",
-                ]),
+                "\n".join(
+                    [
+                        "version: 1",
+                        "suppress:",
+                        "  - id: CY-SECRET-001",
+                        "    reason: test fixture uses a fake credential shape",
+                        '    files: ["app.py"]',
+                        "    reviewed_by: unit-test",
+                        '    reviewed_at: "2026-05-29"',
+                        "",
+                    ]
+                ),
                 encoding="utf-8",
             )
             result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
@@ -989,17 +1101,19 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             project = Path(tmp)
             (project / "app.py").write_text(f'API_KEY = "{token}"\n', encoding="utf-8")
             (project / ".checkyourself.yml").write_text(
-                "\n".join([
-                    "version: 1",
-                    "suppress:",
-                    "  - id: CY-SECRET-001",
-                    "    reason: reviewed multiline path fixture",
-                    "    files:",
-                    "      - app.py",
-                    "    reviewed_by: unit-test",
-                    '    reviewed_at: "2026-09-04"',
-                    "",
-                ]),
+                "\n".join(
+                    [
+                        "version: 1",
+                        "suppress:",
+                        "  - id: CY-SECRET-001",
+                        "    reason: reviewed multiline path fixture",
+                        "    files:",
+                        "      - app.py",
+                        "    reviewed_by: unit-test",
+                        '    reviewed_at: "2026-09-04"',
+                        "",
+                    ]
+                ),
                 encoding="utf-8",
             )
             result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
@@ -1015,21 +1129,19 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             (project / "src").mkdir()
-            (project / "src" / "reviewed.py").write_text(
-                'API_KEY = "abcdefghijklmnop"\n', encoding="utf-8"
-            )
-            (project / "src" / "runtime.py").write_text(
-                'API_KEY = "qrstuvwxyzabcdef"\n', encoding="utf-8"
-            )
+            (project / "src" / "reviewed.py").write_text('API_KEY = "abcdefghijklmnop"\n', encoding="utf-8")
+            (project / "src" / "runtime.py").write_text('API_KEY = "qrstuvwxyzabcdef"\n', encoding="utf-8")
             (project / ".checkyourself.yml").write_text(
-                "\n".join([
-                    "version: 1",
-                    "suppress:",
-                    "  - id: CY-SECRET-002",
-                    "    reason: reviewed non-secret config field",
-                    '    files: ["src/reviewed.py"]',
-                    "",
-                ]),
+                "\n".join(
+                    [
+                        "version: 1",
+                        "suppress:",
+                        "  - id: CY-SECRET-002",
+                        "    reason: reviewed non-secret config field",
+                        '    files: ["src/reviewed.py"]',
+                        "",
+                    ]
+                ),
                 encoding="utf-8",
             )
             result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
@@ -1047,12 +1159,14 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             (project / "package.json").write_text(
-                json.dumps({
-                    "scripts": {
-                        "deploy": f"API_KEY={token} node deploy.js",
-                        "safe": "node safe.js",
+                json.dumps(
+                    {
+                        "scripts": {
+                            "deploy": f"API_KEY={token} node deploy.js",
+                            "safe": "node safe.js",
+                        }
                     }
-                }),
+                ),
                 encoding="utf-8",
             )
             json_result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
@@ -1069,27 +1183,33 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             self.assertIn("[REDACTED]", markdown)
 
     def test_mcp_stdio_exposes_thin_tools(self) -> None:
-        messages = "\n".join([
-            json.dumps({
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": "2025-11-25",
-                    "capabilities": {},
-                    "clientInfo": {"name": "unit-test", "version": "0"},
-                },
-            }),
-            json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}),
-            json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}),
-            json.dumps({
-                "jsonrpc": "2.0",
-                "id": 3,
-                "method": "tools/call",
-                "params": {"name": "describe", "arguments": {}},
-            }),
-            "",
-        ])
+        messages = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "initialize",
+                        "params": {
+                            "protocolVersion": "2025-11-25",
+                            "capabilities": {},
+                            "clientInfo": {"name": "unit-test", "version": "0"},
+                        },
+                    }
+                ),
+                json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}),
+                json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 3,
+                        "method": "tools/call",
+                        "params": {"name": "describe", "arguments": {}},
+                    }
+                ),
+                "",
+            ]
+        )
         result = subprocess.run(
             [sys.executable, str(CLI), "mcp"],
             text=True,
@@ -1139,7 +1259,12 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             scan_path.write_text(scan_result.stdout, encoding="utf-8")
 
             score_result = self.run_cli(
-                "score", "--findings", str(scan_path), "--history", "--format", "json",
+                "score",
+                "--findings",
+                str(scan_path),
+                "--history",
+                "--format",
+                "json",
             )
 
             self.assertEqual(score_result.returncode, 0, score_result.stderr)
@@ -1176,7 +1301,12 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                     scan_path = project / "scan.json"
                     scan_path.write_text(scan_result.stdout, encoding="utf-8")
                     score_result = self.run_cli(
-                        "score", "--findings", str(scan_path), "--no-history", "--format", "json",
+                        "score",
+                        "--findings",
+                        str(scan_path),
+                        "--no-history",
+                        "--format",
+                        "json",
                     )
 
                 self.assertEqual(score_result.returncode, 0, score_result.stderr)
@@ -1199,19 +1329,25 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
             before = sorted(
                 (path.relative_to(project).as_posix(), path.read_bytes())
-                for path in project.rglob("*") if path.is_file()
+                for path in project.rglob("*")
+                if path.is_file()
             )
 
             scan_result = self.run_cli("scan", str(project), "--format", "json")
             self.assertEqual(scan_result.returncode, 0, scan_result.stderr)
             score_result = self.run_cli(
-                "score", "--findings", str(findings_path), "--format", "json",
+                "score",
+                "--findings",
+                str(findings_path),
+                "--format",
+                "json",
             )
             self.assertEqual(score_result.returncode, 0, score_result.stderr)
 
             after = sorted(
                 (path.relative_to(project).as_posix(), path.read_bytes())
-                for path in project.rglob("*") if path.is_file()
+                for path in project.rglob("*")
+                if path.is_file()
             )
             self.assertEqual(after, before)
             self.assertFalse((project / "CHECKYOURSELF_PROJECT_CONTEXT.generated.md").exists())
@@ -1242,10 +1378,22 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             with output_path.open("w", encoding="utf-8") as output:
                 result = subprocess.run(
                     [
-                        sys.executable, str(CLI), "score", "--findings", str(findings_path),
-                        "--coverage", str(coverage_path), "--no-history", "--format", "json",
+                        sys.executable,
+                        str(CLI),
+                        "score",
+                        "--findings",
+                        str(findings_path),
+                        "--coverage",
+                        str(coverage_path),
+                        "--no-history",
+                        "--format",
+                        "json",
                     ],
-                    cwd=str(project), text=True, stdout=output, stderr=subprocess.PIPE, check=False,
+                    cwd=str(project),
+                    text=True,
+                    stdout=output,
+                    stderr=subprocess.PIPE,
+                    check=False,
                 )
 
             self.assertEqual(result.returncode, 2)
@@ -1459,9 +1607,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             # secret-shaped literal (CI gitleaks); the written file still has one
             # so the detector under test must flag it
             fixture_secret = "1234567890" + "abcdef"
-            (project / "app.py").write_text(
-                f'API_KEY = "{fixture_secret}"\neval(userInput)\n', encoding="utf-8"
-            )
+            (project / "app.py").write_text(f'API_KEY = "{fixture_secret}"\neval(userInput)\n', encoding="utf-8")
             result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
 
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -1524,12 +1670,12 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
 
     def test_coverage_backed_score_blocks_thin_pass_gaming(self) -> None:
         from importlib import util as _util
+
         spec = _util.spec_from_file_location("cy", CLI)
         cy = _util.module_from_spec(spec)
         spec.loader.exec_module(cy)
         surfaces = [
-            {"id": sid, "surface": surface, "category": category,
-             "status": "Pass", "evidence_reviewed": ["x"]}
+            {"id": sid, "surface": surface, "category": category, "status": "Pass", "evidence_reviewed": ["x"]}
             for sid, surface, category in cy.COVERAGE_SURFACES[:10]
         ]
         coverage = {"schema": "checkyourself-coverage/1", "surfaces": surfaces}
@@ -1539,8 +1685,14 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
             coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
             result = self.run_cli(
-                "score", "--findings", str(findings_path),
-                "--coverage", str(coverage_path), "--no-history", "--format", "json",
+                "score",
+                "--findings",
+                str(findings_path),
+                "--coverage",
+                str(coverage_path),
+                "--no-history",
+                "--format",
+                "json",
             )
         self.assertEqual(result.returncode, 0, result.stderr)
         score = json.loads(result.stdout)
@@ -1549,13 +1701,25 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         self.assertLess(score["score"], 100)
 
     def _run_mcp_validate(self, kind: str, artifact: object) -> dict:
-        messages = "\n".join([
-            json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25"}}),
-            json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
-                "name": "validate", "arguments": {"kind": kind, "artifact": artifact},
-            }}),
-            "",
-        ])
+        messages = "\n".join(
+            [
+                json.dumps(
+                    {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25"}}
+                ),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "validate",
+                            "arguments": {"kind": kind, "artifact": artifact},
+                        },
+                    }
+                ),
+                "",
+            ]
+        )
         result = subprocess.run(
             [sys.executable, str(CLI), "mcp"],
             text=True,
@@ -1602,8 +1766,15 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
 
     def test_validate_rejects_empty_machine_artifacts_in_cli_and_mcp(self) -> None:
         kinds = (
-            "scan", "coverage", "score", "backlog", "next", "diff",
-            "learning-plan", "capabilities", "dashboard-data",
+            "scan",
+            "coverage",
+            "score",
+            "backlog",
+            "next",
+            "diff",
+            "learning-plan",
+            "capabilities",
+            "dashboard-data",
         )
         for kind in kinds:
             with self.subTest(kind=kind):
@@ -1647,11 +1818,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
     def test_cli_outputs_are_deterministic_goldens_after_timestamp_normalization(self) -> None:
         def without_timestamps(value):
             if isinstance(value, dict):
-                return {
-                    key: without_timestamps(item)
-                    for key, item in value.items()
-                    if key != "generated_at"
-                }
+                return {key: without_timestamps(item) for key, item in value.items() if key != "generated_at"}
             if isinstance(value, list):
                 return [without_timestamps(item) for item in value]
             return value
@@ -1675,10 +1842,20 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             findings_path = project / "scan.json"
             findings_path.write_text(first_scan_result.stdout, encoding="utf-8")
             score_one = self.run_cli(
-                "score", "--findings", str(findings_path), "--no-history", "--format", "json",
+                "score",
+                "--findings",
+                str(findings_path),
+                "--no-history",
+                "--format",
+                "json",
             )
             score_two = self.run_cli(
-                "score", "--findings", str(findings_path), "--no-history", "--format", "json",
+                "score",
+                "--findings",
+                str(findings_path),
+                "--no-history",
+                "--format",
+                "json",
             )
             self.assertEqual(score_one.returncode, 0, score_one.stderr)
             self.assertEqual(score_two.returncode, 0, score_two.stderr)
@@ -1712,7 +1889,12 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             self.assertEqual(self.run_cli("validate", "--kind", "scan", str(scan_path)).returncode, 0)
 
             score_result = self.run_cli(
-                "score", "--findings", str(scan_path), "--no-history", "--format", "json",
+                "score",
+                "--findings",
+                str(scan_path),
+                "--no-history",
+                "--format",
+                "json",
             )
             self.assertEqual(score_result.returncode, 0, score_result.stderr)
             score_path = project / "score.json"
@@ -1733,24 +1915,47 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                 validation = self.run_cli("validate", "--kind", kind, str(artifact_path), "--format", "json")
                 self.assertEqual(validation.returncode, 0, validation.stderr)
 
-            mcp_scan = self._run_mcp_requests([
-                {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25"}},
-                {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "scan", "arguments": {"project": "."}}},
-            ], cwd=project)
+            mcp_scan = self._run_mcp_requests(
+                [
+                    {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25"}},
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "tools/call",
+                        "params": {"name": "scan", "arguments": {"project": "."}},
+                    },
+                ],
+                cwd=project,
+            )
             mcp_scan_result = mcp_scan[2]["result"]
             self.assertFalse(mcp_scan_result["isError"])
             self.assertEqual(mcp_scan_result["structuredContent"]["schema"], "checkyourself-scan/1")
             mcp_scan_data = mcp_scan_result["structuredContent"]
 
-            mcp_pipeline = self._run_mcp_requests([
-                {"jsonrpc": "2.0", "id": 3, "method": "initialize", "params": {"protocolVersion": "2025-11-25"}},
-                {"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {
-                    "name": "score", "arguments": {"findings": mcp_scan_data},
-                }},
-                {"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {
-                    "name": "validate", "arguments": {"kind": "scan", "artifact": mcp_scan_data},
-                }},
-            ], cwd=project)
+            mcp_pipeline = self._run_mcp_requests(
+                [
+                    {"jsonrpc": "2.0", "id": 3, "method": "initialize", "params": {"protocolVersion": "2025-11-25"}},
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 4,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "score",
+                            "arguments": {"findings": mcp_scan_data},
+                        },
+                    },
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 5,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "validate",
+                            "arguments": {"kind": "scan", "artifact": mcp_scan_data},
+                        },
+                    },
+                ],
+                cwd=project,
+            )
             mcp_score = mcp_pipeline[4]["result"]
             self.assertFalse(mcp_score["isError"])
             self.assertEqual(mcp_score["structuredContent"]["schema"], "checkyourself-score/1")
@@ -1773,21 +1978,32 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
 
     def test_semantic_report_validation_rejects_tampered_verdict(self) -> None:
         artifact = deepcopy(GOLDEN_REPORT)
-        artifact.update({
-            "score": 100,
-            "confidence": "high",
-            "score_caps": [],
-            "findings": [{
-                "id": "F-OPEN-P0", "severity": "P0", "category": "C1",
-                "finding": "Cross-user access remains possible",
-                "plain_english_risk": "A user may read another user's records.",
-                "evidence": ["auth.md:1"], "status": "open",
-            }],
-        })
-        artifact["remediation_backlog"] = [{
-            "finding_id": "F-OPEN-P0", "severity": "P0",
-            "fix_summary": "Prove tenant isolation.", "status": "open",
-        }]
+        artifact.update(
+            {
+                "score": 100,
+                "confidence": "high",
+                "score_caps": [],
+                "findings": [
+                    {
+                        "id": "F-OPEN-P0",
+                        "severity": "P0",
+                        "category": "C1",
+                        "finding": "Cross-user access remains possible",
+                        "plain_english_risk": "A user may read another user's records.",
+                        "evidence": ["auth.md:1"],
+                        "status": "open",
+                    }
+                ],
+            }
+        )
+        artifact["remediation_backlog"] = [
+            {
+                "finding_id": "F-OPEN-P0",
+                "severity": "P0",
+                "fix_summary": "Prove tenant isolation.",
+                "status": "open",
+            }
+        ]
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "tampered-report.json"
             path.write_text(json.dumps(artifact), encoding="utf-8")
@@ -1808,9 +2024,16 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
             coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
             result = self.run_cli(
-                "score", "--findings", str(findings_path), "--coverage", str(coverage_path),
-                "--claim", "The export returns only the requester's records",
-                "--no-history", "--format", "json",
+                "score",
+                "--findings",
+                str(findings_path),
+                "--coverage",
+                str(coverage_path),
+                "--claim",
+                "The export returns only the requester's records",
+                "--no-history",
+                "--format",
+                "json",
             )
         self.assertEqual(result.returncode, 0, result.stderr)
         score = json.loads(result.stdout)
@@ -1822,6 +2045,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
 
     def _full_coverage(self) -> dict:
         from importlib import util as _util
+
         spec = _util.spec_from_file_location("cy", CLI)
         cy = _util.module_from_spec(spec)
         spec.loader.exec_module(cy)
@@ -1842,16 +2066,32 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
     def _verification_artifact(self, root: Path, surface_id: str, *, suffix: str = "proof") -> Path:
         path = root / "coverage" / "verification" / surface_id / f"{suffix}.json"
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({
-            "kind": "surface-verification-record",
-            "surface_id": surface_id,
-            "source_revision": "fixture-revision",
-            "command": f"verify {surface_id}",
-            "result": "verified",
-        }) + "\n", encoding="utf-8")
+        path.write_text(
+            json.dumps(
+                {
+                    "kind": "surface-verification-record",
+                    "surface_id": surface_id,
+                    "source_revision": "fixture-revision",
+                    "command": f"verify {surface_id}",
+                    "result": "verified",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
         return path
 
-    def _receipt(self, path: Path, root: Path, origin: str, source_state: str, result: str, *, surface_id: str, claim: str = "fixture claim") -> dict:
+    def _receipt(
+        self,
+        path: Path,
+        root: Path,
+        origin: str,
+        source_state: str,
+        result: str,
+        *,
+        surface_id: str,
+        claim: str = "fixture claim",
+    ) -> dict:
         receipt = {
             "reference": path.relative_to(root).as_posix(),
             "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
@@ -1866,23 +2106,48 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             "issuer": "checkyourself-verifier/1",
             "issued_at": "2026-09-05T00:00:00Z",
         }
-        binding = {field: receipt.get(field) for field in (
-            "reference", "sha256", "subject_digest", "surface_id", "source_revision", "command", "claim",
-            "origin", "source_state", "result", "issuer", "issued_at",
-        )}
+        binding = {
+            field: receipt.get(field)
+            for field in (
+                "reference",
+                "sha256",
+                "subject_digest",
+                "surface_id",
+                "source_revision",
+                "command",
+                "claim",
+                "origin",
+                "source_state",
+                "result",
+                "issuer",
+                "issued_at",
+            )
+        }
         receipt["receipt_sha256"] = hashlib.sha256(
             json.dumps(binding, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
         ).hexdigest()
         return receipt
 
     def _run_mcp_score(self, coverage: object) -> dict:
-        messages = "\n".join([
-            json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25"}}),
-            json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
-                "name": "score", "arguments": {"findings": {"findings": []}, "coverage": coverage},
-            }}),
-            "",
-        ])
+        messages = "\n".join(
+            [
+                json.dumps(
+                    {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25"}}
+                ),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "score",
+                            "arguments": {"findings": {"findings": []}, "coverage": coverage},
+                        },
+                    }
+                ),
+                "",
+            ]
+        )
         result = subprocess.run(
             [sys.executable, str(CLI), "mcp"],
             text=True,
@@ -1924,13 +2189,15 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         cases["missing canonical surface"] = missing_surface
 
         structural_drift = deepcopy(base)
-        structural_drift["surfaces"].append({
-            "id": "S99",
-            "surface": "Untracked surface",
-            "category": "C1",
-            "status": "Pass",
-            "evidence_reviewed": ["src/app.py:99"],
-        })
+        structural_drift["surfaces"].append(
+            {
+                "id": "S99",
+                "surface": "Untracked surface",
+                "category": "C1",
+                "status": "Pass",
+                "evidence_reviewed": ["src/app.py:99"],
+            }
+        )
         cases["unknown structural row"] = structural_drift
 
         for label, coverage in cases.items():
@@ -1941,8 +2208,14 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                     findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
                     coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
                     cli_result = self.run_cli(
-                        "score", "--findings", str(findings_path),
-                        "--coverage", str(coverage_path), "--no-history", "--format", "json",
+                        "score",
+                        "--findings",
+                        str(findings_path),
+                        "--coverage",
+                        str(coverage_path),
+                        "--no-history",
+                        "--format",
+                        "json",
                     )
                 self.assertEqual(cli_result.returncode, 2, cli_result.stderr)
                 error = json.loads(cli_result.stdout)
@@ -1958,6 +2231,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
 
     def test_caller_issued_full_evidence_cannot_reach_high_confidence(self) -> None:
         from importlib import util as _util
+
         spec = _util.spec_from_file_location("cy", CLI)
         cy = _util.module_from_spec(spec)
         spec.loader.exec_module(cy)
@@ -1967,17 +2241,37 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             coverage_path = Path(tmp) / "coverage.json"
             for index, (sid, surface, category) in enumerate(cy.COVERAGE_SURFACES, start=1):
                 evidence = self._verification_artifact(Path(tmp), sid, suffix=f"receipt-{index}")
-                surfaces.append({
-                    "id": sid, "surface": surface, "category": category,
-                    "status": "Pass", "evidence_reviewed": [evidence.relative_to(Path(tmp)).as_posix()],
-                    "evidence_receipts": [self._receipt(evidence, Path(tmp), "fixture verifier", "temporary test tree", "non-empty artifact observed", surface_id=sid)],
-                })
+                surfaces.append(
+                    {
+                        "id": sid,
+                        "surface": surface,
+                        "category": category,
+                        "status": "Pass",
+                        "evidence_reviewed": [evidence.relative_to(Path(tmp)).as_posix()],
+                        "evidence_receipts": [
+                            self._receipt(
+                                evidence,
+                                Path(tmp),
+                                "fixture verifier",
+                                "temporary test tree",
+                                "non-empty artifact observed",
+                                surface_id=sid,
+                            )
+                        ],
+                    }
+                )
             coverage = {"schema": "checkyourself-coverage/1", "surfaces": surfaces}
             findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
             coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
             result = self.run_cli(
-                "score", "--findings", str(findings_path),
-                "--coverage", str(coverage_path), "--no-history", "--format", "json",
+                "score",
+                "--findings",
+                str(findings_path),
+                "--coverage",
+                str(coverage_path),
+                "--no-history",
+                "--format",
+                "json",
             )
         self.assertEqual(result.returncode, 0, result.stderr)
         score = json.loads(result.stdout)
@@ -1992,16 +2286,26 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             receipt_path = project / "receipt.json"
             result = self.run_cli(
                 "receipt",
-                "--root", str(project),
-                "--reference", evidence.relative_to(project).as_posix(),
-                "--surface-id", "S11",
-                "--source-revision", "abc123",
-                "--source-state", "temporary test tree",
-                "--command", "pytest tests/test_app.py -q",
-                "--claim", "The focused quality gate passes",
-                "--result", "1 passed",
-                "--out", str(receipt_path),
-                "--format", "json",
+                "--root",
+                str(project),
+                "--reference",
+                evidence.relative_to(project).as_posix(),
+                "--surface-id",
+                "S11",
+                "--source-revision",
+                "abc123",
+                "--source-state",
+                "temporary test tree",
+                "--command",
+                "pytest tests/test_app.py -q",
+                "--claim",
+                "The focused quality gate passes",
+                "--result",
+                "1 passed",
+                "--out",
+                str(receipt_path),
+                "--format",
+                "json",
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
@@ -2023,16 +2327,26 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             evidence = self._verification_artifact(project, "S11", suffix="pytest")
             result = self.run_cli(
                 "receipt",
-                "--root", str(project),
-                "--reference", evidence.relative_to(project).as_posix(),
-                "--surface-id", "S11",
-                "--source-revision", "abc123",
-                "--source-state", "temporary test tree",
-                "--command", "pytest tests/test_app.py -q",
-                "--claim", "The focused quality gate passes",
-                "--result", "1 passed",
-                "--subject-digest", "0" * 64,
-                "--format", "json",
+                "--root",
+                str(project),
+                "--reference",
+                evidence.relative_to(project).as_posix(),
+                "--surface-id",
+                "S11",
+                "--source-revision",
+                "abc123",
+                "--source-state",
+                "temporary test tree",
+                "--command",
+                "pytest tests/test_app.py -q",
+                "--claim",
+                "The focused quality gate passes",
+                "--result",
+                "1 passed",
+                "--subject-digest",
+                "0" * 64,
+                "--format",
+                "json",
             )
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn("subject_digest must match", result.stderr)
@@ -2042,47 +2356,83 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             project = Path(tmp)
             evidence = project / "custom" / "S11" / "pytest-proof.json"
             evidence.parent.mkdir(parents=True)
-            evidence.write_text(json.dumps({
-                "kind": "surface-verification-record",
-                "surface_id": "S11",
-                "source_revision": "abc123",
-                "command": "pytest tests/test_app.py -q",
-                "result": "1 passed",
-            }) + "\n", encoding="utf-8")
-            (project / ".checkyourself.json").write_text(json.dumps({
-                "verification_artifact_registry": {
-                    "S11": {
-                        "path_roots": ["custom/S11"],
-                        "path_patterns": ["pytest-*.json"],
+            evidence.write_text(
+                json.dumps(
+                    {
+                        "kind": "surface-verification-record",
+                        "surface_id": "S11",
+                        "source_revision": "abc123",
+                        "command": "pytest tests/test_app.py -q",
+                        "result": "1 passed",
                     }
-                }
-            }), encoding="utf-8")
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (project / ".checkyourself.json").write_text(
+                json.dumps(
+                    {
+                        "verification_artifact_registry": {
+                            "S11": {
+                                "path_roots": ["custom/S11"],
+                                "path_patterns": ["pytest-*.json"],
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
             result = self.run_cli(
-                "receipt", "--root", str(project),
-                "--reference", evidence.relative_to(project).as_posix(),
-                "--surface-id", "S11", "--source-revision", "abc123",
-                "--source-state", "temporary test tree",
-                "--command", "pytest tests/test_app.py -q",
-                "--claim", "The focused quality gate passes", "--result", "1 passed",
-                "--format", "json",
+                "receipt",
+                "--root",
+                str(project),
+                "--reference",
+                evidence.relative_to(project).as_posix(),
+                "--surface-id",
+                "S11",
+                "--source-revision",
+                "abc123",
+                "--source-state",
+                "temporary test tree",
+                "--command",
+                "pytest tests/test_app.py -q",
+                "--claim",
+                "The focused quality gate passes",
+                "--result",
+                "1 passed",
+                "--format",
+                "json",
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             wrong_shape = project / "custom" / "S11" / "pytest-wrong.json"
             wrong_shape.write_text(json.dumps({"surface_id": "S11"}), encoding="utf-8")
             rejected = self.run_cli(
-                "receipt", "--root", str(project),
-                "--reference", wrong_shape.relative_to(project).as_posix(),
-                "--surface-id", "S11", "--source-revision", "abc123",
-                "--source-state", "temporary test tree",
-                "--command", "pytest tests/test_app.py -q",
-                "--claim", "The focused quality gate passes", "--result", "1 passed",
-                "--format", "json",
+                "receipt",
+                "--root",
+                str(project),
+                "--reference",
+                wrong_shape.relative_to(project).as_posix(),
+                "--surface-id",
+                "S11",
+                "--source-revision",
+                "abc123",
+                "--source-state",
+                "temporary test tree",
+                "--command",
+                "pytest tests/test_app.py -q",
+                "--claim",
+                "The focused quality gate passes",
+                "--result",
+                "1 passed",
+                "--format",
+                "json",
             )
         self.assertEqual(rejected.returncode, 2, rejected.stderr)
         self.assertIn("expected", rejected.stderr)
 
     def test_distinct_unregistered_artifacts_fail_closed_for_issuance_and_score(self) -> None:
         from importlib import util as _util
+
         spec = _util.spec_from_file_location("cy", CLI)
         cy = _util.module_from_spec(spec)
         spec.loader.exec_module(cy)
@@ -2094,14 +2444,16 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                 evidence.write_text(f"Existing but unregistered artifact for {row['id']}.\n", encoding="utf-8")
                 reference = evidence.relative_to(project).as_posix()
                 row["evidence_reviewed"] = [reference]
-                row["evidence_receipts"] = [self._receipt(
-                    evidence,
-                    project,
-                    "fixture verifier",
-                    "temporary test tree",
-                    "verified",
-                    surface_id=row["id"],
-                )]
+                row["evidence_receipts"] = [
+                    self._receipt(
+                        evidence,
+                        project,
+                        "fixture verifier",
+                        "temporary test tree",
+                        "verified",
+                        surface_id=row["id"],
+                    )
+                ]
                 with self.assertRaisesRegex(cy.CliError, "not a registered verification artifact"):
                     cy.issue_receipt(
                         reference,
@@ -2118,8 +2470,14 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
             coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
             result = self.run_cli(
-                "score", "--findings", str(findings_path), "--coverage", str(coverage_path),
-                "--no-history", "--format", "json",
+                "score",
+                "--findings",
+                str(findings_path),
+                "--coverage",
+                str(coverage_path),
+                "--no-history",
+                "--format",
+                "json",
             )
         self.assertEqual(result.returncode, 0, result.stderr)
         score = json.loads(result.stdout)
@@ -2129,6 +2487,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
 
     def test_distinct_unregistered_delegation_artifacts_fail_closed(self) -> None:
         from importlib import util as _util
+
         spec = _util.spec_from_file_location("cy", CLI)
         cy = _util.module_from_spec(spec)
         spec.loader.exec_module(cy)
@@ -2137,16 +2496,25 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             project = Path(tmp)
             for row in coverage["surfaces"]:
                 evidence = project / f"delegation-{row['id']}.md"
-                evidence.write_text(f"Existing but unregistered delegation artifact for {row['id']}.\n", encoding="utf-8")
+                evidence.write_text(
+                    f"Existing but unregistered delegation artifact for {row['id']}.\n", encoding="utf-8"
+                )
                 reference = evidence.relative_to(project).as_posix()
                 row.update(
                     status="NotApplicable",
                     evidence_reviewed=[],
                     not_applicable_reason="Responsibility is delegated.",
-                    delegation_receipts=[self._receipt(
-                        evidence, project, "fixture delegation", "temporary test tree",
-                        "delegated", surface_id=row["id"], claim="Delegation is documented",
-                    )],
+                    delegation_receipts=[
+                        self._receipt(
+                            evidence,
+                            project,
+                            "fixture delegation",
+                            "temporary test tree",
+                            "delegated",
+                            surface_id=row["id"],
+                            claim="Delegation is documented",
+                        )
+                    ],
                 )
                 with self.assertRaisesRegex(cy.CliError, "not a registered verification artifact"):
                     cy.issue_receipt(
@@ -2164,8 +2532,14 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
             coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
             result = self.run_cli(
-                "score", "--findings", str(findings_path), "--coverage", str(coverage_path),
-                "--no-history", "--format", "json",
+                "score",
+                "--findings",
+                str(findings_path),
+                "--coverage",
+                str(coverage_path),
+                "--no-history",
+                "--format",
+                "json",
             )
         self.assertEqual(result.returncode, 0, result.stderr)
         score = json.loads(result.stdout)
@@ -2175,6 +2549,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
 
     def test_rebound_receipt_with_rehashed_binding_fails_closed(self) -> None:
         from importlib import util as _util
+
         spec = _util.spec_from_file_location("cy", CLI)
         cy = _util.module_from_spec(spec)
         spec.loader.exec_module(cy)
@@ -2208,8 +2583,14 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
             coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
             result = self.run_cli(
-                "score", "--findings", str(findings_path), "--coverage", str(coverage_path),
-                "--no-history", "--format", "json",
+                "score",
+                "--findings",
+                str(findings_path),
+                "--coverage",
+                str(coverage_path),
+                "--no-history",
+                "--format",
+                "json",
             )
         self.assertEqual(result.returncode, 0, result.stderr)
         score = json.loads(result.stdout)
@@ -2246,8 +2627,14 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                     findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
                     coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
                     result = self.run_cli(
-                        "score", "--findings", str(findings_path), "--coverage", str(coverage_path),
-                        "--no-history", "--format", "json",
+                        "score",
+                        "--findings",
+                        str(findings_path),
+                        "--coverage",
+                        str(coverage_path),
+                        "--no-history",
+                        "--format",
+                        "json",
                     )
                 self.assertEqual(result.returncode, 0, result.stderr)
                 score = json.loads(result.stdout)
@@ -2260,20 +2647,31 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
     def test_finding_linked_only_to_fixed_finding_is_independently_blocked(self) -> None:
         coverage = self._full_coverage()
         findings = {
-            "findings": [{
-                "id": "F-FIXED-ISOLATION", "severity": "P0", "category": "C1",
-                "finding": "Prior isolation issue is fixed", "status": "fixed",
-            }]
+            "findings": [
+                {
+                    "id": "F-FIXED-ISOLATION",
+                    "severity": "P0",
+                    "category": "C1",
+                    "finding": "Prior isolation issue is fixed",
+                    "status": "fixed",
+                }
+            ]
         }
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             for row in coverage["surfaces"]:
                 evidence = self._verification_artifact(project, row["id"])
                 row["evidence_reviewed"] = [evidence.relative_to(project).as_posix()]
-                row["evidence_receipts"] = [self._receipt(
-                    evidence, project, "fixture verifier", "temporary test tree",
-                    "non-empty artifact observed", surface_id=row["id"],
-                )]
+                row["evidence_receipts"] = [
+                    self._receipt(
+                        evidence,
+                        project,
+                        "fixture verifier",
+                        "temporary test tree",
+                        "non-empty artifact observed",
+                        surface_id=row["id"],
+                    )
+                ]
             s07 = next(row for row in coverage["surfaces"] if row["id"] == "S07")
             s07.update(status="Finding", finding_ids=["F-FIXED-ISOLATION"])
             findings_path = project / "findings.json"
@@ -2281,8 +2679,14 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             findings_path.write_text(json.dumps(findings), encoding="utf-8")
             coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
             result = self.run_cli(
-                "score", "--findings", str(findings_path), "--coverage", str(coverage_path),
-                "--no-history", "--format", "json",
+                "score",
+                "--findings",
+                str(findings_path),
+                "--coverage",
+                str(coverage_path),
+                "--no-history",
+                "--format",
+                "json",
             )
         self.assertEqual(result.returncode, 0, result.stderr)
         score = json.loads(result.stdout)
@@ -2303,8 +2707,14 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
             coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
             result = self.run_cli(
-                "score", "--findings", str(findings_path), "--coverage", str(coverage_path),
-                "--no-history", "--format", "json",
+                "score",
+                "--findings",
+                str(findings_path),
+                "--coverage",
+                str(coverage_path),
+                "--no-history",
+                "--format",
+                "json",
             )
         self.assertEqual(result.returncode, 0, result.stderr)
         score = json.loads(result.stdout)
@@ -2315,10 +2725,15 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
 
     def test_accepted_p0_retains_residual_risk_penalty_and_cap(self) -> None:
         findings = {
-            "findings": [{
-                "id": "F-ACCEPTED-P0", "severity": "P0", "category": "C1",
-                "finding": "Cross-user access remains possible", "status": "accepted-risk",
-            }]
+            "findings": [
+                {
+                    "id": "F-ACCEPTED-P0",
+                    "severity": "P0",
+                    "category": "C1",
+                    "finding": "Cross-user access remains possible",
+                    "status": "accepted-risk",
+                }
+            ]
         }
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "findings.json"
@@ -2329,9 +2744,16 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         self.assertEqual(score["counts"]["P0"], 1)
         self.assertIn(49, [cap["cap"] for cap in score["caps_applied"]])
         self.assertLessEqual(score["score"], 49)
-        self.assertEqual(score["workflow_dispositions"], [{
-            "finding_id": "F-ACCEPTED-P0", "status": "accepted-risk", "residual_risk": "open",
-        }])
+        self.assertEqual(
+            score["workflow_dispositions"],
+            [
+                {
+                    "finding_id": "F-ACCEPTED-P0",
+                    "status": "accepted-risk",
+                    "residual_risk": "open",
+                }
+            ],
+        )
 
     def test_unknown_evidence_survives_finding_category_override(self) -> None:
         coverage = self._full_coverage()
@@ -2339,18 +2761,31 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         s06.update(status="Unknown", evidence_reviewed=[], missing_evidence=["restore receipt"])
         s07 = next(item for item in coverage["surfaces"] if item["id"] == "S07")
         s07.update(status="Finding", evidence_reviewed=["fixture.md:1"], finding_ids=["F-ISOLATION"])
-        findings = {"findings": [{
-            "id": "F-ISOLATION", "severity": "P3", "category": "C1",
-            "finding": "Isolation evidence is incomplete", "status": "open",
-        }]}
+        findings = {
+            "findings": [
+                {
+                    "id": "F-ISOLATION",
+                    "severity": "P3",
+                    "category": "C1",
+                    "finding": "Isolation evidence is incomplete",
+                    "status": "open",
+                }
+            ]
+        }
         with tempfile.TemporaryDirectory() as tmp:
             findings_path = Path(tmp) / "findings.json"
             coverage_path = Path(tmp) / "coverage.json"
             findings_path.write_text(json.dumps(findings), encoding="utf-8")
             coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
             result = self.run_cli(
-                "score", "--findings", str(findings_path), "--coverage", str(coverage_path),
-                "--no-history", "--format", "json",
+                "score",
+                "--findings",
+                str(findings_path),
+                "--coverage",
+                str(coverage_path),
+                "--no-history",
+                "--format",
+                "json",
             )
         self.assertEqual(result.returncode, 0, result.stderr)
         score = json.loads(result.stdout)
@@ -2359,11 +2794,17 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         self.assertLess(score["score"], 100)
 
     def test_diff_detects_regression_and_gates_in_ci(self) -> None:
-        old = {"findings": [{"id": "CY-TEST-001", "severity": "P1", "category": "C5", "finding": "No tests", "status": "open"}]}
-        new = {"findings": [
-            {"id": "CY-TEST-001", "severity": "P1", "category": "C5", "finding": "No tests", "status": "open"},
-            {"id": "CY-SECRET-001", "severity": "P0", "category": "C3", "finding": "Secret", "status": "open"},
-        ]}
+        old = {
+            "findings": [
+                {"id": "CY-TEST-001", "severity": "P1", "category": "C5", "finding": "No tests", "status": "open"}
+            ]
+        }
+        new = {
+            "findings": [
+                {"id": "CY-TEST-001", "severity": "P1", "category": "C5", "finding": "No tests", "status": "open"},
+                {"id": "CY-SECRET-001", "severity": "P0", "category": "C3", "finding": "Secret", "status": "open"},
+            ]
+        }
         with tempfile.TemporaryDirectory() as tmp:
             old_path = Path(tmp) / "old.json"
             new_path = Path(tmp) / "new.json"
@@ -2378,8 +2819,16 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         self.assertEqual(ci_result.returncode, 1)
 
     def test_diff_gates_equal_count_p1_replacement(self) -> None:
-        old = {"findings": [{"id": "CY-OLD-001", "severity": "P1", "category": "C5", "finding": "Old risk", "status": "open"}]}
-        new = {"findings": [{"id": "CY-NEW-001", "severity": "P1", "category": "C5", "finding": "New risk", "status": "open"}]}
+        old = {
+            "findings": [
+                {"id": "CY-OLD-001", "severity": "P1", "category": "C5", "finding": "Old risk", "status": "open"}
+            ]
+        }
+        new = {
+            "findings": [
+                {"id": "CY-NEW-001", "severity": "P1", "category": "C5", "finding": "New risk", "status": "open"}
+            ]
+        }
         with tempfile.TemporaryDirectory() as tmp:
             old_path = Path(tmp) / "old.json"
             new_path = Path(tmp) / "new.json"
@@ -2396,8 +2845,16 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         self.assertEqual(ci_result.returncode, 1)
 
     def test_diff_reports_status_only_resolution(self) -> None:
-        old = {"findings": [{"id": "CY-TEST-001", "severity": "P1", "category": "C5", "finding": "No tests", "status": "open"}]}
-        new = {"findings": [{"id": "CY-TEST-001", "severity": "P1", "category": "C5", "finding": "No tests", "status": "fixed"}]}
+        old = {
+            "findings": [
+                {"id": "CY-TEST-001", "severity": "P1", "category": "C5", "finding": "No tests", "status": "open"}
+            ]
+        }
+        new = {
+            "findings": [
+                {"id": "CY-TEST-001", "severity": "P1", "category": "C5", "finding": "No tests", "status": "fixed"}
+            ]
+        }
         with tempfile.TemporaryDirectory() as tmp:
             old_path = Path(tmp) / "old.json"
             new_path = Path(tmp) / "new.json"
@@ -2414,8 +2871,14 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         self.assertFalse(diff["regression"])
 
     def test_diff_gates_reopened_and_escalated_high_risk(self) -> None:
-        old = {"findings": [{"id": "CY-RISK-001", "severity": "P2", "category": "C5", "finding": "Risk", "status": "fixed"}]}
-        new = {"findings": [{"id": "CY-RISK-001", "severity": "P1", "category": "C5", "finding": "Risk", "status": "open"}]}
+        old = {
+            "findings": [
+                {"id": "CY-RISK-001", "severity": "P2", "category": "C5", "finding": "Risk", "status": "fixed"}
+            ]
+        }
+        new = {
+            "findings": [{"id": "CY-RISK-001", "severity": "P1", "category": "C5", "finding": "Risk", "status": "open"}]
+        }
         with tempfile.TemporaryDirectory() as tmp:
             old_path = Path(tmp) / "old.json"
             new_path = Path(tmp) / "new.json"
@@ -2447,15 +2910,36 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         self.assertEqual(backlog["batch_basis"]["safety_analysis"], "not performed")
 
     def test_mcp_rejects_unknown_arguments_and_unknown_tools(self) -> None:
-        messages = "\n".join([
-            json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25"}}),
-            json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "scan", "arguments": {"path": "/etc"}}}),
-            json.dumps({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "does_not_exist", "arguments": {}}}),
-            "",
-        ])
+        messages = "\n".join(
+            [
+                json.dumps(
+                    {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25"}}
+                ),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "tools/call",
+                        "params": {"name": "scan", "arguments": {"path": "/etc"}},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 3,
+                        "method": "tools/call",
+                        "params": {"name": "does_not_exist", "arguments": {}},
+                    }
+                ),
+                "",
+            ]
+        )
         result = subprocess.run(
             [sys.executable, str(CLI), "mcp"],
-            text=True, input=messages, capture_output=True, check=False,
+            text=True,
+            input=messages,
+            capture_output=True,
+            check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         responses = {json.loads(line)["id"]: json.loads(line) for line in result.stdout.splitlines()}
@@ -2465,15 +2949,36 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         self.assertIn("unknown tool", responses[3]["error"]["message"])
 
     def test_mcp_rejects_wrong_argument_types_and_bounds(self) -> None:
-        messages = "\n".join([
-            json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25"}}),
-            json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "scan", "arguments": {"deep": "false"}}}),
-            json.dumps({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "scan", "arguments": {"max_files": 0}}}),
-            "",
-        ])
+        messages = "\n".join(
+            [
+                json.dumps(
+                    {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25"}}
+                ),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "tools/call",
+                        "params": {"name": "scan", "arguments": {"deep": "false"}},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 3,
+                        "method": "tools/call",
+                        "params": {"name": "scan", "arguments": {"max_files": 0}},
+                    }
+                ),
+                "",
+            ]
+        )
         result = subprocess.run(
             [sys.executable, str(CLI), "mcp"],
-            text=True, input=messages, capture_output=True, check=False,
+            text=True,
+            input=messages,
+            capture_output=True,
+            check=False,
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -2488,23 +2993,48 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
 
         self.assertEqual(result.returncode, 0, result.stderr)
         for command in (
-            "describe", "scan", "diagnostic", "schema", "coverage", "score",
-            "backlog", "next", "diff", "validate", "init", "mcp",
+            "describe",
+            "scan",
+            "diagnostic",
+            "schema",
+            "coverage",
+            "score",
+            "backlog",
+            "next",
+            "diff",
+            "validate",
+            "init",
+            "mcp",
         ):
             self.assertIn(command, result.stdout)
         self.assertNotIn("Project root to scan", result.stdout)
 
     def test_mcp_scan_is_confined_to_scan_root(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            messages = "\n".join([
-                json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25"}}),
-                json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "scan", "arguments": {"project": "/etc"}}}),
-                "",
-            ])
+            messages = "\n".join(
+                [
+                    json.dumps(
+                        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25"}}
+                    ),
+                    json.dumps(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": 2,
+                            "method": "tools/call",
+                            "params": {"name": "scan", "arguments": {"project": "/etc"}},
+                        }
+                    ),
+                    "",
+                ]
+            )
             result = subprocess.run(
                 [sys.executable, str(CLI), "mcp"],
-                text=True, input=messages, capture_output=True, check=False,
-                cwd=tmp, env={**__import__("os").environ, "CHECKYOURSELF_SCAN_ROOT": tmp},
+                text=True,
+                input=messages,
+                capture_output=True,
+                check=False,
+                cwd=tmp,
+                env={**__import__("os").environ, "CHECKYOURSELF_SCAN_ROOT": tmp},
             )
         self.assertEqual(result.returncode, 0, result.stderr)
         responses = {json.loads(line)["id"]: json.loads(line) for line in result.stdout.splitlines()}
@@ -2521,7 +3051,11 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         with tempfile.TemporaryDirectory() as tmp:
             result = subprocess.run(
                 [sys.executable, str(CLI), "score", "--findings", "-", "--format", "json"],
-                text=True, input=json.dumps({"findings": []}), capture_output=True, check=False, cwd=tmp,
+                text=True,
+                input=json.dumps({"findings": []}),
+                capture_output=True,
+                check=False,
+                cwd=tmp,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertFalse((Path(tmp) / ".checkyourself-score-history.json").exists())
@@ -2535,7 +3069,9 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                     findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
                     history_path = project / "history.json"
                     history_path.write_text(corrupted, encoding="utf-8")
-                    result = self.run_cli("score", "--findings", str(findings_path), "--history", str(history_path), "--format", "json")
+                    result = self.run_cli(
+                        "score", "--findings", str(findings_path), "--history", str(history_path), "--format", "json"
+                    )
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertTrue((project / "history.json.corrupt.bak").exists())
                     history = json.loads(history_path.read_text(encoding="utf-8"))
@@ -2549,14 +3085,18 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             (project / "samples" / "sample-dashboard-data.json").write_text("[]", encoding="utf-8")
             result = subprocess.run(
                 [sys.executable, str(validator), str(project)],
-                text=True, capture_output=True, check=False,
+                text=True,
+                capture_output=True,
+                check=False,
             )
         # Must not crash with a traceback; a clean failure message is fine.
         self.assertNotIn("Traceback", result.stderr)
 
     def test_diff_artifact_validates_against_schema(self) -> None:
         old = {"findings": []}
-        new = {"findings": [{"id": "CY-CI-001", "severity": "P2", "category": "C6", "finding": "No CI", "status": "open"}]}
+        new = {
+            "findings": [{"id": "CY-CI-001", "severity": "P2", "category": "C6", "finding": "No CI", "status": "open"}]
+        }
         with tempfile.TemporaryDirectory() as tmp:
             old_path = Path(tmp) / "old.json"
             new_path = Path(tmp) / "new.json"
@@ -2595,11 +3135,13 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             (project / "app.py").write_text(
-                "\n".join([
-                    'tokenizer = "abcdefghijklmnopqrstuvwxyz123456"',
-                    f'{continuation_field} = "reset/abcdefghijklmnop"',
-                    "",
-                ]),
+                "\n".join(
+                    [
+                        'tokenizer = "abcdefghijklmnopqrstuvwxyz123456"',
+                        f'{continuation_field} = "reset/abcdefghijklmnop"',
+                        "",
+                    ]
+                ),
                 encoding="utf-8",
             )
             result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
@@ -2666,13 +3208,15 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         # A label like "security" is not a scoring category; it must be
         # re-inferred (here to C3) instead of silently escaping penalties.
         findings = {
-            "findings": [{
-                "id": "F-001",
-                "severity": "P1",
-                "category": "security",
-                "finding": "Hardcoded secret in source",
-                "status": "open",
-            }]
+            "findings": [
+                {
+                    "id": "F-001",
+                    "severity": "P1",
+                    "category": "security",
+                    "finding": "Hardcoded secret in source",
+                    "status": "open",
+                }
+            ]
         }
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "findings.json"
@@ -2687,30 +3231,43 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
     def _write_challenges(self, project: Path, definitions: dict) -> None:
         path = project / ".checkyourself" / "challenges.json"
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({
-            "schema": "checkyourself-challenges/1",
-            "challenges": definitions,
-        }), encoding="utf-8")
+        path.write_text(
+            json.dumps(
+                {
+                    "schema": "checkyourself-challenges/1",
+                    "challenges": definitions,
+                }
+            ),
+            encoding="utf-8",
+        )
 
     def _score_challenge_receipt(self, project: Path, receipt: dict) -> dict:
         coverage = {
             "schema": "checkyourself-coverage/1",
-            "surfaces": [{
-                "id": "S11",
-                "surface": "Tests, quality gates, and regression coverage",
-                "category": "C5",
-                "status": "Pass",
-                "evidence_reviewed": [receipt["captured_output"]],
-                "evidence_receipts": [receipt],
-            }],
+            "surfaces": [
+                {
+                    "id": "S11",
+                    "surface": "Tests, quality gates, and regression coverage",
+                    "category": "C5",
+                    "status": "Pass",
+                    "evidence_reviewed": [receipt["captured_output"]],
+                    "evidence_receipts": [receipt],
+                }
+            ],
         }
         findings_path = project / "findings.json"
         coverage_path = project / "coverage.json"
         findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
         coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
         score = self.run_cli(
-            "score", "--findings", str(findings_path), "--coverage", str(coverage_path),
-            "--no-history", "--format", "json",
+            "score",
+            "--findings",
+            str(findings_path),
+            "--coverage",
+            str(coverage_path),
+            "--no-history",
+            "--format",
+            "json",
         )
         self.assertEqual(score.returncode, 0, score.stderr)
         return json.loads(score.stdout)
@@ -2718,14 +3275,17 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
     def test_true_command_challenge_is_rejected_before_credit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
-            self._write_challenges(project, {
-                "S11": {
-                    "command": ["true"],
-                    "timeout_s": 120,
-                    "success": {"exit_zero": True},
-                    "output_kind": "text",
+            self._write_challenges(
+                project,
+                {
+                    "S11": {
+                        "command": ["true"],
+                        "timeout_s": 120,
+                        "success": {"exit_zero": True},
+                        "output_kind": "text",
+                    },
                 },
-            })
+            )
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
             self.assertEqual(challenge.returncode, 1)
             result = json.loads(challenge.stdout)
@@ -2738,14 +3298,17 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
     def test_echo_only_output_is_rejected_even_with_a_positive_assertion(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
-            self._write_challenges(project, {
-                "S11": {
-                    "command": ["echo", "one two three"],
-                    "timeout_s": 120,
-                    "success": {"exit_zero": True, "regex_match": "one"},
-                    "output_kind": "text",
+            self._write_challenges(
+                project,
+                {
+                    "S11": {
+                        "command": ["echo", "one two three"],
+                        "timeout_s": 120,
+                        "success": {"exit_zero": True, "regex_match": "one"},
+                        "output_kind": "text",
+                    },
                 },
-            })
+            )
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
             self.assertEqual(challenge.returncode, 1)
             result = json.loads(challenge.stdout)
@@ -2754,14 +3317,17 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
     def test_trivially_matching_regex_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
-            self._write_challenges(project, {
-                "S11": {
-                    "command": [sys.executable, "-c", "import pytest; print('1 passed in 0.01s')"],
-                    "timeout_s": 120,
-                    "success": {"exit_zero": True, "regex_match": ".*"},
-                    "output_kind": "text",
+            self._write_challenges(
+                project,
+                {
+                    "S11": {
+                        "command": [sys.executable, "-c", "import pytest; print('1 passed in 0.01s')"],
+                        "timeout_s": 120,
+                        "success": {"exit_zero": True, "regex_match": ".*"},
+                        "output_kind": "text",
+                    },
                 },
-            })
+            )
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
             self.assertEqual(challenge.returncode, 1)
             result = json.loads(challenge.stdout)
@@ -2770,14 +3336,25 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
     def test_build_surface_requires_a_non_empty_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
-            self._write_challenges(project, {
-                "S13": {
-                    "command": [sys.executable, "-c", "import sys; sys.stdout.write('release status ready checks 1\\n')"],
-                    "timeout_s": 120,
-                    "success": {"exit_zero": True, "regex_match": "release\\s+status\\s+ready", "artifact": "build/release.json"},
-                    "output_kind": "text",
+            self._write_challenges(
+                project,
+                {
+                    "S13": {
+                        "command": [
+                            sys.executable,
+                            "-c",
+                            "import sys; sys.stdout.write('release status ready checks 1\\n')",
+                        ],
+                        "timeout_s": 120,
+                        "success": {
+                            "exit_zero": True,
+                            "regex_match": "release\\s+status\\s+ready",
+                            "artifact": "build/release.json",
+                        },
+                        "output_kind": "text",
+                    },
                 },
-            })
+            )
             challenge = self.run_cli("challenge", str(project), "--surface", "S13", "--format", "json")
             self.assertEqual(challenge.returncode, 1)
             result = json.loads(challenge.stdout)
@@ -2786,14 +3363,26 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
     def test_build_surface_accepts_a_non_empty_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
-            self._write_challenges(project, {
-                "S13": {
-                    "command": [sys.executable, "-c", "from pathlib import Path; Path('build').mkdir(); Path('build/release.json').write_text('release'); import sys; sys.stdout.write('release status ready checks 1\\n')"],
-                    "timeout_s": 120,
-                    "success": {"exit_zero": True, "regex_match": "release\\s+status\\s+ready", "artifact": "build/release.json"},
-                    "output_kind": "text",
+            self._write_challenges(
+                project,
+                {
+                    "S13": {
+                        "command": [
+                            sys.executable,
+                            "-c",
+                            "from pathlib import Path; Path('build').mkdir(); Path('build/release.json').write_text('re"
+                            "lease'); import sys; sys.stdout.write('release status ready checks 1\\n')",
+                        ],
+                        "timeout_s": 120,
+                        "success": {
+                            "exit_zero": True,
+                            "regex_match": "release\\s+status\\s+ready",
+                            "artifact": "build/release.json",
+                        },
+                        "output_kind": "text",
+                    },
                 },
-            })
+            )
             challenge = self.run_cli("challenge", str(project), "--surface", "S13", "--format", "json")
             self.assertEqual(challenge.returncode, 0, challenge.stderr or ("STDOUT:" + challenge.stdout[-1500:]))
             self.assertEqual(json.loads(challenge.stdout)["surfaces"][0]["status"], "PASS")
@@ -2824,14 +3413,17 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
     def test_analysis_surface_requires_structured_findings_fields(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
-            self._write_challenges(project, {
-                "S19": {
-                    "command": [sys.executable, "-c", "import json; print(json.dumps({'status': 'pass'}))"],
-                    "timeout_s": 120,
-                    "success": {"json_field": {"status": "pass"}},
-                    "output_kind": "json",
+            self._write_challenges(
+                project,
+                {
+                    "S19": {
+                        "command": [sys.executable, "-c", "import json; print(json.dumps({'status': 'pass'}))"],
+                        "timeout_s": 120,
+                        "success": {"json_field": {"status": "pass"}},
+                        "output_kind": "json",
+                    },
                 },
-            })
+            )
             challenge = self.run_cli("challenge", str(project), "--surface", "S19", "--format", "json")
             self.assertEqual(challenge.returncode, 1)
             result = json.loads(challenge.stdout)
@@ -2841,14 +3433,17 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             (project / "test_challenge.py").write_text("def test_challenge():\n    assert True\n", encoding="utf-8")
-            self._write_challenges(project, {
-                "S11": {
-                    "command": [sys.executable, "-m", "pytest", "-q"],
-                    "timeout_s": 120,
-                    "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
-                    "output_kind": "text",
+            self._write_challenges(
+                project,
+                {
+                    "S11": {
+                        "command": [sys.executable, "-m", "pytest", "-q"],
+                        "timeout_s": 120,
+                        "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
+                        "output_kind": "text",
+                    },
                 },
-            })
+            )
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
             self.assertEqual(challenge.returncode, 0, challenge.stderr or ("STDOUT:" + challenge.stdout[-1500:]))
             result = json.loads(challenge.stdout)
@@ -2863,29 +3458,42 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                 "tool": "checkyourself-cli",
                 "schema": "checkyourself-coverage/1",
                 "generated_at": "2026-09-05T00:00:00Z",
-                "surfaces": [{
-                    "id": "S11",
-                    "surface": "Tests, quality gates, and regression coverage",
-                    "category": "C5",
-                    "status": "Pass",
-                    "evidence_reviewed": [receipt["captured_output"]],
-                    "evidence_receipts": [receipt],
-                    "missing_evidence": [],
-                    "not_applicable_reason": "",
-                }],
+                "surfaces": [
+                    {
+                        "id": "S11",
+                        "surface": "Tests, quality gates, and regression coverage",
+                        "category": "C5",
+                        "status": "Pass",
+                        "evidence_reviewed": [receipt["captured_output"]],
+                        "evidence_receipts": [receipt],
+                        "missing_evidence": [],
+                        "not_applicable_reason": "",
+                    }
+                ],
             }
             findings_path = project / "findings.json"
             coverage_path = project / "coverage.json"
             findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
             coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
             validation = self.run_cli(
-                "validate", "--kind", "coverage", str(coverage_path), "--format", "json",
+                "validate",
+                "--kind",
+                "coverage",
+                str(coverage_path),
+                "--format",
+                "json",
             )
             self.assertEqual(validation.returncode, 0, validation.stderr)
             self.assertTrue(json.loads(validation.stdout)["valid"])
             score = self.run_cli(
-                "score", "--findings", str(findings_path), "--coverage", str(coverage_path),
-                "--no-history", "--format", "json",
+                "score",
+                "--findings",
+                str(findings_path),
+                "--coverage",
+                str(coverage_path),
+                "--no-history",
+                "--format",
+                "json",
             )
             self.assertEqual(score.returncode, 0, score.stderr)
             c5 = next(item for item in json.loads(score.stdout)["per_category"] if item["id"] == "C5")
@@ -2913,18 +3521,21 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
     def test_duration_printing_reexecution_keeps_executed_credit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
-            self._write_challenges(project, {
-                "S11": {
-                    "command": [
-                        sys.executable,
-                        "-c",
-                        "import pytest, time; print(f'1 passed in {time.time_ns()}ms')",
-                    ],
-                    "timeout_s": 120,
-                    "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
-                    "output_kind": "text",
+            self._write_challenges(
+                project,
+                {
+                    "S11": {
+                        "command": [
+                            sys.executable,
+                            "-c",
+                            "import pytest, time; print(f'1 passed in {time.time_ns()}ms')",
+                        ],
+                        "timeout_s": 120,
+                        "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
+                        "output_kind": "text",
+                    },
                 },
-            })
+            )
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
             self.assertEqual(challenge.returncode, 0, challenge.stderr or ("STDOUT:" + challenge.stdout[-1500:]))
             receipt = json.loads(challenge.stdout)["receipts"][0]
@@ -2939,14 +3550,17 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
     def test_legacy_executed_receipt_rederives_semantic_digest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
-            self._write_challenges(project, {
-                "S11": {
-                    "command": [sys.executable, "-c", "import pytest; print('1 passed in 0.01s')"],
-                    "timeout_s": 120,
-                    "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
-                    "output_kind": "text",
+            self._write_challenges(
+                project,
+                {
+                    "S11": {
+                        "command": [sys.executable, "-c", "import pytest; print('1 passed in 0.01s')"],
+                        "timeout_s": 120,
+                        "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
+                        "output_kind": "text",
+                    },
                 },
-            })
+            )
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
             self.assertEqual(challenge.returncode, 0, challenge.stderr or ("STDOUT:" + challenge.stdout[-1500:]))
             legacy = json.loads(challenge.stdout)["receipts"][0]
@@ -2964,18 +3578,22 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             state_path = project / ".checkyourself" / "challenge-runs" / "state.txt"
             state_path.parent.mkdir(parents=True, exist_ok=True)
             state_path.write_text("pass\n", encoding="utf-8")
-            self._write_challenges(project, {
-                "S11": {
-                    "command": [
-                        sys.executable,
-                        "-c",
-                        "from pathlib import Path; import pytest, sys; print('1 passed checks'); raise SystemExit(0 if Path('.checkyourself/challenge-runs/state.txt').read_text().strip() == 'pass' else 7)",
-                    ],
-                    "timeout_s": 120,
-                    "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
-                    "output_kind": "text",
+            self._write_challenges(
+                project,
+                {
+                    "S11": {
+                        "command": [
+                            sys.executable,
+                            "-c",
+                            "from pathlib import Path; import pytest, sys; print('1 passed checks'); raise SystemExit(0"
+                            " if Path('.checkyourself/challenge-runs/state.txt').read_text().strip() == 'pass' else 7)",
+                        ],
+                        "timeout_s": 120,
+                        "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
+                        "output_kind": "text",
+                    },
                 },
-            })
+            )
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
             self.assertEqual(challenge.returncode, 0, challenge.stderr or ("STDOUT:" + challenge.stdout[-1500:]))
             receipt = json.loads(challenge.stdout)["receipts"][0]
@@ -2983,7 +3601,9 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             score = self._score_challenge_receipt(project, receipt)
             c5 = next(item for item in score["per_category"] if item["id"] == "C5")
             self.assertEqual(c5["coverage_status"], "Unknown")
-            self.assertTrue(any("exit code" in needed for item in score["manual_evidence_needed"] for needed in item["needed"]))
+            self.assertTrue(
+                any("exit code" in needed for item in score["manual_evidence_needed"] for needed in item["needed"])
+            )
 
     def test_fresh_assertion_failure_is_unknown(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2991,18 +3611,22 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             state_path = project / ".checkyourself" / "challenge-runs" / "state.txt"
             state_path.parent.mkdir(parents=True, exist_ok=True)
             state_path.write_text("pass\n", encoding="utf-8")
-            self._write_challenges(project, {
-                "S11": {
-                    "command": [
-                        sys.executable,
-                        "-c",
-                        "from pathlib import Path; import pytest; print('1 passed checks' if Path('.checkyourself/challenge-runs/state.txt').read_text().strip() == 'pass' else 'not a test result')",
-                    ],
-                    "timeout_s": 120,
-                    "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
-                    "output_kind": "text",
+            self._write_challenges(
+                project,
+                {
+                    "S11": {
+                        "command": [
+                            sys.executable,
+                            "-c",
+                            "from pathlib import Path; import pytest; print('1 passed checks' if Path('.checkyourself/c"
+                            "hallenge-runs/state.txt').read_text().strip() == 'pass' else 'not a test result')",
+                        ],
+                        "timeout_s": 120,
+                        "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
+                        "output_kind": "text",
+                    },
                 },
-            })
+            )
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
             self.assertEqual(challenge.returncode, 0, challenge.stderr or ("STDOUT:" + challenge.stdout[-1500:]))
             receipt = json.loads(challenge.stdout)["receipts"][0]
@@ -3010,19 +3634,28 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             score = self._score_challenge_receipt(project, receipt)
             c5 = next(item for item in score["per_category"] if item["id"] == "C5")
             self.assertEqual(c5["coverage_status"], "Unknown")
-            self.assertTrue(any("assertions failed" in needed for item in score["manual_evidence_needed"] for needed in item["needed"]))
+            self.assertTrue(
+                any(
+                    "assertions failed" in needed
+                    for item in score["manual_evidence_needed"]
+                    for needed in item["needed"]
+                )
+            )
 
     def test_probe_e1_forged_merged_definition_receipt_is_unknown_without_hmac(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
-            self._write_challenges(project, {
-                "S11": {
-                    "command": [sys.executable, "-c", "import pytest; print('1 passed in 0.01s')"],
-                    "timeout_s": 120,
-                    "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
-                    "output_kind": "text",
+            self._write_challenges(
+                project,
+                {
+                    "S11": {
+                        "command": [sys.executable, "-c", "import pytest; print('1 passed in 0.01s')"],
+                        "timeout_s": 120,
+                        "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
+                        "output_kind": "text",
+                    },
                 },
-            })
+            )
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
             self.assertEqual(challenge.returncode, 0, challenge.stderr or ("STDOUT:" + challenge.stdout[-1500:]))
             forged = json.loads(challenge.stdout)["receipts"][0]
@@ -3031,19 +3664,28 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             c5 = next(item for item in score["per_category"] if item["id"] == "C5")
             self.assertEqual(c5["coverage_status"], "Unknown")
             self.assertIn(90, [cap["cap"] for cap in score["caps_applied"]])
-            self.assertTrue(any("local integrity binding HMAC" in needed for item in score["manual_evidence_needed"] for needed in item["needed"]))
+            self.assertTrue(
+                any(
+                    "local integrity binding HMAC" in needed
+                    for item in score["manual_evidence_needed"]
+                    for needed in item["needed"]
+                )
+            )
 
     def test_executed_receipt_with_invalid_hmac_is_unknown(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
-            self._write_challenges(project, {
-                "S11": {
-                    "command": [sys.executable, "-c", "import pytest; print('1 passed in 0.01s')"],
-                    "timeout_s": 120,
-                    "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
-                    "output_kind": "text",
+            self._write_challenges(
+                project,
+                {
+                    "S11": {
+                        "command": [sys.executable, "-c", "import pytest; print('1 passed in 0.01s')"],
+                        "timeout_s": 120,
+                        "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
+                        "output_kind": "text",
+                    },
                 },
-            })
+            )
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
             self.assertEqual(challenge.returncode, 0, challenge.stderr or ("STDOUT:" + challenge.stdout[-1500:]))
             invalid = json.loads(challenge.stdout)["receipts"][0]
@@ -3056,14 +3698,17 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
     def test_executed_receipt_is_unknown_when_capture_is_edited(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
-            self._write_challenges(project, {
-                "S11": {
-                    "command": [sys.executable, "-c", "import pytest; print('1 passed in 0.01s')"],
-                    "timeout_s": 120,
-                    "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
-                    "output_kind": "text",
+            self._write_challenges(
+                project,
+                {
+                    "S11": {
+                        "command": [sys.executable, "-c", "import pytest; print('1 passed in 0.01s')"],
+                        "timeout_s": 120,
+                        "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
+                        "output_kind": "text",
+                    },
                 },
-            })
+            )
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
             self.assertEqual(challenge.returncode, 0, challenge.stderr or ("STDOUT:" + challenge.stdout[-1500:]))
             receipt = json.loads(challenge.stdout)["receipts"][0]
@@ -3079,18 +3724,22 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             state_path = project / ".checkyourself" / "challenge-runs" / "input.txt"
             state_path.parent.mkdir(parents=True, exist_ok=True)
             state_path.write_text("before\n", encoding="utf-8")
-            self._write_challenges(project, {
-                "S11": {
-                    "command": [
-                        sys.executable,
-                        "-c",
-                        "import pytest; from pathlib import Path; print(Path('.checkyourself/challenge-runs/input.txt').read_text().strip() + ' 1 passed')",
-                    ],
-                    "timeout_s": 120,
-                    "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
-                    "output_kind": "text",
+            self._write_challenges(
+                project,
+                {
+                    "S11": {
+                        "command": [
+                            sys.executable,
+                            "-c",
+                            "import pytest; from pathlib import Path; print(Path('.checkyourself/challenge-runs/input.t"
+                            "xt').read_text().strip() + ' 1 passed')",
+                        ],
+                        "timeout_s": 120,
+                        "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
+                        "output_kind": "text",
+                    },
                 },
-            })
+            )
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
             self.assertEqual(challenge.returncode, 0, challenge.stderr or ("STDOUT:" + challenge.stdout[-1500:]))
             receipt = json.loads(challenge.stdout)["receipts"][0]
@@ -3098,51 +3747,86 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             score = self._score_challenge_receipt(project, receipt)
             c5 = next(item for item in score["per_category"] if item["id"] == "C5")
             self.assertEqual(c5["coverage_status"], "Unknown")
-            self.assertTrue(any("re-executed output digest" in needed for item in score["manual_evidence_needed"] for needed in item["needed"]))
+            self.assertTrue(
+                any(
+                    "re-executed output digest" in needed
+                    for item in score["manual_evidence_needed"]
+                    for needed in item["needed"]
+                )
+            )
 
     def test_caller_issued_receipt_is_explicitly_unverified(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
             artifact = self._verification_artifact(project, "S11")
             receipt = self._receipt(
-                artifact, project, "caller", "caller state", "perfect", surface_id="S11",
+                artifact,
+                project,
+                "caller",
+                "caller state",
+                "perfect",
+                surface_id="S11",
             )
             coverage = {
                 "schema": "checkyourself-coverage/1",
-                "surfaces": [{
-                    "id": "S11", "surface": "Tests, quality gates, and regression coverage", "category": "C5",
-                    "status": "Pass", "evidence_reviewed": [artifact.relative_to(project).as_posix()],
-                    "evidence_receipts": [receipt],
-                }],
+                "surfaces": [
+                    {
+                        "id": "S11",
+                        "surface": "Tests, quality gates, and regression coverage",
+                        "category": "C5",
+                        "status": "Pass",
+                        "evidence_reviewed": [artifact.relative_to(project).as_posix()],
+                        "evidence_receipts": [receipt],
+                    }
+                ],
             }
             findings_path = project / "findings.json"
             coverage_path = project / "coverage.json"
             findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
             coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
             score = self.run_cli(
-                "score", "--findings", str(findings_path), "--coverage", str(coverage_path),
-                "--no-history", "--format", "json",
+                "score",
+                "--findings",
+                str(findings_path),
+                "--coverage",
+                str(coverage_path),
+                "--no-history",
+                "--format",
+                "json",
             )
             self.assertEqual(score.returncode, 0, score.stderr)
             data = json.loads(score.stdout)
             self.assertEqual(data["confidence"], "low")
             self.assertIn(
                 "UNVERIFIED",
-                " ".join(
-                    str(item)
-                    for needed in data["manual_evidence_needed"]
-                    for item in needed["needed"]
-                ),
+                " ".join(str(item) for needed in data["manual_evidence_needed"] for item in needed["needed"]),
             )
             self.assertLess(data["score"], 100)
 
     def test_challenge_output_assertions_and_surface_binding(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
-            self._write_challenges(project, {
-                "S02": {"command": [sys.executable, "-c", "import json; print(json.dumps({'status': 'ok', 'dependencies': 1}))"], "timeout_s": 120, "success": {"json_field": {"status": "ok", "dependencies": 1}, "regex_not_match": ["failure"]}, "output_kind": "json"},
-                "S05": {"command": [sys.executable, "-c", "import sys; sys.stdout.write('auth status ok checks 1\\n')"], "timeout_s": 120, "success": {"exit_zero": True, "regex_match": r"auth\s+status\s+ok"}, "output_kind": "text"},
-            })
+            self._write_challenges(
+                project,
+                {
+                    "S02": {
+                        "command": [
+                            sys.executable,
+                            "-c",
+                            "import json; print(json.dumps({'status': 'ok', 'dependencies': 1}))",
+                        ],
+                        "timeout_s": 120,
+                        "success": {"json_field": {"status": "ok", "dependencies": 1}, "regex_not_match": ["failure"]},
+                        "output_kind": "json",
+                    },
+                    "S05": {
+                        "command": [sys.executable, "-c", "import sys; sys.stdout.write('auth status ok checks 1\\n')"],
+                        "timeout_s": 120,
+                        "success": {"exit_zero": True, "regex_match": r"auth\s+status\s+ok"},
+                        "output_kind": "text",
+                    },
+                },
+            )
             challenge = self.run_cli("challenge", str(project), "--surface", "S02", "--format", "json")
             self.assertEqual(challenge.returncode, 0, challenge.stderr or ("STDOUT:" + challenge.stdout[-1500:]))
             receipt = json.loads(challenge.stdout)["receipts"][0]
@@ -3150,17 +3834,31 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             self.assertEqual(receipt["status"], "PASS")
             coverage = {
                 "schema": "checkyourself-coverage/1",
-                "surfaces": [{
-                    "id": "S05", "surface": "Auth, permissions, sessions, roles, and admin paths", "category": "C2",
-                    "status": "Pass", "evidence_reviewed": [receipt["captured_output"]],
-                    "evidence_receipts": [receipt],
-                }],
+                "surfaces": [
+                    {
+                        "id": "S05",
+                        "surface": "Auth, permissions, sessions, roles, and admin paths",
+                        "category": "C2",
+                        "status": "Pass",
+                        "evidence_reviewed": [receipt["captured_output"]],
+                        "evidence_receipts": [receipt],
+                    }
+                ],
             }
             findings_path = project / "findings.json"
             coverage_path = project / "coverage.json"
             findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
             coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
-            score = self.run_cli("score", "--findings", str(findings_path), "--coverage", str(coverage_path), "--no-history", "--format", "json")
+            score = self.run_cli(
+                "score",
+                "--findings",
+                str(findings_path),
+                "--coverage",
+                str(coverage_path),
+                "--no-history",
+                "--format",
+                "json",
+            )
             self.assertEqual(score.returncode, 0, score.stderr)
             c2 = next(item for item in json.loads(score.stdout)["per_category"] if item["id"] == "C2")
             self.assertEqual(c2["coverage_status"], "Unknown")
@@ -3179,21 +3877,51 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
     def test_failing_challenge_is_scored_as_a_finding_and_cap(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
-            self._write_challenges(project, {
-                "S11": {"command": [sys.executable, "-c", "import pytest; print('0 passed in 0.01s'); raise SystemExit(3)"], "timeout_s": 120, "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"}, "output_kind": "text"},
-            })
+            self._write_challenges(
+                project,
+                {
+                    "S11": {
+                        "command": [
+                            sys.executable,
+                            "-c",
+                            "import pytest; print('0 passed in 0.01s'); raise SystemExit(3)",
+                        ],
+                        "timeout_s": 120,
+                        "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
+                        "output_kind": "text",
+                    },
+                },
+            )
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
             self.assertEqual(challenge.returncode, 1)
             receipt = json.loads(challenge.stdout)["receipts"][0]
-            coverage = {"schema": "checkyourself-coverage/1", "surfaces": [{
-                "id": "S11", "surface": "Tests, quality gates, and regression coverage", "category": "C5",
-                "status": "Pass", "evidence_reviewed": [receipt["captured_output"]], "evidence_receipts": [receipt],
-            }]}
+            coverage = {
+                "schema": "checkyourself-coverage/1",
+                "surfaces": [
+                    {
+                        "id": "S11",
+                        "surface": "Tests, quality gates, and regression coverage",
+                        "category": "C5",
+                        "status": "Pass",
+                        "evidence_reviewed": [receipt["captured_output"]],
+                        "evidence_receipts": [receipt],
+                    }
+                ],
+            }
             findings_path = project / "findings.json"
             coverage_path = project / "coverage.json"
             findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
             coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
-            score = self.run_cli("score", "--findings", str(findings_path), "--coverage", str(coverage_path), "--no-history", "--format", "json")
+            score = self.run_cli(
+                "score",
+                "--findings",
+                str(findings_path),
+                "--coverage",
+                str(coverage_path),
+                "--no-history",
+                "--format",
+                "json",
+            )
             self.assertEqual(score.returncode, 0, score.stderr)
             data = json.loads(score.stdout)
             self.assertIn("CY-CHALLENGE-S11", data["findings_scored"])
@@ -3202,9 +3930,17 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
     def test_timeout_is_bounded_and_receipted_as_fail(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
-            self._write_challenges(project, {
-                "S11": {"command": [sys.executable, "-c", "import pytest; import time; time.sleep(2)"], "timeout_s": 0.1, "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"}, "output_kind": "text"},
-            })
+            self._write_challenges(
+                project,
+                {
+                    "S11": {
+                        "command": [sys.executable, "-c", "import pytest; import time; time.sleep(2)"],
+                        "timeout_s": 0.1,
+                        "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
+                        "output_kind": "text",
+                    },
+                },
+            )
             result = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
             self.assertEqual(result.returncode, 1)
             data = json.loads(result.stdout)
@@ -3235,14 +3971,17 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
                 f"subprocess.Popen([sys.executable, '-c', {child_code!r}], "
                 "stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); time.sleep(10)"
             )
-            self._write_challenges(project, {
-                "S11": {
-                    "command": [sys.executable, "-c", command_code],
-                    "timeout_s": 1.0,
-                    "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
-                    "output_kind": "text",
+            self._write_challenges(
+                project,
+                {
+                    "S11": {
+                        "command": [sys.executable, "-c", command_code],
+                        "timeout_s": 1.0,
+                        "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
+                        "output_kind": "text",
+                    },
                 },
-            })
+            )
             try:
                 result = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
                 self.assertEqual(result.returncode, 1, result.stderr)
@@ -3263,22 +4002,48 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
     def test_executed_receipt_is_invalid_after_source_tree_change(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
-            self._write_challenges(project, {
-                "S11": {"command": [sys.executable, "-c", "import pytest; print('1 passed in 0.01s')"], "timeout_s": 120, "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"}, "output_kind": "text"},
-            })
+            self._write_challenges(
+                project,
+                {
+                    "S11": {
+                        "command": [sys.executable, "-c", "import pytest; print('1 passed in 0.01s')"],
+                        "timeout_s": 120,
+                        "success": {"exit_zero": True, "regex_match": r"\b\d+\s+passed\b"},
+                        "output_kind": "text",
+                    },
+                },
+            )
             challenge = self.run_cli("challenge", str(project), "--surface", "S11", "--format", "json")
             self.assertEqual(challenge.returncode, 0, challenge.stderr or ("STDOUT:" + challenge.stdout[-1500:]))
             receipt = json.loads(challenge.stdout)["receipts"][0]
             (project / "app.py").write_text("print('changed')\n", encoding="utf-8")
-            coverage = {"schema": "checkyourself-coverage/1", "surfaces": [{
-                "id": "S11", "surface": "Tests, quality gates, and regression coverage", "category": "C5",
-                "status": "Pass", "evidence_reviewed": [receipt["captured_output"]], "evidence_receipts": [receipt],
-            }]}
+            coverage = {
+                "schema": "checkyourself-coverage/1",
+                "surfaces": [
+                    {
+                        "id": "S11",
+                        "surface": "Tests, quality gates, and regression coverage",
+                        "category": "C5",
+                        "status": "Pass",
+                        "evidence_reviewed": [receipt["captured_output"]],
+                        "evidence_receipts": [receipt],
+                    }
+                ],
+            }
             findings_path = project / "findings.json"
             coverage_path = project / "coverage.json"
             findings_path.write_text(json.dumps({"findings": []}), encoding="utf-8")
             coverage_path.write_text(json.dumps(coverage), encoding="utf-8")
-            score = self.run_cli("score", "--findings", str(findings_path), "--coverage", str(coverage_path), "--no-history", "--format", "json")
+            score = self.run_cli(
+                "score",
+                "--findings",
+                str(findings_path),
+                "--coverage",
+                str(coverage_path),
+                "--no-history",
+                "--format",
+                "json",
+            )
             self.assertEqual(score.returncode, 0, score.stderr)
             c5 = next(item for item in json.loads(score.stdout)["per_category"] if item["id"] == "C5")
             self.assertEqual(c5["coverage_status"], "Unknown")

@@ -27,6 +27,7 @@
   "files": [
     "bin/",
     "tools/checkyourself.py",
+    "tools/checkyourself/",
     "schemas/",
     "checkyourself.manifest.json",
     "NOTICE.md"
