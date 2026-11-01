@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### 2026-11-01 — npm manifest identity aligned with the published package (manifest only; nothing published)
+
+- Root `package.json` now declares `"name": "@puenteworks/checkyourself"` with
+  `"publishConfig": {"access": "public"}`, matching the package users actually
+  install (published 2026-09-19; the unscoped `checkyourself` name returns Not
+  found on the npm registry). The `bin` command stays `checkyourself`, so
+  `npx @puenteworks/checkyourself` and the wrapper are unchanged. No version
+  bump — the staged 1.8.0 release is a separate change — and nothing was
+  published: publishing remains a separate, CEO-gated act.
+- New contract test (`tests/test_documentation_contract.py`) pins the manifest
+  name to the published identity and asserts it equals every README
+  `npm install` target, so README and manifest cannot drift apart again.
+
 ### 2026-10-27 — Licence-history note (wording only; terms unchanged)
 
 - Recorded the dated relicensing: GitHub release `v1.4.2` (2026-05-29) shipped MIT; `v1.7.0` (2026-06-13) and later, including current HEAD, are Apache-2.0. Copies obtained under MIT remain under MIT. No licence file or grant was changed.
