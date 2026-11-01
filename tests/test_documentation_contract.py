@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import unittest
 from pathlib import Path
 
@@ -78,3 +79,21 @@ class DocumentationContractTests(unittest.TestCase):
         self.assertIn(f"latest tagged release is `{version}`", security)
         self.assertIn(release_line.lower(), security)
         self.assertIn("public `main` branch", security)
+
+    def test_npm_manifest_identity_matches_published_package_and_readme_install(self) -> None:
+        package = json.loads(self.read("package.json"))
+        name = package["name"]
+
+        # (a) The root manifest must declare the published npm identity. The
+        # unscoped "checkyourself" name 404s on the registry; the package
+        # users actually install is @puenteworks/checkyourself.
+        self.assertEqual(name, "@puenteworks/checkyourself")
+        self.assertEqual(package.get("publishConfig", {}).get("access"), "public")
+
+        # (b) Every README `npm install` target must equal the manifest name,
+        # so the documented install command and the manifest cannot drift.
+        readme = self.read("README.md")
+        install_targets = re.findall(r"npm install(?:\s+-\w[\w-]*)*\s+([^\s`]+)", readme)
+        self.assertTrue(install_targets, "README must contain an `npm install <package>` line")
+        for target in install_targets:
+            self.assertEqual(target, name)
