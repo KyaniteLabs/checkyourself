@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### 2026-11-01 — npm tarball no longer ships Python bytecode (packaging hygiene; nothing published)
+
+- `package.json` `files` now negates `!**/*.pyc`. Running the test suite
+  compiles `tools/checkyourself/__pycache__/*.pyc`, and npm does not apply
+  `.gitignore` to paths pulled in by the `files` allowlist, so `npm pack` after
+  `unittest` was shipping 23 interpreter-tagged `.pyc` files (surfaced in the
+  independent Security review of PR #48; the manifest-identity change did not
+  cause it). One negation entry drops every `.pyc` from the tarball, and
+  `__pycache__` goes with them because npm never packs empty directories.
+- New behavioral regression (`tests/test_packaging.py`): compiles the bytecode
+  cache the way a test run does, runs `npm pack --dry-run --json`, and asserts
+  the tarball contains no `__pycache__` or `.pyc` path while still shipping
+  every `tools/checkyourself/*.py` source, every `schemas/*.json`, the
+  `bin/checkyourself.mjs` wrapper, `checkyourself.manifest.json`, `NOTICE.md`,
+  and `LICENSE`. No version bump, no publish.
+
 ### 2026-11-01 — npm manifest identity aligned with the published package (manifest only; nothing published)
 
 - Root `package.json` now declares `"name": "@puenteworks/checkyourself"` with
