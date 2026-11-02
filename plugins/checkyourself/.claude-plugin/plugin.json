@@ -1,0 +1,12 @@
+{
+  "name": "checkyourself",
+  "displayName": "CheckYourself",
+  "version": "1.7.0",
+  "description": "Verify completion claims and scan approved local projects read-only with the stdlib Python CLI and 11 local MCP tools. No uploads or telemetry.",
+  "author": {
+    "name": "Kyanite Labs",
+    "url": "https://github.com/KyaniteLabs"
+  },
+  "repository": "https://github.com/KyaniteLabs/checkyourself",
+  "license": "Apache-2.0"
+}
