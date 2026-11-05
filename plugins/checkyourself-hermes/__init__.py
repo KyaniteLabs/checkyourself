@@ -14,6 +14,8 @@ challenge / init / mcp / receipt / diff are intentionally NOT exposed in v0.1.0.
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import fcntl
 import json
 import logging
@@ -26,7 +28,7 @@ import tempfile
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -58,8 +60,16 @@ _CLAIM_RE = re.compile(
 )
 
 _ctx = None
-# Optional per-call overrides set by tool/slash handlers (session id from kwargs).
-_call_session_id: Optional[str] = None
+# Per-call session override set by tool handlers (session id from handler kwargs).
+# ContextVar (token/reset), never a process global: overlapping handlers on other
+# threads / tasks must not observe or clobber each other's session id.
+_CALL_SESSION: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "checkyourself_call_session", default=None
+)
+# Seconds between SIGTERM and SIGKILL of the child's process group on timeout.
+_KILL_GRACE = 1.0
+# Keys that mark a plugin-written receipt envelope (anything else is passed raw to the CLI).
+_RECEIPT_KEYS = frozenset({"receipt_id", "valid", "data"})
 
 
 # --- config / storage -------------------------------------------------------
@@ -106,9 +116,10 @@ def _safe_key(raw: str) -> str:
 
 
 def _session_id_from_host() -> str:
-    """Caller-scoped Hermes session id (ContextVar first, then env / call override)."""
-    if _call_session_id:
-        return str(_call_session_id)
+    """Caller-scoped Hermes session id (per-call ContextVar, then Hermes session env)."""
+    override = _CALL_SESSION.get()
+    if override:
+        return str(override)
     try:
         from gateway.session_context import get_session_env
 
@@ -241,31 +252,50 @@ def _close_pipes(proc: subprocess.Popen) -> None:
             pass
 
 
-def _kill_process_group(proc: subprocess.Popen) -> None:
-    """Terminate the whole process tree started in its own session."""
-    if proc.pid is None:
+def _group_alive(pgid: int) -> bool:
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def _kill_process_group(proc: subprocess.Popen, grace: Optional[float] = None) -> None:
+    """Terminate the whole process group started in its own session.
+
+    Leader exit is NOT evidence the group is gone: descendants may ignore SIGTERM.
+    After the grace period every remaining group member gets SIGKILL.
+    """
+    grace = _KILL_GRACE if grace is None else grace
+    pgid = proc.pid
+    if pgid is None:
         _close_pipes(proc)
         return
     try:
-        os.killpg(proc.pid, signal.SIGTERM)
+        os.killpg(pgid, signal.SIGTERM)
     except (ProcessLookupError, PermissionError, OSError):
         try:
             proc.terminate()
         except Exception:
             pass
-    try:
-        proc.wait(timeout=1.0)
-        _close_pipes(proc)
-        return
-    except Exception:
-        pass
-    try:
-        os.killpg(proc.pid, signal.SIGKILL)
-    except (ProcessLookupError, PermissionError, OSError):
+    deadline = time.monotonic() + max(0.0, float(grace))
+    while time.monotonic() < deadline:
+        proc.poll()  # reap the leader so it does not linger as a zombie group member
+        if not _group_alive(pgid):
+            break
+        time.sleep(0.05)
+    if _group_alive(pgid):
         try:
-            proc.kill()
-        except Exception:
-            pass
+            os.killpg(pgid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError, OSError):
+            try:
+                proc.kill()
+            except Exception:
+                pass
     try:
         proc.wait(timeout=2.0)
     except Exception:
@@ -286,7 +316,7 @@ def run_checkyourself(args: List[str]) -> Dict[str, Any]:
             cwd=str(_data_dir()),
             start_new_session=True,  # own process group for tree kill on timeout
         )
-    except FileNotFoundError as exc:
+    except (OSError, ValueError) as exc:
         return {
             "ok": False,
             "error": f"checkyourself not runnable (need Node >=18 + npx + Python 3): {exc}",
@@ -296,6 +326,12 @@ def run_checkyourself(args: List[str]) -> Dict[str, Any]:
     except subprocess.TimeoutExpired:
         _kill_process_group(proc)
         return {"ok": False, "error": "checkyourself timed out"}
+    except BaseException:
+        _kill_process_group(proc, grace=0.0)
+        raise
+    if _group_alive(proc.pid):
+        # Leader finished but left descendants in its group; do not leave them running.
+        _kill_process_group(proc, grace=0.0)
     out = (out_s or "").strip()
     err = (err_s or "").strip()
     if proc.returncode != 0 and not out:
@@ -340,13 +376,15 @@ def _implicit_pointer_path(session_id: Optional[str] = None) -> Path:
     return _implicit_dir() / f"{sid}.json"
 
 
-def _invalidate_implicit(session_id: Optional[str] = None, reason: str = "failed_scan") -> None:
-    path = _implicit_pointer_path(session_id)
+def _invalidate_implicit(session_id: Optional[str] = None, reason: str = "failed_scan", error: str = "") -> None:
+    sid = session_id if session_id is not None else _session_id_from_host()
+    path = _implicit_pointer_path(sid)
     meta = {
         "valid": False,
         "invalidated_at": int(time.time()),
         "reason": reason,
-        "session_id": session_id if session_id is not None else _session_id_from_host(),
+        "session_id": sid or None,
+        **({"error": str(error)[:300]} if error else {}),
     }
     try:
         _atomic_write_json(path, meta)
@@ -398,26 +436,34 @@ def _load_receipt(receipt_path: Path) -> Dict[str, Any]:
     envelope = _load_json(receipt_path, None)
     if not isinstance(envelope, dict) or not envelope.get("valid", True):
         raise ValueError(f"receipt is missing or invalidated: {receipt_path}")
-    data = envelope.get("data")
-    if not isinstance(data, dict):
-        # Legacy / raw scan JSON written directly
+    if not _is_receipt_envelope(envelope):
+        # Raw scan JSON written directly
         if "counts" in envelope or "findings" in envelope:
             return envelope
         raise ValueError(f"receipt has no scan data: {receipt_path}")
-    return data
+    return envelope["data"]
 
 
-def _findings_path(explicit: Optional[str] = None) -> Path:
+def _resolve_explicit_findings(explicit: str) -> Path:
+    p = Path(str(explicit)).expanduser()
+    if not p.is_absolute():
+        p = (_agent_cwd() / p).resolve()
+    else:
+        p = p.resolve()
+    if not p.is_file():
+        raise ValueError(f"findings file not found: {p}")
+    return p
+
+
+def _select_findings(explicit: Optional[str], session_id: str) -> tuple[Path, Optional[Dict[str, Any]]]:
+    """Pick the score input once. Returns (path, pointer snapshot for implicit receipts).
+
+    The pointer is read exactly once; callers must use the returned snapshot for provenance
+    instead of rereading the mutable per-session pointer after the CLI runs.
+    """
     if explicit:
-        p = Path(str(explicit)).expanduser()
-        if not p.is_absolute():
-            p = (_agent_cwd() / p).resolve()
-        else:
-            p = p.resolve()
-        if not p.is_file():
-            raise ValueError(f"findings file not found: {p}")
-        return p
-    pointer = _load_json(_implicit_pointer_path(), None)
+        return _resolve_explicit_findings(explicit), None
+    pointer = _load_json(_implicit_pointer_path(session_id), None)
     if not isinstance(pointer, dict) or not pointer.get("valid"):
         raise ValueError(
             "no valid session receipt: run checkyourself_scan first, or pass findings_path / receipt_id "
@@ -427,25 +473,53 @@ def _findings_path(explicit: Optional[str] = None) -> Path:
     if not receipt_path.is_file():
         rid = pointer.get("receipt_id")
         if rid:
-            receipt_path = _receipts_dir() / f"{rid}.json"
+            receipt_path = _receipts_dir() / f"{_safe_key(str(rid))}.json"
     if not receipt_path.is_file():
         raise ValueError(
             "session receipt pointer is stale; re-run checkyourself_scan or pass an explicit findings_path"
         )
-    return receipt_path
+    return receipt_path, dict(pointer)
 
 
-def _materialize_findings(path: Path) -> Path:
-    """If path is a receipt envelope, write/return a temp raw-scan JSON for the CLI."""
+def _findings_path(explicit: Optional[str] = None) -> Path:
+    return _select_findings(explicit, _session_id_from_host())[0]
+
+
+def _is_receipt_envelope(raw: Any) -> bool:
+    return isinstance(raw, dict) and _RECEIPT_KEYS.issubset(raw.keys()) and "session_id" in raw
+
+
+def _tmp_dir() -> Path:
+    p = _data_dir() / "tmp"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+@contextlib.contextmanager
+def _materialized_findings(path: Path):
+    """Yield a CLI-ready findings path.
+
+    Raw CLI-supported inputs (scan objects, findings arrays including ``[]``, anything else)
+    are passed through untouched. Only a recognized plugin receipt envelope is unpacked, into
+    a unique temp file under plugin-data that is removed afterwards. The caller's input
+    directory is never written to.
+    """
     raw = _load_json(path, None)
-    if not isinstance(raw, dict):
-        raise ValueError(f"findings file is not JSON object: {path}")
-    if isinstance(raw.get("data"), dict) and ("receipt_id" in raw or "valid" in raw):
-        # Receipt envelope — extract scan payload to a sibling temp for the CLI.
-        tmp = path.with_suffix(path.suffix + ".payload.json")
-        _atomic_write_json(tmp, raw["data"])
-        return tmp
-    return path
+    if not _is_receipt_envelope(raw):
+        yield path
+        return
+    if not raw.get("valid", False):
+        raise ValueError(f"receipt is invalidated: {path}")
+    fd, tmp_name = tempfile.mkstemp(prefix="findings-", suffix=".json", dir=str(_tmp_dir()))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(raw["data"], ensure_ascii=False))
+        yield Path(tmp_name)
+    finally:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
 
 
 # --- operations -------------------------------------------------------------
@@ -454,71 +528,81 @@ def describe() -> Dict[str, Any]:
     return run_checkyourself(["describe", "--format", "json"])
 
 
-def scan(project: Optional[str] = None, deep: bool = False, max_files: Optional[int] = None) -> Dict[str, Any]:
+def _scan_once(project: Optional[str], deep: bool, max_files: Optional[int], sid: str) -> Dict[str, Any]:
     root = _resolve_project(project)
-    mf = int(max_files if max_files is not None else _cfg("max_files"))
-    args = [
-        "scan",
-        str(root),
-        "--no-write",
-        "--format", "json",
-        "--max-files", str(mf),
-    ]
+    try:
+        mf = int(max_files if max_files is not None else _cfg("max_files"))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"max_files must be an integer: {max_files!r}") from exc
+    if mf <= 0:
+        raise ValueError(f"max_files must be positive: {mf}")
+    args = ["scan", str(root), "--no-write", "--format", "json", "--max-files", str(mf)]
     if deep:
         args.append("--deep")
     res = run_checkyourself(args)
+    if not (res.get("ok") and isinstance(res.get("data"), dict)):
+        return res
+    provenance = _write_receipt(res["data"], project=root, deep=bool(deep), max_files=mf, session_id=sid)
+    res["receipt_id"] = provenance["receipt_id"]
+    res["receipt_path"] = provenance["receipt_path"]
+    res["provenance"] = {
+        "session_id": provenance.get("session_id"),
+        "project": provenance["project"],
+        "ts": provenance["ts"],
+        "deep": provenance["deep"],
+        "max_files": provenance["max_files"],
+    }
+    return res
+
+
+def scan(project: Optional[str] = None, deep: bool = False, max_files: Optional[int] = None) -> Dict[str, Any]:
+    """Scan and bind a receipt to the caller session captured once at entry.
+
+    ANY failure (path / argument validation, missing executable, raised subprocess error,
+    non-zero CLI, non-scan output) invalidates that session's implicit receipt first.
+    """
     sid = _session_id_from_host()
-    if res.get("ok") and isinstance(res.get("data"), dict):
-        provenance = _write_receipt(
-            res["data"],
-            project=root,
-            deep=bool(deep),
-            max_files=mf,
-            session_id=sid,
-        )
-        res["receipt_id"] = provenance["receipt_id"]
-        res["receipt_path"] = provenance["receipt_path"]
-        res["provenance"] = {
-            "session_id": provenance.get("session_id"),
-            "project": provenance["project"],
-            "ts": provenance["ts"],
-            "deep": provenance["deep"],
-            "max_files": provenance["max_files"],
-        }
-    else:
-        _invalidate_implicit(sid, reason="failed_scan")
+    try:
+        res = _scan_once(project, deep, max_files, sid)
+    except Exception as exc:
+        _invalidate_implicit(sid, reason="failed_scan", error=str(exc))
+        return {"ok": False, "error": str(exc), "implicit_receipt_invalidated": True}
+    if not res.get("receipt_id"):
+        _invalidate_implicit(sid, reason="failed_scan", error=str(res.get("error") or ""))
         res["implicit_receipt_invalidated"] = True
     return res
 
 
-def score(findings_path: Optional[str] = None, claim: Optional[str] = None) -> Dict[str, Any]:
-    path = _materialize_findings(_findings_path(findings_path))
-    args = ["score", "--findings", str(path), "--format", "json", "--no-history"]
-    if claim:
-        args += ["--claim", str(claim)[:500]]
-    res = run_checkyourself(args)
-    # Attach provenance when scoring the session's implicit receipt.
-    if findings_path is None:
-        pointer = _load_json(_implicit_pointer_path(), {})
-        if isinstance(pointer, dict) and pointer.get("valid"):
-            res["receipt_id"] = pointer.get("receipt_id")
-            res["receipt_path"] = pointer.get("receipt_path")
-            res["provenance"] = {
-                "session_id": pointer.get("session_id"),
-                "project": pointer.get("project"),
-                "ts": pointer.get("ts"),
-            }
+def _run_on_findings(verb: str, findings_path: Optional[str], extra: List[str]) -> Dict[str, Any]:
+    sid = _session_id_from_host()
+    path, pointer = _select_findings(findings_path, sid)
+    with _materialized_findings(path) as cli_path:
+        res = run_checkyourself([verb, "--findings", str(cli_path), "--format", "json", *extra])
+    if pointer is not None:
+        # Provenance from the snapshot actually scored — never a reread of the live pointer.
+        res["receipt_id"] = pointer.get("receipt_id")
+        res["receipt_path"] = str(path)
+        res["provenance"] = {
+            "session_id": pointer.get("session_id"),
+            "project": pointer.get("project"),
+            "ts": pointer.get("ts"),
+        }
     return res
 
 
+def score(findings_path: Optional[str] = None, claim: Optional[str] = None) -> Dict[str, Any]:
+    extra = ["--no-history"]
+    if claim:
+        extra += ["--claim", str(claim)[:500]]
+    return _run_on_findings("score", findings_path, extra)
+
+
 def backlog(findings_path: Optional[str] = None) -> Dict[str, Any]:
-    path = _materialize_findings(_findings_path(findings_path))
-    return run_checkyourself(["backlog", "--findings", str(path), "--format", "json"])
+    return _run_on_findings("backlog", findings_path, [])
 
 
 def next_batch(findings_path: Optional[str] = None) -> Dict[str, Any]:
-    path = _materialize_findings(_findings_path(findings_path))
-    return run_checkyourself(["next", "--findings", str(path), "--format", "json"])
+    return _run_on_findings("next", findings_path, [])
 
 
 def coverage_emit(project_label: Optional[str] = None) -> Dict[str, Any]:
@@ -761,14 +845,48 @@ def _scan_summary(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 def _score_summary(payload: Dict[str, Any]) -> Dict[str, Any]:
     data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+    counts = data.get("counts") if isinstance(data.get("counts"), dict) else {}
     return {
         "score": data.get("score", data.get("production_reality_score")),
+        "raw_score": data.get("raw_score"),
+        "score_mode": data.get("score_mode"),
+        "confidence": data.get("confidence"),
         "band": data.get("band", data.get("tier")),
-        "caps": data.get("caps") or data.get("score_caps"),
+        "caps": _score_caps(data),
+        "counts": {k: counts[k] for k in ("P0", "P1", "P2", "P3") if k in counts} or None,
+        "coverage_complete": data.get("coverage_complete"),
         "receipt_id": payload.get("receipt_id"),
         "receipt_path": payload.get("receipt_path"),
         "provenance": payload.get("provenance"),
     }
+
+
+def _score_caps(data: Dict[str, Any]) -> Optional[List[Any]]:
+    caps = data.get("caps_applied", data.get("caps", data.get("score_caps")))
+    if isinstance(caps, list):
+        return [
+            {"cap": c.get("cap"), "reason": str(c.get("reason", ""))[:160]} if isinstance(c, dict) else c
+            for c in caps[:10]
+        ]
+    return caps or None
+
+
+def _payload_kind(data: Any) -> str:
+    """Dispatch on the CLI schema id first; score is checked before shared fields like counts."""
+    if not isinstance(data, dict):
+        return "generic"
+    schema = str(data.get("schema") or "")
+    if schema.startswith("checkyourself-score"):
+        return "score"
+    if schema.startswith("checkyourself-scan"):
+        return "scan"
+    if schema:
+        return "generic"
+    if "score" in data or "production_reality_score" in data:
+        return "score"
+    if "files_scanned" in data or "counts" in data or "findings" in data:
+        return "scan"
+    return "generic"
 
 
 def _bounded_tool_json(out: Dict[str, Any], max_out: int = MAX_OUT) -> str:
@@ -776,16 +894,11 @@ def _bounded_tool_json(out: Dict[str, Any], max_out: int = MAX_OUT) -> str:
     full = json.dumps(out, ensure_ascii=False)
     if len(full) <= max_out:
         return full
-    if isinstance(out.get("data"), dict) and (
-        "files_scanned" in out["data"] or "counts" in out["data"] or "findings" in out["data"]
-    ):
+    kind = _payload_kind(out.get("data"))
+    if kind == "scan":
         summary: Dict[str, Any] = _scan_summary(out)
-        kind = "scan"
-    elif isinstance(out.get("data"), dict) and (
-        "score" in out["data"] or "production_reality_score" in out["data"]
-    ):
+    elif kind == "score":
         summary = _score_summary(out)
-        kind = "score"
     else:
         summary = {
             "keys": sorted(out.keys())[:20],
@@ -793,7 +906,6 @@ def _bounded_tool_json(out: Dict[str, Any], max_out: int = MAX_OUT) -> str:
             "receipt_path": out.get("receipt_path"),
             "error": out.get("error"),
         }
-        kind = "generic"
     artifact = out.get("receipt_path") or out.get("receipt_id")
     candidates: List[Dict[str, Any]] = [
         {
@@ -817,7 +929,7 @@ def _bounded_tool_json(out: Dict[str, Any], max_out: int = MAX_OUT) -> str:
             "kind": kind,
             "summary": {
                 k: summary.get(k)
-                for k in ("project", "files_scanned", "counts", "score", "band", "receipt_id")
+                for k in ("project", "files_scanned", "counts", "score", "score_mode", "band", "receipt_id")
                 if k in summary and summary.get(k) is not None
             },
             "artifact_ref": artifact,
@@ -852,11 +964,8 @@ def _capture_session_kwargs(kwargs: Dict[str, Any]) -> Optional[str]:
 
 def _wrap(fn):
     def handler(args: Optional[Dict[str, Any]] = None, **kwargs: Any) -> str:
-        global _call_session_id
-        prev = _call_session_id
         captured = _capture_session_kwargs(kwargs)
-        if captured:
-            _call_session_id = captured
+        token = _CALL_SESSION.set(captured) if captured else None
         try:
             try:
                 out = fn(args or {})
@@ -869,7 +978,8 @@ def _wrap(fn):
                 out = {"ok": False, "error": "internal: non-dict tool result"}
             return _bounded_tool_json(out)
         finally:
-            _call_session_id = prev
+            if token is not None:
+                _CALL_SESSION.reset(token)
 
     return handler
 
@@ -901,6 +1011,43 @@ _HELP = (
 )
 
 
+def _fmt_scan(data: Dict[str, Any], res: Dict[str, Any], lines: List[str]) -> str:
+    counts = data.get("counts") if isinstance(data.get("counts"), dict) else {}
+    lines.append(f"files_scanned: {data.get('files_scanned')}")
+    if counts:
+        lines.append("counts: " + ", ".join(f"{k}={counts.get(k, 0)}" for k in ("P0", "P1", "P2", "P3")))
+    if data.get("project"):
+        lines.append(f"scanned_project: {data.get('project')}")
+    findings = data.get("findings")
+    if isinstance(findings, list) and findings:
+        lines.append(f"findings_listed: {len(findings)}")
+    if res.get("receipt_path"):
+        lines.append(f"full_artifact: {res['receipt_path']}")
+    return "\n".join(lines)[:SLASH_MAX]
+
+
+def _fmt_score(data: Dict[str, Any], res: Dict[str, Any], lines: List[str]) -> str:
+    summary = _score_summary(res)
+    lines.append(f"score: {summary['score']}")
+    if summary.get("raw_score") is not None and summary.get("raw_score") != summary.get("score"):
+        lines.append(f"raw_score: {summary['raw_score']}")
+    for key in ("score_mode", "confidence", "band"):
+        if summary.get(key):
+            lines.append(f"{key}: {summary[key]}")
+    if summary.get("counts"):
+        lines.append("counts: " + ", ".join(f"{k}={v}" for k, v in summary["counts"].items()))
+    caps = summary.get("caps")
+    if isinstance(caps, list):
+        for cap in caps:
+            if isinstance(cap, dict):
+                lines.append(f"cap: {cap.get('cap')} ({cap.get('reason')})")
+    if summary.get("coverage_complete") is not None:
+        lines.append(f"coverage_complete: {summary['coverage_complete']}")
+    if res.get("receipt_path"):
+        lines.append(f"from_receipt: {res['receipt_path']}")
+    return "\n".join(lines)[:SLASH_MAX]
+
+
 def _fmt(res: Dict[str, Any]) -> str:
     """Slash-facing summary — never slice mid-JSON."""
     if not res.get("ok") and "data" not in res:
@@ -915,33 +1062,12 @@ def _fmt(res: Dict[str, Any]) -> str:
         if prov.get("session_id"):
             lines.append(f"session: {prov['session_id']}")
     data = res.get("data")
+    kind = _payload_kind(data)
+    if kind == "score":
+        return _fmt_score(data, res, lines)
+    if kind == "scan":
+        return _fmt_scan(data, res, lines)
     if isinstance(data, dict):
-        if "files_scanned" in data or "counts" in data:
-            counts = data.get("counts") if isinstance(data.get("counts"), dict) else {}
-            lines.append(f"files_scanned: {data.get('files_scanned')}")
-            if counts:
-                lines.append(
-                    "counts: "
-                    + ", ".join(f"{k}={counts.get(k, 0)}" for k in ("P0", "P1", "P2", "P3"))
-                )
-            if data.get("project"):
-                lines.append(f"scanned_project: {data.get('project')}")
-            findings = data.get("findings")
-            if isinstance(findings, list) and findings:
-                lines.append(f"findings_listed: {len(findings)}")
-            if res.get("receipt_path"):
-                lines.append(f"full_artifact: {res['receipt_path']}")
-            text = "\n".join(lines) if lines else json.dumps(_scan_summary(res), indent=2)
-            return text[:SLASH_MAX]
-        if "score" in data or "production_reality_score" in data:
-            score_val = data.get("score", data.get("production_reality_score"))
-            band = data.get("band", data.get("tier"))
-            lines.append(f"score: {score_val}")
-            if band:
-                lines.append(f"band: {band}")
-            if res.get("receipt_path"):
-                lines.append(f"from_receipt: {res['receipt_path']}")
-            return "\n".join(lines)[:SLASH_MAX]
         # Generic small JSON — dump with indent but never mid-cut invalidly
         dumped = json.dumps(data, indent=2, ensure_ascii=False)
         if len(dumped) <= SLASH_MAX:

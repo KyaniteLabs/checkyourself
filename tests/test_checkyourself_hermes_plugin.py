@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
+import importlib.util
 import json
 import os
-import signal
-import subprocess
+import shlex
 import sys
 import tempfile
 import threading
@@ -16,11 +17,9 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_DIR = ROOT / "plugins" / "checkyourself-hermes"
-sys.path.insert(0, str(PLUGIN_DIR.parent))
+CLI = ROOT / "tools" / "checkyourself.py"
 
 # Import the plugin module directly by path so we do not require Hermes installed.
-import importlib.util
-
 _spec = importlib.util.spec_from_file_location(
     "checkyourself_hermes_plugin",
     PLUGIN_DIR / "__init__.py",
@@ -50,6 +49,15 @@ class _FakeSessionCtx:
         return os.getenv(name, default)
 
 
+@contextlib.contextmanager
+def _session(sid):
+    token = cy._CALL_SESSION.set(sid)
+    try:
+        yield
+    finally:
+        cy._CALL_SESSION.reset(token)
+
+
 class HermesPluginKaiFixes(unittest.TestCase):
     def setUp(self):
         self._tmpdir = tempfile.TemporaryDirectory()
@@ -66,7 +74,6 @@ class HermesPluginKaiFixes(unittest.TestCase):
         os.environ.pop("HERMES_PLATFORM", None)
         os.environ.pop("HERMES_SESSION_PLATFORM", None)
         os.environ.pop("HERMES_SESSION_ID", None)
-        cy._call_session_id = None
         cy._ctx = None
 
     def tearDown(self):
@@ -83,12 +90,16 @@ class HermesPluginKaiFixes(unittest.TestCase):
         os.environ.pop("HERMES_SESSION_PLATFORM", None)
         os.environ.pop("HERMES_PLATFORM", None)
 
-        with mock.patch.dict(sys.modules, {
-            "gateway": mock.MagicMock(),
-            "gateway.session_context": mock.MagicMock(get_session_env=fake.get_session_env),
-        }):
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "gateway": mock.MagicMock(),
+                "gateway.session_context": mock.MagicMock(get_session_env=fake.get_session_env),
+            },
+        ):
             # Ensure import path used by plugin resolves to our fake
             import types
+
             mod = types.ModuleType("gateway.session_context")
             mod.get_session_env = fake.get_session_env
             sys.modules["gateway.session_context"] = mod
@@ -100,6 +111,7 @@ class HermesPluginKaiFixes(unittest.TestCase):
         fake = _FakeSessionCtx()
         fake.set_session_vars(platform="cli")
         import types
+
         mod = types.ModuleType("gateway.session_context")
         mod.get_session_env = fake.get_session_env
         with mock.patch.dict(sys.modules, {"gateway.session_context": mod, "gateway": types.ModuleType("gateway")}):
@@ -114,6 +126,7 @@ class HermesPluginKaiFixes(unittest.TestCase):
         launch.mkdir()
 
         import types
+
         rcwd = types.ModuleType("agent.runtime_cwd")
         rcwd.resolve_agent_cwd = lambda: project_a
         agent_mod = types.ModuleType("agent")
@@ -150,36 +163,35 @@ class HermesPluginKaiFixes(unittest.TestCase):
             return {"ok": True, "exit": 0, "data": data}
 
         with mock.patch.object(cy, "run_checkyourself", side_effect=fake_run):
-            cy._call_session_id = "session-A"
-            res_a = cy.scan(str(project_a))
+            with _session("session-A"):
+                res_a = cy.scan(str(project_a))
             self.assertTrue(res_a["ok"])
             self.assertTrue(res_a.get("receipt_id"))
             rid_a = res_a["receipt_id"]
 
-            cy._call_session_id = "session-B"
-            res_b = cy.scan(str(project_b))
+            with _session("session-B"):
+                res_b = cy.scan(str(project_b))
             self.assertTrue(res_b["ok"])
             rid_b = res_b["receipt_id"]
             self.assertNotEqual(rid_a, rid_b)
 
             # Session A still points at A's receipt
-            cy._call_session_id = "session-A"
-            path_a = cy._findings_path()
-            data_a = cy._load_receipt(path_a)
+            with _session("session-A"):
+                data_a = cy._load_receipt(cy._findings_path())
             self.assertEqual(data_a["project"], str(project_a))
 
             # Failed scan for A invalidates A's implicit pointer
             with mock.patch.object(cy, "run_checkyourself", return_value={"ok": False, "error": "boom"}):
-                cy._call_session_id = "session-A"
-                failed = cy.scan(str(project_a))
+                with _session("session-A"):
+                    failed = cy.scan(str(project_a))
             self.assertFalse(failed["ok"])
             self.assertTrue(failed.get("implicit_receipt_invalidated"))
-            with self.assertRaises(ValueError):
+            with _session("session-A"), self.assertRaises(ValueError):
                 cy._findings_path()
 
             # Session B still intact
-            cy._call_session_id = "session-B"
-            data_b = cy._load_receipt(cy._findings_path())
+            with _session("session-B"):
+                data_b = cy._load_receipt(cy._findings_path())
             self.assertEqual(data_b["project"], str(project_b))
 
     # --- P2: bounded envelope ----------------------------------------------
@@ -263,37 +275,41 @@ class HermesPluginKaiFixes(unittest.TestCase):
 
     # --- P2: process-group timeout kill ------------------------------------
 
-    def test_timeout_kills_process_group_descendants(self):
+    def test_timeout_kills_sigterm_resistant_descendant(self):
         marker = self.td / "child_marker"
-        # Child script: ignore SIGTERM at the Python level? We rely on SIGKILL of the group.
-        # Parent is a shell that spawns a long-running python grandchild.
-        child_py = self.td / "sleepy.py"
+        ready = self.td / "child_ready"
+        child_py = self.td / "stubborn.py"
         child_py.write_text(
-            "import time, pathlib, sys\n"
-            f"p = pathlib.Path({str(marker)!r})\n"
-            "time.sleep(2.0)\n"
-            "p.write_text('survived')\n",
+            "import os, pathlib, signal, time\n"
+            "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+            f"pathlib.Path({str(ready)!r}).write_text(str(os.getpid()))\n"
+            "time.sleep(3.0)\n"
+            f"pathlib.Path({str(marker)!r}).write_text('survived')\n",
             encoding="utf-8",
         )
         trampoline = self.td / "trampoline.sh"
+        # The shell leader exits promptly on SIGTERM; its Python child ignores SIGTERM.
         trampoline.write_text(
-            "#!/bin/sh\n"
-            f"python3 {child_py} &\n"
-            "wait\n",
+            f"#!/bin/sh\ntrap 'exit 0' TERM\n{shlex.quote(sys.executable)} {shlex.quote(str(child_py))} &\nwait\n",
             encoding="utf-8",
         )
         trampoline.chmod(0o755)
 
-        with mock.patch.object(cy, "_cfg", side_effect=lambda k: {
-            "checkyourself_command": str(trampoline),
-            "timeout_seconds": 1,
-        }.get(k, cy.DEFAULTS.get(k))):
+        cfg = {"checkyourself_command": str(trampoline), "timeout_seconds": 1}
+        with (
+            mock.patch.object(cy, "_cfg", side_effect=lambda k: cfg.get(k, cy.DEFAULTS.get(k))),
+            mock.patch.object(cy, "_KILL_GRACE", 0.5),
+        ):
             res = cy.run_checkyourself([])
         self.assertFalse(res["ok"])
         self.assertIn("timed out", res.get("error", ""))
-        # Give a moment; grandchild must not finish and write the marker.
-        time.sleep(2.5)
-        self.assertFalse(marker.exists(), "descendant survived timeout")
+        self.assertTrue(ready.exists(), "child never installed its SIGTERM-ignoring handler")
+        child_pid = int(ready.read_text())
+        time.sleep(3.5)
+        self.assertFalse(marker.exists(), "SIGTERM-resistant descendant survived timeout")
+        status = Path(f"/proc/{child_pid}/status")
+        if status.exists():  # reparented zombie awaiting reaping is dead, anything else is not
+            self.assertIn("State:\tZ", status.read_text())
 
     # --- P2: data.counts ---------------------------------------------------
 
@@ -356,6 +372,193 @@ class HermesPluginKaiFixes(unittest.TestCase):
         text = cy._slash('scan "')
         self.assertIn("No closing quotation", text)
         self.assertIn("Usage:", text)
+
+    # --- Kai pass 2: real-contract / concurrent regressions -----------------
+
+    def _real_cli_cfg(self, **over):
+        cfg = {
+            "checkyourself_command": f"{shlex.quote(sys.executable)} {shlex.quote(str(CLI))}",
+            "timeout_seconds": 120,
+            "max_files": 500,
+        }
+        cfg.update(over)
+        return mock.patch.object(cy, "_cfg", side_effect=lambda k: cfg.get(k, cy.DEFAULTS.get(k)))
+
+    def _fixture_project(self, name="proj"):
+        proj = self.td / name
+        proj.mkdir()
+        (proj / "package.json").write_text('{"name": "fixture", "scripts": {"test": "node t.js"}}\n')
+        (proj / "index.js").write_text("console.log('hi')\n")
+        return proj
+
+    def test_overlapping_handlers_do_not_mix_session_ids(self):
+        project_a = self.td / "A"
+        project_b = self.td / "B"
+        project_a.mkdir()
+        project_b.mkdir()
+        a_in, a_go, b_in, b_go = (threading.Event() for _ in range(4))
+
+        def fake_run(args):
+            root = Path(args[1])
+            if root == project_a.resolve():
+                a_in.set()
+                a_go.wait(5)
+            else:
+                b_in.set()
+                b_go.wait(5)
+            return {"ok": True, "exit": 0, "data": {"project": str(root), "files_scanned": 1, "counts": {}}}
+
+        results = {}
+
+        def call(label, project):
+            results[label] = json.loads(cy._tool_scan({"project": str(project)}, session_id=label))
+
+        with mock.patch.object(cy, "run_checkyourself", side_effect=fake_run):
+            ta = threading.Thread(target=call, args=("A", project_a))
+            tb = threading.Thread(target=call, args=("B", project_b))
+            ta.start()
+            self.assertTrue(a_in.wait(5))  # A is paused inside the CLI call
+            tb.start()
+            self.assertTrue(b_in.wait(5))  # B entered while A is still running
+            a_go.set()  # A resumes first and finishes while B is still running
+            ta.join(5)
+            b_go.set()
+            tb.join(5)
+
+        for label, project in (("A", project_a), ("B", project_b)):
+            res = results[label]
+            self.assertTrue(res["ok"], res)
+            self.assertEqual(res["provenance"]["session_id"], label)
+            envelope = json.loads(Path(res["receipt_path"]).read_text())
+            self.assertEqual(envelope["session_id"], label)
+            self.assertEqual(envelope["project"], str(project.resolve()))
+            pointer = json.loads(cy._implicit_pointer_path(label).read_text())
+            self.assertEqual(pointer["receipt_id"], res["receipt_id"])
+        # Nothing leaks into later calls without a session kwarg.
+        self.assertEqual(cy._session_id_from_host(), "")
+        self.assertFalse(cy._implicit_pointer_path("").exists())
+
+    def test_score_provenance_is_the_snapshot_actually_scored(self):
+        project_a = self.td / "A"
+        project_a.mkdir()
+        scans = iter(["first", "second"])
+
+        def fake_run(args):
+            if args[0] == "scan":
+                return {"ok": True, "exit": 0, "data": {"project": next(scans), "files_scanned": 1, "counts": {}}}
+            scored = json.loads(Path(args[args.index("--findings") + 1]).read_text())
+            # A concurrent scan in the same session replaces the pointer mid-score.
+            second = cy.scan(str(project_a))
+            holder["second"] = second["receipt_id"]
+            return {"ok": True, "exit": 0, "data": {"schema": "checkyourself-score/1", "score": 50, "seen": scored}}
+
+        holder = {}
+        with mock.patch.object(cy, "run_checkyourself", side_effect=fake_run):
+            first = json.loads(cy._tool_scan({"project": str(project_a)}, session_id="S"))
+            res = json.loads(cy._tool_score({}, session_id="S"))
+        self.assertEqual(res["data"]["seen"]["project"], "first")
+        self.assertEqual(res["receipt_id"], first["receipt_id"])
+        self.assertNotEqual(res["receipt_id"], holder["second"])
+
+    def test_failed_scan_before_cli_invalidates_prior_receipt(self):
+        project_a = self.td / "A"
+        project_a.mkdir()
+        ok = {"ok": True, "exit": 0, "data": {"project": str(project_a), "files_scanned": 1, "counts": {}}}
+        failures = [
+            ({"project": str(self.td / "does-not-exist")}, None),  # path validation
+            ({"project": str(project_a), "max_files": "lots"}, None),  # argument validation
+            ({"project": str(project_a)}, OSError("exec format error")),  # raised subprocess error
+        ]
+        for args, raised in failures:
+            with self.subTest(args=args, raised=raised):
+                with mock.patch.object(cy, "run_checkyourself", return_value=ok):
+                    good = json.loads(cy._tool_scan({"project": str(project_a)}, session_id="A"))
+                    self.assertTrue(good["ok"])
+                    self.assertTrue(json.loads(cy._tool_score({}, session_id="A")).get("receipt_id"))
+                side = {"side_effect": raised} if raised else {"return_value": ok}
+                with mock.patch.object(cy, "run_checkyourself", **side):
+                    bad = json.loads(cy._tool_scan(args, session_id="A"))
+                    self.assertFalse(bad["ok"])
+                    self.assertTrue(bad.get("implicit_receipt_invalidated"))
+                    after = json.loads(cy._tool_score({}, session_id="A"))
+                self.assertFalse(after["ok"])
+                self.assertIn("no valid session receipt", after["error"])
+                # Slash path behaves the same.
+                self.assertIn("no valid session receipt", cy._slash("score"))
+
+    def test_missing_executable_invalidates_prior_receipt(self):
+        project_a = self.td / "A"
+        project_a.mkdir()
+        ok = {"ok": True, "exit": 0, "data": {"project": str(project_a), "files_scanned": 1, "counts": {}}}
+        with mock.patch.object(cy, "run_checkyourself", return_value=ok):
+            self.assertTrue(json.loads(cy._tool_scan({"project": str(project_a)}, session_id="A"))["ok"])
+        with self._real_cli_cfg(checkyourself_command=str(self.td / "no-such-binary")):
+            bad = json.loads(cy._tool_scan({"project": str(project_a)}, session_id="A"))
+            self.assertFalse(bad["ok"])
+            after = json.loads(cy._tool_score({}, session_id="A"))
+        self.assertIn("no valid session receipt", after["error"])
+
+    def test_real_cli_score_output_displays_score_mode_and_caps(self):
+        proj = self._fixture_project()
+        with self._real_cli_cfg():
+            scanned = cy.scan(str(proj))
+            self.assertTrue(scanned["ok"], scanned)
+            res = cy.score()
+            slash_text = cy._slash("score")
+        self.assertTrue(res["ok"], res)
+        data = res["data"]
+        self.assertEqual(data["schema"], "checkyourself-score/1")
+        self.assertIn("counts", data)  # real score JSON shares `counts` with scans
+        text = cy._fmt(res)
+        self.assertIn(f"score: {data['score']}", text)
+        self.assertIn(f"score_mode: {data['score_mode']}", text)
+        self.assertNotIn("files_scanned", text)
+        for cap in data.get("caps_applied") or []:
+            self.assertIn(f"cap: {cap['cap']}", text)
+        self.assertIn(f"score: {data['score']}", slash_text)
+        # Oversized score responses stay score-shaped.
+        bounded = json.loads(cy._bounded_tool_json(res, max_out=1500))
+        self.assertEqual(bounded["kind"], "score")
+        self.assertEqual(bounded["summary"]["score"], data["score"])
+        self.assertEqual(bounded["summary"]["score_mode"], data["score_mode"])
+        self.assertEqual(cy._payload_kind(scanned["data"]), "scan")
+
+    def test_explicit_receipt_in_project_dir_is_never_modified(self):
+        proj = self._fixture_project()
+        with self._real_cli_cfg():
+            scanned = cy.scan(str(proj))
+        self.assertTrue(scanned["ok"], scanned)
+        caller_receipt = proj / "receipt.json"
+        caller_receipt.write_bytes(Path(scanned["receipt_path"]).read_bytes())
+        sibling = proj / "receipt.json.payload.json"
+        sibling.write_text("caller-owned sentinel\n")
+        before = {p.name: p.read_bytes() for p in proj.iterdir()}
+        with self._real_cli_cfg():
+            res = cy.score(str(caller_receipt))
+            backlog_res = cy.backlog(str(caller_receipt))
+        self.assertTrue(res["ok"], res)
+        self.assertTrue(backlog_res["ok"], backlog_res)
+        self.assertIn("score", res["data"])
+        after = {p.name: p.read_bytes() for p in proj.iterdir()}
+        self.assertEqual(before, after)
+        tmp = self.data / "tmp"
+        self.assertEqual(list(tmp.iterdir()) if tmp.exists() else [], [])
+
+    def test_raw_findings_arrays_pass_through_to_cli(self):
+        empty = self.td / "empty.json"
+        empty.write_text("[]\n")
+        one = self.td / "one.json"
+        one.write_text(json.dumps([{"id": "F1", "severity": "P1", "title": "x", "category": "tests"}]))
+        before = {p: p.read_bytes() for p in (empty, one)}
+        with self._real_cli_cfg():
+            for path in (empty, one):
+                for fn in (cy.score, cy.backlog, cy.next_batch):
+                    with self.subTest(path=path.name, fn=fn.__name__):
+                        res = fn(str(path))
+                        self.assertTrue(res["ok"], res)
+                        self.assertIn("schema", res["data"])
+            self.assertEqual(json.loads(cy._tool_score({"findings_path": str(empty)}))["data"]["counts"]["P0"], 0)
+        self.assertEqual(before, {p: p.read_bytes() for p in (empty, one)})
 
 
 if __name__ == "__main__":
