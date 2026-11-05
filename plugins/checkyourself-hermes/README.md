@@ -28,7 +28,7 @@ Requires **Node ≥ 18**, `npx` on PATH, and **Python 3** (the npm package is a 
 
 - **Downloads code:** first use runs `npx -y @puenteworks/checkyourself@1.7.0` (npm). Override with `checkyourself_command` (e.g. `checkyourself` after `npm i -g @puenteworks/checkyourself@1.7.0`).
 - **Network / telemetry:** the CLI itself is local-first — no network calls, no telemetry, secret values never printed. The only network step is the one-time npm download of the pinned package (or whenever the npx cache misses).
-- **Filesystem:** `scan` is read-only against the target project (`--no-write`). Findings JSON, score ledger, and meta live under `<HERMES_HOME>/plugin-data/checkyourself/` (per profile). Nothing is written into the scanned project by this plugin.
+- **Filesystem:** `scan` is read-only against the target project (`--no-write`). Immutable session/project-bound scan receipts, the per-session implicit pointer, and the score ledger live under `<HERMES_HOME>/plugin-data/checkyourself/` (per profile). A failed scan invalidates that session's implicit receipt. Nothing is written into the scanned project by this plugin.
 - **Secrets:** child env is scrubbed (PATH/HOME/locale/proxy/npm cache/`CHECKYOURSELF_PYTHON` only). No API keys are required or copied from Hermes secret scope.
 - **Gateway:** `/checkyourself scan|score|backlog|next|coverage` are refused on gateway platforms unless `allow_project_slash_on_gateway: true`. Agent tools still work.
 - **Not in v0.1.0:** `challenge` (executes committed challenge commands), `init` (writes starter files), `mcp` (stdio server), `receipt`, `diff` — use the CheckYourself CLI directly.
@@ -48,7 +48,7 @@ Requires **Node ≥ 18**, `npx` on PATH, and **Python 3** (the npm package is a 
 ## Known issues
 
 - First call is slow (npm download); offline machines need a pre-installed `checkyourself` on PATH.
-- Score without a prior scan fails with a clear error — run `checkyourself_scan` first (or pass `findings_path`).
+- Score without a prior valid session receipt fails with a clear error — run `checkyourself_scan` first (or pass `findings_path`). Relative project paths resolve via Hermes session cwd (`resolve_agent_cwd`).
 - Large repos may truncate at `max_files`; the scan JSON discloses truncation in `scan_limits`.
 - The score is **scoped evidence**, not a production-safety certification.
 - No Desktop pane, 2:1 banner, or screenshots yet.
