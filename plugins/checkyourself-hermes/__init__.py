@@ -7,22 +7,26 @@ Surfaces:
   tools          -> checkyourself_scan / _score / _backlog / _next / _describe / _coverage
   skill          -> skills/checkyourself/SKILL.md
 
-Child processes get a scrubbed env; scan artifacts and the score ledger live under
+Child processes get a scrubbed env; scan receipts and the score ledger live under
 <HERMES_HOME>/plugin-data/checkyourself/ via plugins.plugin_storage. Only public ctx.* APIs.
 challenge / init / mcp / receipt / diff are intentionally NOT exposed in v0.1.0.
 """
 
 from __future__ import annotations
 
+import fcntl
 import json
 import logging
 import os
 import re
 import shlex
+import signal
 import subprocess
+import tempfile
 import time
+import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +42,8 @@ DEFAULTS: Dict[str, Any] = {
 }
 LEDGER_MAX = 200
 MAX_OUT = 20000
+SLASH_MAX = 3500
+_LOCAL_PLATFORMS = frozenset({"cli", "tui", "desktop", "local", "acp", ""})
 
 # Completion / launch claims that should trip the Evidence Gate brief.
 _CLAIM_RE = re.compile(
@@ -52,6 +58,8 @@ _CLAIM_RE = re.compile(
 )
 
 _ctx = None
+# Optional per-call overrides set by tool/slash handlers (session id from kwargs).
+_call_session_id: Optional[str] = None
 
 
 # --- config / storage -------------------------------------------------------
@@ -80,8 +88,64 @@ def _ledger_path() -> Path:
     return _data_dir() / "score_ledger.json"
 
 
-def _last_scan_path() -> Path:
-    return _data_dir() / "last_scan.json"
+def _receipts_dir() -> Path:
+    p = _data_dir() / "receipts"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def _implicit_dir() -> Path:
+    p = _data_dir() / "implicit"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def _safe_key(raw: str) -> str:
+    key = re.sub(r"[^A-Za-z0-9._-]+", "_", (raw or "").strip()) or "nosession"
+    return key[:96]
+
+
+def _session_id_from_host() -> str:
+    """Caller-scoped Hermes session id (ContextVar first, then env / call override)."""
+    if _call_session_id:
+        return str(_call_session_id)
+    try:
+        from gateway.session_context import get_session_env
+
+        sid = get_session_env("HERMES_SESSION_ID", "") or ""
+    except Exception:
+        sid = ""
+    if not sid:
+        sid = os.environ.get("HERMES_SESSION_ID") or ""
+    return str(sid).strip()
+
+
+def _session_platform() -> str:
+    """Platform identity from Hermes session ContextVars (not raw os.environ alone)."""
+    try:
+        from gateway.session_context import get_session_env
+
+        session_plat = get_session_env("HERMES_SESSION_PLATFORM", "") or ""
+    except Exception:
+        session_plat = os.environ.get("HERMES_SESSION_PLATFORM") or ""
+    # HERMES_PLATFORM remains a process-level override used by some local surfaces.
+    plat = os.environ.get("HERMES_PLATFORM") or session_plat or ""
+    return str(plat).strip().lower()
+
+
+def _on_gateway() -> bool:
+    plat = _session_platform()
+    return bool(plat) and plat not in _LOCAL_PLATFORMS
+
+
+def _agent_cwd() -> Path:
+    """Hermes logical session / terminal cwd; falls back to process cwd."""
+    try:
+        from agent.runtime_cwd import resolve_agent_cwd
+
+        return Path(resolve_agent_cwd()).resolve()
+    except Exception:
+        return Path.cwd().resolve()
 
 
 def _load_json(path: Path, default: Any) -> Any:
@@ -93,16 +157,60 @@ def _load_json(path: Path, default: Any) -> Any:
     return default
 
 
-def _save_json(path: Path, payload: Any) -> None:
+def _atomic_write_json(path: Path, payload: Any) -> None:
+    """Write JSON via a unique temp file + os.replace (safe under concurrent writers)."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    tmp.replace(path)
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        dir=str(path.parent),
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp_name, path)
+    except Exception:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
 
 
-def _on_gateway() -> bool:
-    plat = (os.environ.get("HERMES_PLATFORM") or os.environ.get("HERMES_SESSION_PLATFORM") or "").lower()
-    return bool(plat) and plat not in {"cli", "tui", "desktop", "local", "acp"}
+def _save_json(path: Path, payload: Any) -> None:
+    _atomic_write_json(path, payload)
+
+
+def _with_file_lock(lock_path: Path):
+    """Exclusive flock context manager for ledger RMW."""
+
+    class _Lock:
+        def __enter__(self_inner):
+            lock_path.parent.mkdir(parents=True, exist_ok=True)
+            self_inner._fh = open(lock_path, "a+", encoding="utf-8")
+            fcntl.flock(self_inner._fh.fileno(), fcntl.LOCK_EX)
+            return self_inner._fh
+
+        def __exit__(self_inner, *exc):
+            try:
+                fcntl.flock(self_inner._fh.fileno(), fcntl.LOCK_UN)
+            finally:
+                self_inner._fh.close()
+
+    return _Lock()
+
+
+def _append_ledger(entry: Dict[str, Any]) -> None:
+    path = _ledger_path()
+    lock_path = path.with_suffix(path.suffix + ".lock")
+    with _with_file_lock(lock_path):
+        ledger = _load_json(path, [])
+        if not isinstance(ledger, list):
+            ledger = []
+        ledger.append(entry)
+        _atomic_write_json(path, ledger[-LEDGER_MAX:])
 
 
 # --- child process ----------------------------------------------------------
@@ -120,28 +228,76 @@ def _scrubbed_env() -> Dict[str, str]:
     env = {k: os.environ[k] for k in _ENV_ALLOW if os.environ.get(k)}
     env["NO_COLOR"] = "1"
     env["CHECKYOURSELF_PLUGIN_DATA"] = str(_data_dir())
-    # No API keys needed — CLI is local-first and prints no secrets. Do not copy
-    # anything from Hermes secret scope into the child.
     return env
+
+
+def _close_pipes(proc: subprocess.Popen) -> None:
+    for stream in (proc.stdout, proc.stderr, proc.stdin):
+        if stream is None:
+            continue
+        try:
+            stream.close()
+        except Exception:
+            pass
+
+
+def _kill_process_group(proc: subprocess.Popen) -> None:
+    """Terminate the whole process tree started in its own session."""
+    if proc.pid is None:
+        _close_pipes(proc)
+        return
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError, OSError):
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+    try:
+        proc.wait(timeout=1.0)
+        _close_pipes(proc)
+        return
+    except Exception:
+        pass
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError):
+        try:
+            proc.kill()
+        except Exception:
+            pass
+    try:
+        proc.wait(timeout=2.0)
+    except Exception:
+        pass
+    _close_pipes(proc)
 
 
 def run_checkyourself(args: List[str]) -> Dict[str, Any]:
     cmd = shlex.split(str(_cfg("checkyourself_command"))) + args
+    timeout = int(_cfg("timeout_seconds"))
     try:
-        proc = subprocess.run(
+        proc = subprocess.Popen(
             cmd,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=int(_cfg("timeout_seconds")),
             env=_scrubbed_env(),
             cwd=str(_data_dir()),
+            start_new_session=True,  # own process group for tree kill on timeout
         )
     except FileNotFoundError as exc:
-        return {"ok": False, "error": f"checkyourself not runnable (need Node >=18 + npx + Python 3): {exc}"}
+        return {
+            "ok": False,
+            "error": f"checkyourself not runnable (need Node >=18 + npx + Python 3): {exc}",
+        }
+    try:
+        out_s, err_s = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
+        _kill_process_group(proc)
         return {"ok": False, "error": "checkyourself timed out"}
-    out = (proc.stdout or "").strip()
-    err = (proc.stderr or "").strip()
+    out = (out_s or "").strip()
+    err = (err_s or "").strip()
     if proc.returncode != 0 and not out:
         return {"ok": False, "exit": proc.returncode, "error": err[-800:] or f"exit {proc.returncode}"}
     data: Any = None
@@ -169,8 +325,7 @@ def _resolve_project(project: Optional[str] = None) -> Path:
     raw = str(project if project not in (None, "") else _cfg("default_project")).strip() or "."
     p = Path(raw).expanduser()
     if not p.is_absolute():
-        # Prefer cwd when default "."; otherwise resolve relative to cwd.
-        p = (Path.cwd() / p).resolve()
+        p = (_agent_cwd() / p).resolve()
     else:
         p = p.resolve()
     if not p.exists():
@@ -180,22 +335,117 @@ def _resolve_project(project: Optional[str] = None) -> Path:
     return p
 
 
+def _implicit_pointer_path(session_id: Optional[str] = None) -> Path:
+    sid = _safe_key(session_id if session_id is not None else _session_id_from_host())
+    return _implicit_dir() / f"{sid}.json"
+
+
+def _invalidate_implicit(session_id: Optional[str] = None, reason: str = "failed_scan") -> None:
+    path = _implicit_pointer_path(session_id)
+    meta = {
+        "valid": False,
+        "invalidated_at": int(time.time()),
+        "reason": reason,
+        "session_id": session_id if session_id is not None else _session_id_from_host(),
+    }
+    try:
+        _atomic_write_json(path, meta)
+    except Exception:
+        logger.debug("checkyourself: failed invalidating implicit receipt", exc_info=True)
+
+
+def _write_receipt(
+    scan_data: Dict[str, Any],
+    *,
+    project: Path,
+    deep: bool,
+    max_files: int,
+    session_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Immutable session/project-bound scan receipt; updates the session's implicit pointer."""
+    sid = session_id if session_id is not None else _session_id_from_host()
+    receipt_id = uuid.uuid4().hex
+    receipt_path = _receipts_dir() / f"{receipt_id}.json"
+    provenance = {
+        "receipt_id": receipt_id,
+        "session_id": sid or None,
+        "project": str(project),
+        "deep": bool(deep),
+        "max_files": int(max_files),
+        "ts": int(time.time()),
+    }
+    envelope = {
+        **provenance,
+        "valid": True,
+        "data": scan_data,
+    }
+    _atomic_write_json(receipt_path, envelope)
+    _atomic_write_json(
+        _implicit_pointer_path(sid),
+        {
+            "valid": True,
+            "receipt_id": receipt_id,
+            "receipt_path": str(receipt_path),
+            "project": str(project),
+            "session_id": sid or None,
+            "ts": provenance["ts"],
+        },
+    )
+    return provenance | {"receipt_path": str(receipt_path)}
+
+
+def _load_receipt(receipt_path: Path) -> Dict[str, Any]:
+    envelope = _load_json(receipt_path, None)
+    if not isinstance(envelope, dict) or not envelope.get("valid", True):
+        raise ValueError(f"receipt is missing or invalidated: {receipt_path}")
+    data = envelope.get("data")
+    if not isinstance(data, dict):
+        # Legacy / raw scan JSON written directly
+        if "counts" in envelope or "findings" in envelope:
+            return envelope
+        raise ValueError(f"receipt has no scan data: {receipt_path}")
+    return data
+
+
 def _findings_path(explicit: Optional[str] = None) -> Path:
     if explicit:
         p = Path(str(explicit)).expanduser()
         if not p.is_absolute():
-            p = (Path.cwd() / p).resolve()
+            p = (_agent_cwd() / p).resolve()
         else:
             p = p.resolve()
         if not p.is_file():
             raise ValueError(f"findings file not found: {p}")
         return p
-    last = _last_scan_path()
-    if not last.is_file():
+    pointer = _load_json(_implicit_pointer_path(), None)
+    if not isinstance(pointer, dict) or not pointer.get("valid"):
         raise ValueError(
-            "no findings file: run checkyourself_scan first, or pass findings_path to an existing scan JSON"
+            "no valid session receipt: run checkyourself_scan first, or pass findings_path / receipt_id "
+            "to an existing scan JSON (a failed scan invalidates the previous implicit receipt)"
         )
-    return last
+    receipt_path = Path(str(pointer.get("receipt_path") or ""))
+    if not receipt_path.is_file():
+        rid = pointer.get("receipt_id")
+        if rid:
+            receipt_path = _receipts_dir() / f"{rid}.json"
+    if not receipt_path.is_file():
+        raise ValueError(
+            "session receipt pointer is stale; re-run checkyourself_scan or pass an explicit findings_path"
+        )
+    return receipt_path
+
+
+def _materialize_findings(path: Path) -> Path:
+    """If path is a receipt envelope, write/return a temp raw-scan JSON for the CLI."""
+    raw = _load_json(path, None)
+    if not isinstance(raw, dict):
+        raise ValueError(f"findings file is not JSON object: {path}")
+    if isinstance(raw.get("data"), dict) and ("receipt_id" in raw or "valid" in raw):
+        # Receipt envelope — extract scan payload to a sibling temp for the CLI.
+        tmp = path.with_suffix(path.suffix + ".payload.json")
+        _atomic_write_json(tmp, raw["data"])
+        return tmp
+    return path
 
 
 # --- operations -------------------------------------------------------------
@@ -217,31 +467,57 @@ def scan(project: Optional[str] = None, deep: bool = False, max_files: Optional[
     if deep:
         args.append("--deep")
     res = run_checkyourself(args)
+    sid = _session_id_from_host()
     if res.get("ok") and isinstance(res.get("data"), dict):
-        _save_json(_last_scan_path(), res["data"])
-        # Also stash a sidecar pointer for humans
-        _save_json(
-            _data_dir() / "last_scan_meta.json",
-            {"ts": int(time.time()), "project": str(root), "deep": bool(deep), "max_files": mf},
+        provenance = _write_receipt(
+            res["data"],
+            project=root,
+            deep=bool(deep),
+            max_files=mf,
+            session_id=sid,
         )
+        res["receipt_id"] = provenance["receipt_id"]
+        res["receipt_path"] = provenance["receipt_path"]
+        res["provenance"] = {
+            "session_id": provenance.get("session_id"),
+            "project": provenance["project"],
+            "ts": provenance["ts"],
+            "deep": provenance["deep"],
+            "max_files": provenance["max_files"],
+        }
+    else:
+        _invalidate_implicit(sid, reason="failed_scan")
+        res["implicit_receipt_invalidated"] = True
     return res
 
 
 def score(findings_path: Optional[str] = None, claim: Optional[str] = None) -> Dict[str, Any]:
-    path = _findings_path(findings_path)
+    path = _materialize_findings(_findings_path(findings_path))
     args = ["score", "--findings", str(path), "--format", "json", "--no-history"]
     if claim:
         args += ["--claim", str(claim)[:500]]
-    return run_checkyourself(args)
+    res = run_checkyourself(args)
+    # Attach provenance when scoring the session's implicit receipt.
+    if findings_path is None:
+        pointer = _load_json(_implicit_pointer_path(), {})
+        if isinstance(pointer, dict) and pointer.get("valid"):
+            res["receipt_id"] = pointer.get("receipt_id")
+            res["receipt_path"] = pointer.get("receipt_path")
+            res["provenance"] = {
+                "session_id": pointer.get("session_id"),
+                "project": pointer.get("project"),
+                "ts": pointer.get("ts"),
+            }
+    return res
 
 
 def backlog(findings_path: Optional[str] = None) -> Dict[str, Any]:
-    path = _findings_path(findings_path)
+    path = _materialize_findings(_findings_path(findings_path))
     return run_checkyourself(["backlog", "--findings", str(path), "--format", "json"])
 
 
 def next_batch(findings_path: Optional[str] = None) -> Dict[str, Any]:
-    path = _findings_path(findings_path)
+    path = _materialize_findings(_findings_path(findings_path))
     return run_checkyourself(["next", "--findings", str(path), "--format", "json"])
 
 
@@ -265,12 +541,74 @@ _BRIEF = (
 )
 
 
-def _on_pre_llm(user_message: str = "", **_: Any) -> Optional[Dict[str, str]]:
+def _extract_message_text(user_message: Any) -> str:
+    """Flatten Hermes multimodal / list content into plain text for claim matching."""
+    if user_message is None:
+        return ""
+    if isinstance(user_message, str):
+        return user_message
+    if isinstance(user_message, dict):
+        # Single content block
+        for key in ("text", "content", "value"):
+            val = user_message.get(key)
+            if isinstance(val, str):
+                return val
+            if isinstance(val, (list, dict)):
+                return _extract_message_text(val)
+        return ""
+    if isinstance(user_message, (list, tuple)):
+        parts: List[str] = []
+        for block in user_message:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict):
+                btype = str(block.get("type") or "").lower()
+                if btype in {"image", "image_url", "input_image", "media"}:
+                    continue
+                text = block.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+                elif isinstance(text, dict) and isinstance(text.get("value"), str):
+                    parts.append(text["value"])
+                elif isinstance(block.get("content"), str):
+                    parts.append(block["content"])
+                else:
+                    nested = _extract_message_text(block.get("content"))
+                    if nested:
+                        parts.append(nested)
+        return "\n".join(p for p in parts if p)
+    return str(user_message)
+
+
+def _on_pre_llm(user_message: Any = "", **_: Any) -> Optional[Dict[str, str]]:
     try:
-        if _cfg("inject_on_claim") and user_message and _CLAIM_RE.search(user_message):
+        text = _extract_message_text(user_message)
+        if _cfg("inject_on_claim") and text and _CLAIM_RE.search(text):
             return {"context": _BRIEF}
     except Exception:
         logger.debug("checkyourself: pre_llm_call failed", exc_info=True)
+    return None
+
+
+def _finding_counts_from_scan(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Prefer CLI contract `data.counts` (P0–P3); fall back to summary dicts."""
+    counts = data.get("counts")
+    if isinstance(counts, dict):
+        out = {
+            k: counts[k]
+            for k in ("P0", "P1", "P2", "P3", "total", "p0", "p1", "p2", "p3")
+            if k in counts
+        }
+        if out:
+            return out
+    findings = data.get("findings") or data.get("summary") or {}
+    if isinstance(findings, dict):
+        out = {
+            k: findings.get(k)
+            for k in ("p0", "p1", "p2", "p3", "total", "P0", "P1", "P2", "P3", "count")
+            if k in findings
+        }
+        return out or None
     return None
 
 
@@ -285,32 +623,43 @@ def _on_post_tool(tool_name: str = "", args: Optional[Dict[str, Any]] = None, re
             try:
                 payload = json.loads(result)
             except Exception:
-                payload = {"raw": result[:200]}
+                payload = {"raw": result[:200], "ok": False}
         entry: Dict[str, Any] = {
             "ts": int(time.time()),
             "tool": tool_name,
             "ok": isinstance(payload, dict) and bool(payload.get("ok")),
         }
+        if isinstance(payload, dict):
+            if payload.get("truncated"):
+                entry["truncated"] = True
+            if payload.get("receipt_id"):
+                entry["receipt_id"] = payload.get("receipt_id")
+            if isinstance(payload.get("provenance"), dict):
+                entry["project"] = payload["provenance"].get("project")
+                entry["session_id"] = payload["provenance"].get("session_id")
         data = payload.get("data") if isinstance(payload, dict) else None
         if isinstance(data, dict):
             if tool_name == "checkyourself_scan":
-                entry["project"] = data.get("project")
+                entry["project"] = entry.get("project") or data.get("project")
                 entry["files_scanned"] = data.get("files_scanned")
-                findings = data.get("findings") or data.get("summary") or {}
-                if isinstance(findings, dict):
-                    entry["finding_counts"] = {
-                        k: findings.get(k)
-                        for k in ("p0", "p1", "p2", "total", "P0", "P1", "P2", "count")
-                        if k in findings
-                    } or None
+                entry["finding_counts"] = _finding_counts_from_scan(data)
             if tool_name == "checkyourself_score":
                 entry["score"] = data.get("score", data.get("production_reality_score"))
                 entry["band"] = data.get("band", data.get("tier"))
-        ledger = _load_json(_ledger_path(), [])
-        if not isinstance(ledger, list):
-            ledger = []
-        ledger.append(entry)
-        _save_json(_ledger_path(), ledger[-LEDGER_MAX:])
+        # Summary-only payloads (truncated envelope) still carry top-level summary fields.
+        if isinstance(payload, dict) and tool_name == "checkyourself_scan":
+            summary = payload.get("summary")
+            if isinstance(summary, dict):
+                entry.setdefault("project", summary.get("project"))
+                entry.setdefault("files_scanned", summary.get("files_scanned"))
+                if entry.get("finding_counts") is None and isinstance(summary.get("counts"), dict):
+                    entry["finding_counts"] = _finding_counts_from_scan({"counts": summary["counts"]})
+        if isinstance(payload, dict) and tool_name == "checkyourself_score":
+            summary = payload.get("summary")
+            if isinstance(summary, dict):
+                entry.setdefault("score", summary.get("score"))
+                entry.setdefault("band", summary.get("band"))
+        _append_ledger(entry)
     except Exception:
         logger.debug("checkyourself: post_tool_call failed", exc_info=True)
     return None
@@ -322,12 +671,13 @@ SCAN_SCHEMA = {
     "name": "checkyourself_scan",
     "description": (
         "Read-only CheckYourself scan of a project: stack signals + deterministic local findings. "
-        "Writes no files into the project (--no-write); saves JSON under HERMES plugin-data for score/backlog."
+        "Writes no files into the project (--no-write); saves an immutable session/project receipt "
+        "under HERMES plugin-data for score/backlog (returns receipt_id)."
     ),
     "parameters": {
         "type": "object",
         "properties": {
-            "project": {"type": "string", "description": "Project root to scan (default: plugin default_project)."},
+            "project": {"type": "string", "description": "Project root to scan (default: plugin default_project / Hermes session cwd)."},
             "deep": {"type": "boolean", "description": "Slower validation checks (mutable CI actions, dep coverage)."},
             "max_files": {"type": "integer", "description": "Cap files scanned before truncation."},
         },
@@ -338,12 +688,12 @@ SCORE_SCHEMA = {
     "name": "checkyourself_score",
     "description": (
         "Compute the deterministic Production Reality Score (0-100) from a CheckYourself findings/scan JSON. "
-        "Defaults to the last scan saved by checkyourself_scan. Score is evidence, not a safety certification."
+        "Defaults to this session's last valid scan receipt. Score is evidence, not a safety certification."
     ),
     "parameters": {
         "type": "object",
         "properties": {
-            "findings_path": {"type": "string", "description": "Path to scan/findings JSON; omit to use last scan."},
+            "findings_path": {"type": "string", "description": "Path to scan/findings JSON or receipt; omit to use this session's last valid receipt."},
             "claim": {"type": "string", "description": "Optional completion claim to record alongside the score."},
         },
         "required": [],
@@ -392,16 +742,135 @@ COVERAGE_SCHEMA = {
 }
 
 
+def _scan_summary(payload: Dict[str, Any]) -> Dict[str, Any]:
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+    counts = data.get("counts") if isinstance(data.get("counts"), dict) else {}
+    return {
+        "project": data.get("project") or (payload.get("provenance") or {}).get("project"),
+        "files_scanned": data.get("files_scanned"),
+        "counts": {
+            k: counts[k] for k in ("P0", "P1", "P2", "P3") if k in counts
+        } or None,
+        "deep": data.get("deep"),
+        "scan_limits": data.get("scan_limits"),
+        "receipt_id": payload.get("receipt_id"),
+        "receipt_path": payload.get("receipt_path"),
+        "provenance": payload.get("provenance"),
+    }
+
+
+def _score_summary(payload: Dict[str, Any]) -> Dict[str, Any]:
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+    return {
+        "score": data.get("score", data.get("production_reality_score")),
+        "band": data.get("band", data.get("tier")),
+        "caps": data.get("caps") or data.get("score_caps"),
+        "receipt_id": payload.get("receipt_id"),
+        "receipt_path": payload.get("receipt_path"),
+        "provenance": payload.get("provenance"),
+    }
+
+
+def _bounded_tool_json(out: Dict[str, Any], max_out: int = MAX_OUT) -> str:
+    """Always return valid JSON. Large payloads become a truncated envelope with artifact ref."""
+    full = json.dumps(out, ensure_ascii=False)
+    if len(full) <= max_out:
+        return full
+    if isinstance(out.get("data"), dict) and (
+        "files_scanned" in out["data"] or "counts" in out["data"] or "findings" in out["data"]
+    ):
+        summary: Dict[str, Any] = _scan_summary(out)
+        kind = "scan"
+    elif isinstance(out.get("data"), dict) and (
+        "score" in out["data"] or "production_reality_score" in out["data"]
+    ):
+        summary = _score_summary(out)
+        kind = "score"
+    else:
+        summary = {
+            "keys": sorted(out.keys())[:20],
+            "receipt_id": out.get("receipt_id"),
+            "receipt_path": out.get("receipt_path"),
+            "error": out.get("error"),
+        }
+        kind = "generic"
+    artifact = out.get("receipt_path") or out.get("receipt_id")
+    candidates: List[Dict[str, Any]] = [
+        {
+            "ok": bool(out.get("ok")),
+            "truncated": True,
+            "kind": kind,
+            "summary": summary,
+            "artifact_ref": artifact,
+            "note": (
+                "Full CLI JSON omitted to keep a valid tool response; "
+                "use artifact_ref / receipt_path for the complete scan."
+                if artifact
+                else "Full payload omitted to keep a valid tool response."
+            ),
+            **({"stderr": str(out.get("stderr"))[-200:]} if out.get("stderr") else {}),
+            **({"error": out.get("error")} if out.get("error") else {}),
+        },
+        {
+            "ok": bool(out.get("ok")),
+            "truncated": True,
+            "kind": kind,
+            "summary": {
+                k: summary.get(k)
+                for k in ("project", "files_scanned", "counts", "score", "band", "receipt_id")
+                if k in summary and summary.get(k) is not None
+            },
+            "artifact_ref": artifact,
+        },
+        {
+            "ok": bool(out.get("ok")),
+            "truncated": True,
+            "summary": {"receipt_id": out.get("receipt_id"), "project": (out.get("provenance") or {}).get("project") if isinstance(out.get("provenance"), dict) else None},
+            "artifact_ref": artifact,
+        },
+        {
+            "ok": bool(out.get("ok")),
+            "truncated": True,
+            "artifact_ref": artifact,
+        },
+    ]
+    for envelope in candidates:
+        encoded = json.dumps(envelope, ensure_ascii=False)
+        if len(encoded) <= max_out:
+            return encoded
+    # Absolute last resort: still valid JSON, never a mid-string cut of the original.
+    return json.dumps({"ok": bool(out.get("ok")), "truncated": True}, ensure_ascii=False)
+
+
+def _capture_session_kwargs(kwargs: Dict[str, Any]) -> Optional[str]:
+    for key in ("session_id", "hermes_session_id", "task_id", "sessionId"):
+        val = kwargs.get(key)
+        if val:
+            return str(val)
+    return None
+
+
 def _wrap(fn):
-    def handler(args: Optional[Dict[str, Any]] = None, **_: Any) -> str:
+    def handler(args: Optional[Dict[str, Any]] = None, **kwargs: Any) -> str:
+        global _call_session_id
+        prev = _call_session_id
+        captured = _capture_session_kwargs(kwargs)
+        if captured:
+            _call_session_id = captured
         try:
-            out = fn(args or {})
-        except ValueError as exc:
-            out = {"ok": False, "error": str(exc)}
-        except Exception as exc:  # never crash the agent loop
-            logger.debug("checkyourself tool failed", exc_info=True)
-            out = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
-        return json.dumps(out, ensure_ascii=False)[:MAX_OUT]
+            try:
+                out = fn(args or {})
+            except ValueError as exc:
+                out = {"ok": False, "error": str(exc)}
+            except Exception as exc:  # never crash the agent loop
+                logger.debug("checkyourself tool failed", exc_info=True)
+                out = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+            if not isinstance(out, dict):
+                out = {"ok": False, "error": "internal: non-dict tool result"}
+            return _bounded_tool_json(out)
+        finally:
+            _call_session_id = prev
+
     return handler
 
 
@@ -420,7 +889,7 @@ _PROJECT_SLASH = {"scan", "score", "backlog", "next", "coverage"}
 _HELP = (
     "Usage:\n"
     "  /checkyourself describe                         Capability manifest\n"
-    "  /checkyourself scan [project] [--deep]          Read-only scan (saves findings in plugin-data)\n"
+    "  /checkyourself scan [project] [--deep]          Read-only scan (session-bound receipt)\n"
     "  /checkyourself score [findings.json]            Production Reality Score\n"
     "  /checkyourself backlog [findings.json]          Ranked remediation backlog\n"
     "  /checkyourself next [findings.json]             Next approval batch\n"
@@ -433,38 +902,84 @@ _HELP = (
 
 
 def _fmt(res: Dict[str, Any]) -> str:
+    """Slash-facing summary — never slice mid-JSON."""
     if not res.get("ok") and "data" not in res:
         return f"CheckYourself failed: {res.get('error') or res.get('stderr') or res}"
-    if "data" in res:
-        return json.dumps(res["data"], indent=2, ensure_ascii=False)[:3500]
-    return str(res.get("text", ""))[:3500]
+    lines: List[str] = []
+    if res.get("receipt_id"):
+        lines.append(f"receipt_id: {res['receipt_id']}")
+    if isinstance(res.get("provenance"), dict):
+        prov = res["provenance"]
+        if prov.get("project"):
+            lines.append(f"project: {prov['project']}")
+        if prov.get("session_id"):
+            lines.append(f"session: {prov['session_id']}")
+    data = res.get("data")
+    if isinstance(data, dict):
+        if "files_scanned" in data or "counts" in data:
+            counts = data.get("counts") if isinstance(data.get("counts"), dict) else {}
+            lines.append(f"files_scanned: {data.get('files_scanned')}")
+            if counts:
+                lines.append(
+                    "counts: "
+                    + ", ".join(f"{k}={counts.get(k, 0)}" for k in ("P0", "P1", "P2", "P3"))
+                )
+            if data.get("project"):
+                lines.append(f"scanned_project: {data.get('project')}")
+            findings = data.get("findings")
+            if isinstance(findings, list) and findings:
+                lines.append(f"findings_listed: {len(findings)}")
+            if res.get("receipt_path"):
+                lines.append(f"full_artifact: {res['receipt_path']}")
+            text = "\n".join(lines) if lines else json.dumps(_scan_summary(res), indent=2)
+            return text[:SLASH_MAX]
+        if "score" in data or "production_reality_score" in data:
+            score_val = data.get("score", data.get("production_reality_score"))
+            band = data.get("band", data.get("tier"))
+            lines.append(f"score: {score_val}")
+            if band:
+                lines.append(f"band: {band}")
+            if res.get("receipt_path"):
+                lines.append(f"from_receipt: {res['receipt_path']}")
+            return "\n".join(lines)[:SLASH_MAX]
+        # Generic small JSON — dump with indent but never mid-cut invalidly
+        dumped = json.dumps(data, indent=2, ensure_ascii=False)
+        if len(dumped) <= SLASH_MAX:
+            prefix = ("\n".join(lines) + "\n") if lines else ""
+            return (prefix + dumped)[:SLASH_MAX]
+        keys = list(data.keys())[:12]
+        lines.append(f"keys: {keys}")
+        lines.append("(truncated — ask via tool for full JSON)")
+        return "\n".join(lines)[:SLASH_MAX]
+    text = str(res.get("text", ""))
+    return text[:SLASH_MAX]
 
 
 def _slash(raw_args: str) -> str:
     raw = (raw_args or "").strip()
     if not raw:
         return _HELP
-    parts = shlex.split(raw)
-    cmd = parts[0].lower() if parts else "help"
-    rest = parts[1:]
-    if cmd in {"help", "-h", "--help"}:
-        return _HELP
-    if cmd not in _SAFE_SLASH:
-        return (
-            f"Unknown or blocked subcommand `{cmd}`. "
-            f"Allowed: {', '.join(sorted(_SAFE_SLASH))}. "
-            "challenge/init/mcp/receipt/diff stay on the CLI."
-        )
-    if cmd in _PROJECT_SLASH and _on_gateway() and not _cfg("allow_project_slash_on_gateway"):
-        return (
-            f"/checkyourself {cmd} is disabled on gateway platforms (filesystem access). "
-            "Ask the agent to use the tools instead, or set allow_project_slash_on_gateway: true."
-        )
     try:
+        parts = shlex.split(raw)
+        cmd = parts[0].lower() if parts else "help"
+        rest = parts[1:]
+        if cmd in {"help", "-h", "--help"}:
+            return _HELP
+        if cmd not in _SAFE_SLASH:
+            return (
+                f"Unknown or blocked subcommand `{cmd}`. "
+                f"Allowed: {', '.join(sorted(_SAFE_SLASH))}. "
+                "challenge/init/mcp/receipt/diff stay on the CLI."
+            )
+        if cmd in _PROJECT_SLASH and _on_gateway() and not _cfg("allow_project_slash_on_gateway"):
+            return (
+                f"/checkyourself {cmd} is disabled on gateway platforms (filesystem access). "
+                "Ask the agent to use the tools instead, or set allow_project_slash_on_gateway: true."
+            )
         if cmd == "describe":
             return _fmt(describe())
         if cmd == "status":
-            return json.dumps(_load_json(_ledger_path(), [])[-10:], indent=2)
+            return json.dumps(_load_json(_ledger_path(), [])[-10:], indent=2)[:SLASH_MAX]
         if cmd == "coverage":
             label = rest[0] if rest else None
             return _fmt(coverage_emit(label))
