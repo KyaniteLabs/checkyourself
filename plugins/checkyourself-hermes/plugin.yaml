@@ -1,0 +1,47 @@
+name: checkyourself
+version: "0.1.0"
+manifest_version: 2
+description: "CheckYourself for Hermes: Evidence Gate — before you believe a completion claim (done / tests pass / ready to ship), re-derive it with a local read-only scan, verifier-friendly score, and ranked backlog. Adds pre_llm_call claim brief, post_tool_call score ledger, /checkyourself (describe/scan/score/backlog/next/coverage/status/help), checkyourself_scan / _score / _backlog / _next / _describe / _coverage tools, and a bundled checkyourself skill. Disclosure — shells out to `npx -y @puenteworks/checkyourself@1.7.0` (downloads from npm on first run; needs Node >=18 and Python 3; Node only launches the bundled stdlib Python CLI); local-first — no network, no telemetry, secret values never printed by the CLI; scan/score/backlog artifacts live under <HERMES_HOME>/plugin-data/checkyourself/; child env is scrubbed (parent environment is never passed through); slash refuses project ops on gateway platforms unless opted in; challenge/init/mcp/receipt/diff are NOT exposed as Hermes slash or tools in v0.1.0."
+author: "Kyanite Labs"
+license: Apache-2.0
+homepage: https://github.com/KyaniteLabs/checkyourself/tree/main/plugins/checkyourself-hermes
+tags: [evidence, completion, audit, score, production-readiness, local-first]
+requires_hermes: ">=0.21.6"
+requires_env: []
+provides_tools:
+  - checkyourself_scan
+  - checkyourself_score
+  - checkyourself_backlog
+  - checkyourself_next
+  - checkyourself_describe
+  - checkyourself_coverage
+provides_hooks:
+  - pre_llm_call
+  - post_tool_call
+hooks:
+  - pre_llm_call
+  - post_tool_call
+config_schema:
+  checkyourself_command:
+    type: str
+    default: "npx -y @puenteworks/checkyourself@1.7.0"
+    description: "Command prefix for the CheckYourself CLI (e.g. 'checkyourself' if installed globally)."
+  default_project:
+    type: str
+    default: "."
+    description: "Default project root for scan/score when the caller omits project."
+  inject_on_claim:
+    type: bool
+    default: true
+    description: "When true, pre_llm_call injects an Evidence Gate brief if the user message looks like a completion claim."
+  allow_project_slash_on_gateway:
+    type: bool
+    default: false
+    description: "When false, /checkyourself scan|score|backlog|next|coverage is refused on gateway platforms (filesystem access)."
+  max_files:
+    type: int
+    default: 6000
+    description: "Max files for scan before truncation (passed to --max-files)."
+  timeout_seconds:
+    type: int
+    default: 180
