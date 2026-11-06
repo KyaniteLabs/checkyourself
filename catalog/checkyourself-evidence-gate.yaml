@@ -1,7 +1,7 @@
 name: checkyourself-evidence-gate
 title: Check Yourself Evidence Gate
 repo: https://github.com/KyaniteLabs/checkyourself
-sha: 30f77352cc3a28b2341af9f8a8c8d928be487d0f
+sha: d421e421b38168ca8e4e5e4f06dd72c907ace957
 subdir: hermes-plugin
 description: "Disclosure: scoring re-executes operator-approved local challenge commands, which can write files/use network; no credentials inherited. Blocks kanban_complete without executed test evidence."
 maintainer: KyaniteLabs
@@ -9,7 +9,7 @@ tier: community
 category: tools
 requires_hermes: ">=0.23.0"
 version: "0.1.0"
-docs_url: https://github.com/KyaniteLabs/checkyourself/blob/30f77352cc3a28b2341af9f8a8c8d928be487d0f/hermes-plugin/README.md
+docs_url: https://github.com/KyaniteLabs/checkyourself/blob/d421e421b38168ca8e4e5e4f06dd72c907ace957/hermes-plugin/README.md
 platforms: [linux, macos]
 known_issues:
   - "macOS unverified; Windows unsupported."
