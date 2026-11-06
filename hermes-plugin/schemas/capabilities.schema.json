@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CheckYourself Capabilities",
+  "type": "object",
+  "required": [
+    "tool",
+    "schema",
+    "version",
+    "generated_at",
+    "commands",
+    "public_repo_scope_guardrails",
+    "coverage_surfaces",
+    "scoring",
+    "schemas",
+    "exit_codes",
+    "mcp"
+  ],
+  "properties": {
+    "tool": { "type": "string" },
+    "schema": { "type": "string", "enum": ["checkyourself-capabilities/1"] },
+    "version": { "type": "string" },
+    "generated_at": { "type": "string" },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "summary", "inputs", "output_schema"],
+        "properties": {
+          "name": { "type": "string" },
+          "summary": { "type": "string" },
+          "inputs": { "type": "object" },
+          "output_schema": { "type": "string" }
+        }
+      }
+    },
+    "public_repo_scope_guardrails": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "coverage_surfaces": { "type": "array", "items": { "type": "object" } },
+    "scoring": { "type": "object" },
+    "schemas": { "type": "array", "items": { "type": "string" } },
+    "exit_codes": { "type": "object" },
+    "mcp": { "type": "object" }
+  }
+}
