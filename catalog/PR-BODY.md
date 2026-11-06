@@ -6,7 +6,7 @@ A hard pre_tool_call gate refuses kanban_complete without verified S11 executed-
 Scope is deliberately bounded: C5 test-evidence policy, not all production surfaces; claim text is a label, not independent semantic proof. Does not intercept prose answers, external board clients or review handoffs. Complements hermes-verifier/agent-run-debugger rather than claiming their diagnostic coverage.
 
 ## Exact provenance and proof
-- Product repository KyaniteLabs/checkyourself; source-only plugin subdir hermes-plugin at 30f77352cc3a28b2341af9f8a8c8d928be487d0f.
+- Product repository KyaniteLabs/checkyourself; source-only plugin subdir hermes-plugin at d421e421b38168ca8e4e5e4f06dd72c907ace957.
 - Engine snapshot b2a5684bf9e5232f2c945060dbac8a76c0517d6a, 42 files byte-checked with tools/build_hermes_plugin.py. Shared scaffold b0ff57e17ffd2403647e8bdc87c928b0805bb6f3.
 - Tested Hermes runtime e76fbd80be65ea5c1b89831f8d7aaedb713f5cac; manifest/catalog floor >=0.23.0. Linux verified; macOS unverified; Windows unsupported.
 - Real validator: ok=true, 15 checks, zero warnings. Full suite: 162 tests, one runtime integration skipped there and run separately (passed). Real native discovery + registered tool + hook dispatch + stdio MCP demonstrated incomplete score29/block → executed C5 credit/allow (overall production score34) → capture tamper/block. Sequence 1.246 seconds; final DONE is a labeled simulated sink, not a real board mutation.

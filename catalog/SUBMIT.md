@@ -10,7 +10,7 @@ mkdir -p "$HOME/hackathon-submit/checkyourself-entry"
 cd "$HOME/hackathon-submit/checkyourself-entry"
 git clone https://github.com/KyaniteLabs/checkyourself.git product
 # Confirm the approved immutable plugin object exists:
-git -C product cat-file -e 30f77352cc3a28b2341af9f8a8c8d928be487d0f:hermes-plugin/plugin.yaml
+git -C product cat-file -e d421e421b38168ca8e4e5e4f06dd72c907ace957:hermes-plugin/plugin.yaml
 gh repo fork NousResearch/hermes-agent --clone
 cd hermes-agent
 git switch -c catalog/checkyourself-evidence-gate
@@ -21,7 +21,7 @@ cp ../product/catalog/checkyourself-evidence-gate.yaml plugin-catalog/checkyours
 
 ```sh
 mkdir ../pinned-plugin
-git -C ../product archive 30f77352cc3a28b2341af9f8a8c8d928be487d0f hermes-plugin | tar -x -C ../pinned-plugin
+git -C ../product archive d421e421b38168ca8e4e5e4f06dd72c907ace957 hermes-plugin | tar -x -C ../pinned-plugin
 hermes plugins validate ../pinned-plugin/hermes-plugin --json
 # Current catalog admission tests; inspect the latest README/workflows for any additional checks.
 python -m pytest tests/hermes_cli/test_plugin_catalog.py
