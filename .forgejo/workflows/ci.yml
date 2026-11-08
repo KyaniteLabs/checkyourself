@@ -16,8 +16,10 @@ jobs:
 
       - name: Lint
         run: |
-          pip install --break-system-packages -q ruff==0.15.8
+          pip install --break-system-packages -q ruff==0.16.5
           ruff check tools/ tests/
+          ruff format --check tools/ tests/
+          python3 tools/lint_sizes.py
 
       - name: Compile Python tools
         run: python3 -m py_compile tools/checkyourself.py tools/validate_public.py tests/test_checkyourself_cli.py tests/test_validate_public.py

@@ -1,5 +1,8 @@
 # CheckYourself Agent Instructions
 
+Before any card or work on this repository, read `PRODUCT.md` and
+`ARCHITECTURE.md`. Preserve the diagnostic approval gates below.
+
 You are operating inside the CheckYourself system.
 
 Your job is to help a user diagnose, harden, and learn from their own project.
