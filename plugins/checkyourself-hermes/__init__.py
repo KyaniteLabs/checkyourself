@@ -2,6 +2,7 @@
 
 Surfaces:
   pre_llm_call   -> when the user asserts completion, inject an Evidence Gate brief
+  pre_tool_call  -> block completion tools unless the CheckYourself score passes the gate
   post_tool_call -> record checkyourself_* score / finding counts in a profile-local ledger
   /checkyourself -> describe | scan | score | backlog | next | coverage | status | help
   tools          -> checkyourself_scan / _score / _backlog / _next / _describe / _coverage
@@ -25,10 +26,11 @@ import shlex
 import signal
 import subprocess
 import tempfile
+import threading
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +43,9 @@ DEFAULTS: Dict[str, Any] = {
     "allow_project_slash_on_gateway": False,
     "max_files": 6000,
     "timeout_seconds": 180,
+    # Comma-separated tool names. The score gate blocks these unless the
+    # completion-evidence score is numeric and has no open P0 or P1.
+    "completion_tools": "kanban_complete",
 }
 LEDGER_MAX = 200
 MAX_OUT = 20000
@@ -65,6 +70,14 @@ _ctx = None
 # threads / tasks must not observe or clobber each other's session id.
 _CALL_SESSION: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
     "checkyourself_call_session", default=None
+)
+# Sessions whose implicit pointer could not be invalidated. Scoring stays
+# fail-closed for that identity until a later scan commits a new pointer.
+_IMPLICIT_BLOCK_LOCK = threading.Lock()
+_IMPLICIT_BLOCKED: set[str] = set()
+_NO_IDENTITY = (
+    "no trustworthy caller identity for an implicit receipt; "
+    "refusing a shared nosession pointer"
 )
 # Seconds between SIGTERM and SIGKILL of the child's process group on timeout.
 _KILL_GRACE = 1.0
@@ -115,20 +128,70 @@ def _safe_key(raw: str) -> str:
     return key[:96]
 
 
-def _session_id_from_host() -> str:
-    """Caller-scoped Hermes session id (per-call ContextVar, then Hermes session env)."""
-    override = _CALL_SESSION.get()
-    if override:
-        return str(override)
+def _host_session_vars() -> Optional[Dict[str, str]]:
+    """Read Hermes session vars once.
+
+    None means the native helper is not importable (CLI / tests outside Hermes).
+    A dict means ``get_session_env`` already applied its own rules, including an
+    authoritative empty string. Callers must not read ``os.environ`` again.
+    """
     try:
         from gateway.session_context import get_session_env
-
-        sid = get_session_env("HERMES_SESSION_ID", "") or ""
     except Exception:
-        sid = ""
-    if not sid:
-        sid = os.environ.get("HERMES_SESSION_ID") or ""
-    return str(sid).strip()
+        return None
+    out: Dict[str, str] = {}
+    for name in ("HERMES_SESSION_ID", "HERMES_SESSION_KEY"):
+        try:
+            out[name] = str(get_session_env(name, "") or "").strip()
+        except Exception:
+            out[name] = ""
+    return out
+
+
+def _resolve_identity() -> Tuple[str, str]:
+    """Return ``(identity, source)``.
+
+    Source is ``override``, ``session_id``, ``session_key``, ``local``, or ``none``.
+    A gateway slash handler often has a session key and an authoritative empty
+    session id (no session row yet). The key is namespaced so it cannot collide
+    with a durable session id. ``local`` is only the single-operator bucket used
+    when Hermes itself is not installed. ``none`` fail-closes implicit receipts.
+    """
+    override = _CALL_SESSION.get()
+    if override:
+        return str(override).strip(), "override"
+    host = _host_session_vars()
+    if host is None:
+        sid = (os.environ.get("HERMES_SESSION_ID") or "").strip()
+        if sid:
+            return sid, "session_id"
+        key = (os.environ.get("HERMES_SESSION_KEY") or "").strip()
+        if key:
+            return "key:" + key, "session_key"
+        return "local", "local"
+    sid = host.get("HERMES_SESSION_ID") or ""
+    if sid:
+        return sid, "session_id"
+    key = host.get("HERMES_SESSION_KEY") or ""
+    if key:
+        return "key:" + key, "session_key"
+    return "", "none"
+
+
+def _session_id_from_host() -> str:
+    """Bound caller id, or empty when the only fallback would be the local bucket."""
+    ident, source = _resolve_identity()
+    if source == "local":
+        return ""
+    return ident
+
+
+def _implicit_session_id() -> str:
+    """Identity allowed to own an implicit receipt. Raises when none is trustworthy."""
+    ident, source = _resolve_identity()
+    if source == "none" or not ident:
+        raise ValueError(_NO_IDENTITY)
+    return ident
 
 
 def _session_platform() -> str:
@@ -371,13 +434,37 @@ def _resolve_project(project: Optional[str] = None) -> Path:
     return p
 
 
+def _implicit_blocked(session_id: str) -> bool:
+    with _IMPLICIT_BLOCK_LOCK:
+        return session_id in _IMPLICIT_BLOCKED
+
+
+def _block_implicit(session_id: str) -> None:
+    if not session_id:
+        return
+    with _IMPLICIT_BLOCK_LOCK:
+        _IMPLICIT_BLOCKED.add(session_id)
+
+
+def _clear_implicit_block(session_id: str) -> None:
+    if not session_id:
+        return
+    with _IMPLICIT_BLOCK_LOCK:
+        _IMPLICIT_BLOCKED.discard(session_id)
+
+
 def _implicit_pointer_path(session_id: Optional[str] = None) -> Path:
-    sid = _safe_key(session_id if session_id is not None else _session_id_from_host())
-    return _implicit_dir() / f"{sid}.json"
+    sid = session_id if session_id is not None else _implicit_session_id()
+    return _implicit_dir() / f"{_safe_key(str(sid))}.json"
 
 
-def _invalidate_implicit(session_id: Optional[str] = None, reason: str = "failed_scan", error: str = "") -> None:
-    sid = session_id if session_id is not None else _session_id_from_host()
+def _invalidate_implicit(session_id: Optional[str] = None, reason: str = "failed_scan", error: str = "") -> bool:
+    """Write an invalid pointer. Return False when the write did not land.
+
+    A False return must not be reported as a successful invalidation. The caller
+    fail-closes implicit scoring for this identity until a new scan commits.
+    """
+    sid = session_id if session_id is not None else _implicit_session_id()
     path = _implicit_pointer_path(sid)
     meta = {
         "valid": False,
@@ -390,6 +477,23 @@ def _invalidate_implicit(session_id: Optional[str] = None, reason: str = "failed
         _atomic_write_json(path, meta)
     except Exception:
         logger.debug("checkyourself: failed invalidating implicit receipt", exc_info=True)
+        return False
+    return True
+
+
+def _mark_implicit_invalid(session_id: str, error: str) -> Tuple[bool, str]:
+    """Invalidate the pointer and report the real outcome.
+
+    When the write fails, implicit scoring stays fail-closed in this runtime
+    even though the previous pointer file is still on disk.
+    """
+    if _invalidate_implicit(session_id, reason="failed_scan", error=error):
+        return True, ""
+    _block_implicit(session_id)
+    return (
+        False,
+        "implicit receipt pointer could not be updated; scoring stays fail-closed until a new scan commits",
+    )
 
 
 def _write_receipt(
@@ -429,6 +533,7 @@ def _write_receipt(
             "ts": provenance["ts"],
         },
     )
+    _clear_implicit_block(sid or "")
     return provenance | {"receipt_path": str(receipt_path)}
 
 
@@ -463,6 +568,11 @@ def _select_findings(explicit: Optional[str], session_id: str) -> tuple[Path, Op
     """
     if explicit:
         return _resolve_explicit_findings(explicit), None
+    if _implicit_blocked(session_id):
+        raise ValueError(
+            "implicit scoring is fail-closed after the receipt pointer could not be invalidated; "
+            "re-run checkyourself_scan once plugin-data is writable"
+        )
     pointer = _load_json(_implicit_pointer_path(session_id), None)
     if not isinstance(pointer, dict) or not pointer.get("valid"):
         raise ValueError(
@@ -482,7 +592,9 @@ def _select_findings(explicit: Optional[str], session_id: str) -> tuple[Path, Op
 
 
 def _findings_path(explicit: Optional[str] = None) -> Path:
-    return _select_findings(explicit, _session_id_from_host())[0]
+    if explicit:
+        return _select_findings(explicit, _session_id_from_host())[0]
+    return _select_findings(None, _implicit_session_id())[0]
 
 
 def _is_receipt_envelope(raw: Any) -> bool:
@@ -556,26 +668,38 @@ def _scan_once(project: Optional[str], deep: bool, max_files: Optional[int], sid
 
 
 def scan(project: Optional[str] = None, deep: bool = False, max_files: Optional[int] = None) -> Dict[str, Any]:
-    """Scan and bind a receipt to the caller session captured once at entry.
+    """Scan and bind a receipt to the caller identity captured once at entry.
 
     ANY failure (path / argument validation, missing executable, raised subprocess error,
-    non-zero CLI, non-scan output) invalidates that session's implicit receipt first.
+    non-zero CLI, non-scan output) tries to invalidate that caller's implicit receipt.
+    ``implicit_receipt_invalidated`` is true only when that write landed. A failed write
+    fail-closes implicit scoring until a later scan commits.
     """
-    sid = _session_id_from_host()
+    try:
+        sid = _implicit_session_id()
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc), "implicit_receipt_invalidated": False}
     try:
         res = _scan_once(project, deep, max_files, sid)
     except Exception as exc:
-        _invalidate_implicit(sid, reason="failed_scan", error=str(exc))
-        return {"ok": False, "error": str(exc), "implicit_receipt_invalidated": True}
+        invalidated, detail = _mark_implicit_invalid(sid, str(exc))
+        out: Dict[str, Any] = {"ok": False, "error": str(exc), "implicit_receipt_invalidated": invalidated}
+        if detail:
+            out["implicit_invalidation_error"] = detail
+        return out
     if not res.get("receipt_id"):
-        _invalidate_implicit(sid, reason="failed_scan", error=str(res.get("error") or ""))
-        res["implicit_receipt_invalidated"] = True
+        invalidated, detail = _mark_implicit_invalid(sid, str(res.get("error") or ""))
+        res["implicit_receipt_invalidated"] = invalidated
+        if detail:
+            res["implicit_invalidation_error"] = detail
     return res
 
 
 def _run_on_findings(verb: str, findings_path: Optional[str], extra: List[str]) -> Dict[str, Any]:
-    sid = _session_id_from_host()
-    path, pointer = _select_findings(findings_path, sid)
+    if findings_path:
+        path, pointer = _select_findings(findings_path, _session_id_from_host())
+    else:
+        path, pointer = _select_findings(None, _implicit_session_id())
     with _materialized_findings(path) as cli_path:
         res = run_checkyourself([verb, "--findings", str(cli_path), "--format", "json", *extra])
     if pointer is not None:
@@ -747,6 +871,107 @@ def _on_post_tool(tool_name: str = "", args: Optional[Dict[str, Any]] = None, re
     except Exception:
         logger.debug("checkyourself: post_tool_call failed", exc_info=True)
     return None
+
+
+def _completion_tool_names() -> set[str]:
+    raw = str(_cfg("completion_tools") or "")
+    return {part.strip() for part in raw.split(",") if part.strip()}
+
+
+def _score_gate_verdict(score_res: Dict[str, Any]) -> Dict[str, Any]:
+    """Turn one CheckYourself score payload into an allow/block decision.
+
+    Allowed only when the CLI returned ok, the score is numeric, and the open
+    counts contain no P0 or P1. Anything else, including a missing score, blocks.
+    """
+    data = score_res.get("data") if isinstance(score_res.get("data"), dict) else {}
+    counts = data.get("counts") if isinstance(data.get("counts"), dict) else {}
+    try:
+        p0 = int(counts.get("P0") or 0)
+        p1 = int(counts.get("P1") or 0)
+    except (TypeError, ValueError):
+        p0, p1 = 1, 1
+    raw_score = data.get("score", data.get("production_reality_score"))
+    numeric = isinstance(raw_score, (int, float)) and not isinstance(raw_score, bool)
+    allowed = bool(score_res.get("ok")) and numeric and p0 == 0 and p1 == 0
+    return {
+        "allowed": allowed,
+        "policy": "numeric-score-and-no-open-P0-or-P1",
+        "score": raw_score if numeric else None,
+        "counts": {"P0": p0, "P1": p1},
+        "score_mode": data.get("score_mode"),
+        "ok": bool(score_res.get("ok")),
+        "error": score_res.get("error"),
+    }
+
+
+def _gate_findings_arg(args: Optional[Dict[str, Any]]) -> Optional[str]:
+    """Explicit evidence on a completion call, if the caller supplied any."""
+    if not isinstance(args, dict):
+        return None
+    meta = args.get("metadata") if isinstance(args.get("metadata"), dict) else {}
+    bundled = meta.get("checkyourself") if isinstance(meta.get("checkyourself"), dict) else {}
+    for source in (bundled, args):
+        for key in ("findings_path", "receipt_id"):
+            val = source.get(key)
+            if isinstance(val, str) and val.strip():
+                token = val.strip()
+                if key == "receipt_id" and re.fullmatch(r"[0-9a-fA-F]{32}", token):
+                    path = _receipts_dir() / f"{token}.json"
+                    if not path.is_file():
+                        raise ValueError("receipt_id is not in plugin-data")
+                    return str(path)
+                return token
+    return None
+
+
+def evaluate_completion_gate(tool_name: str, args: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Score completion evidence and decide. Non-completion tools are not gated."""
+    if tool_name not in _completion_tool_names():
+        return {"gated": False, "allowed": True, "tool": tool_name}
+    try:
+        explicit = _gate_findings_arg(args)
+        scored = score(explicit)
+    except Exception as exc:
+        scored = {"ok": False, "error": str(exc)}
+    verdict = _score_gate_verdict(scored if isinstance(scored, dict) else {"ok": False, "error": "non-dict score"})
+    verdict["gated"] = True
+    verdict["tool"] = tool_name
+    return verdict
+
+
+def _completion_block_message(verdict: Dict[str, Any]) -> str:
+    score_val = verdict.get("score")
+    counts = verdict.get("counts") if isinstance(verdict.get("counts"), dict) else {}
+    if score_val is None:
+        detail = verdict.get("error") or "evidence unavailable"
+        return (
+            "Completion blocked: no completion-evidence score. "
+            "Run checkyourself_scan and checkyourself_score, then retry. "
+            f"({detail})"
+        )
+    return (
+        f"Completion blocked: evidence score {score_val} "
+        f"(P0={counts.get('P0', '?')}, P1={counts.get('P1', '?')}). "
+        "Policy requires a numeric score and no open P0 or P1."
+    )
+
+
+def _on_pre_tool(tool_name: str = "", args: Optional[Dict[str, Any]] = None, **_: Any) -> Optional[Dict[str, str]]:
+    """Fail-closed completion gate. None means allow; a block dict stops the tool."""
+    try:
+        if tool_name not in _completion_tool_names():
+            return None
+        verdict = evaluate_completion_gate(tool_name, args)
+        if verdict.get("allowed"):
+            return None
+        return {"action": "block", "message": _completion_block_message(verdict)}
+    except Exception:
+        logger.debug("checkyourself: pre_tool_call gate failed", exc_info=True)
+        return {
+            "action": "block",
+            "message": "Completion blocked: evidence gate failed closed.",
+        }
 
 
 # --- tools ------------------------------------------------------------------
@@ -1007,7 +1232,9 @@ _HELP = (
     "  /checkyourself status                           Recent score-ledger entries\n"
     "Not exposed via slash: challenge, init, mcp, receipt, diff (use the CheckYourself CLI).\n"
     "On gateway platforms, scan/score/backlog/next/coverage are refused unless "
-    "allow_project_slash_on_gateway: true."
+    "allow_project_slash_on_gateway: true.\n"
+    "Completion tools named in completion_tools (default kanban_complete) stay blocked "
+    "until the CheckYourself score is numeric and has no open P0 or P1."
 )
 
 
@@ -1133,6 +1360,7 @@ def register(ctx) -> None:
     global _ctx
     _ctx = ctx
     ctx.register_hook("pre_llm_call", _on_pre_llm)
+    ctx.register_hook("pre_tool_call", _on_pre_tool)
     ctx.register_hook("post_tool_call", _on_post_tool)
     ctx.register_command(
         "checkyourself",

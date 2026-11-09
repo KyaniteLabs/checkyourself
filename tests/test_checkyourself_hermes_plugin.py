@@ -75,6 +75,8 @@ class HermesPluginKaiFixes(unittest.TestCase):
         os.environ.pop("HERMES_SESSION_PLATFORM", None)
         os.environ.pop("HERMES_SESSION_ID", None)
         cy._ctx = None
+        with cy._IMPLICIT_BLOCK_LOCK:
+            cy._IMPLICIT_BLOCKED.clear()
 
     def tearDown(self):
         for p in self._patches:
@@ -559,6 +561,168 @@ class HermesPluginKaiFixes(unittest.TestCase):
                         self.assertIn("schema", res["data"])
             self.assertEqual(json.loads(cy._tool_score({"findings_path": str(empty)}))["data"]["counts"]["P0"], 0)
         self.assertEqual(before, {p: p.read_bytes() for p in (empty, one)})
+
+    # --- Reviewer pass 3: slash identity + invalidation outcome -----------------
+
+    def _authoritative_session(self):
+        """get_session_env that treats an explicit empty binding as authoritative."""
+
+        class _Bound:
+            def __init__(self):
+                self.bound = None
+
+            def set_session_vars(self, **kwargs):
+                self.bound = {
+                    "HERMES_SESSION_PLATFORM": kwargs.get("platform", ""),
+                    "HERMES_SESSION_ID": kwargs.get("session_id", ""),
+                    "HERMES_SESSION_KEY": kwargs.get("session_key", ""),
+                }
+
+            def get_session_env(self, name, default=""):
+                if self.bound is not None and name in self.bound:
+                    return self.bound[name]
+                return os.getenv(name, default)
+
+        fake = _Bound()
+        import types
+
+        mod = types.ModuleType("gateway.session_context")
+        mod.get_session_env = fake.get_session_env
+        gateway = types.ModuleType("gateway")
+        patch = mock.patch.dict(
+            sys.modules,
+            {"gateway": gateway, "gateway.session_context": mod},
+        )
+        return fake, patch
+
+    def test_gateway_slash_session_key_does_not_share_implicit_evidence(self):
+        project_a = self.td / "A"
+        project_b = self.td / "B"
+        project_a.mkdir()
+        project_b.mkdir()
+        os.environ["HERMES_SESSION_ID"] = "foreign-cron-session"
+        fake, patch = self._authoritative_session()
+
+        def fake_run(args):
+            root = Path(args[1]).resolve()
+            return {
+                "ok": True,
+                "exit": 0,
+                "data": {"project": str(root), "files_scanned": 1, "counts": {"P0": 0, "P1": 0, "P2": 0, "P3": 0}},
+            }
+
+        allow = mock.patch.object(
+            cy,
+            "_cfg",
+            side_effect=lambda key: True if key == "allow_project_slash_on_gateway" else cy.DEFAULTS.get(key),
+        )
+        with patch, allow, mock.patch.object(cy, "run_checkyourself", side_effect=fake_run):
+            fake.set_session_vars(platform="telegram", session_key="telegram:chat-A", session_id="")
+            scanned_a = cy._slash(f"scan {shlex.quote(str(project_a))}")
+            self.assertIn("receipt_id:", scanned_a)
+            fake.set_session_vars(platform="telegram", session_key="telegram:chat-B", session_id="")
+            scanned_b = cy._slash(f"scan {shlex.quote(str(project_b))}")
+            self.assertIn("receipt_id:", scanned_b)
+            fake.set_session_vars(platform="telegram", session_key="telegram:chat-A", session_id="")
+            scored = cy.score()
+        self.assertTrue(scored["ok"], scored)
+        self.assertEqual(scored["provenance"]["project"], str(project_a.resolve()))
+        self.assertEqual(scored["provenance"]["session_id"], "key:telegram:chat-A")
+        names = sorted(path.name for path in (self.data / "implicit").glob("*.json"))
+        self.assertIn("key_telegram_chat-A.json", names)
+        self.assertIn("key_telegram_chat-B.json", names)
+        self.assertNotIn("nosession.json", names)
+        self.assertNotIn("foreign-cron-session.json", names)
+
+    def test_gateway_without_identity_ignores_process_session_env(self):
+        project_a = self.td / "A"
+        project_a.mkdir()
+        os.environ["HERMES_SESSION_ID"] = "foreign-cron-session"
+        fake, patch = self._authoritative_session()
+        with patch:
+            fake.set_session_vars(platform="telegram", session_key="", session_id="")
+            failed = cy.scan(str(project_a))
+            self.assertFalse(failed["ok"])
+            self.assertIn("no trustworthy caller identity", failed["error"])
+            self.assertIs(failed["implicit_receipt_invalidated"], False)
+            with self.assertRaises(ValueError) as raised:
+                cy.score()
+        self.assertIn("no trustworthy caller identity", str(raised.exception))
+        implicit = self.data / "implicit"
+        if implicit.exists():
+            names = [path.name for path in implicit.iterdir()]
+            self.assertNotIn("foreign-cron-session.json", names)
+            self.assertNotIn("nosession.json", names)
+
+    def test_failed_pointer_write_is_not_reported_as_invalidated(self):
+        project_a = self.td / "A"
+        project_a.mkdir()
+        ok = {"ok": True, "exit": 0, "data": {"project": str(project_a), "files_scanned": 1, "counts": {}}}
+        with mock.patch.object(cy, "run_checkyourself", return_value=ok):
+            good = cy.scan(str(project_a))
+        self.assertTrue(good["ok"], good)
+        previous = good["receipt_id"]
+        pointer = cy._implicit_pointer_path("local")
+        before = pointer.read_bytes()
+        real_write = cy._atomic_write_json
+
+        def refuse_implicit(path, payload):
+            if Path(path).parent.name == "implicit":
+                raise PermissionError("implicit unwritable")
+            return real_write(path, payload)
+
+        with mock.patch.object(cy, "_atomic_write_json", side_effect=refuse_implicit):
+            bad = cy.scan(str(self.td / "missing-project"))
+        self.assertFalse(bad["ok"])
+        self.assertIs(bad.get("implicit_receipt_invalidated"), False)
+        self.assertIn("fail-closed", bad.get("implicit_invalidation_error", ""))
+        self.assertEqual(pointer.read_bytes(), before)
+        with self.assertRaises(ValueError) as raised:
+            cy.score()
+        self.assertIn("fail-closed", str(raised.exception))
+        self.assertNotIn(previous, str(raised.exception))
+        with mock.patch.object(cy, "run_checkyourself", return_value=ok):
+            again = cy.scan(str(project_a))
+            scored = cy.score()
+        self.assertTrue(again["ok"], again)
+        self.assertNotEqual(again["receipt_id"], previous)
+        self.assertEqual(scored["receipt_id"], again["receipt_id"])
+
+    def test_completion_score_gates_kanban_complete(self):
+        clean = self.td / "clean.json"
+        clean.write_text("[]\n")
+        dirty = self.td / "dirty.json"
+        dirty.write_text(json.dumps([{"id": "F1", "severity": "P0", "title": "open p0"}]))
+        with self._real_cli_cfg():
+            self.assertIsNone(cy._on_pre_tool("checkyourself_scan", {}))
+            missing = cy._on_pre_tool("kanban_complete", {})
+            self.assertEqual(missing["action"], "block")
+            self.assertIn("no completion-evidence score", missing["message"])
+            allowed = cy.evaluate_completion_gate(
+                "kanban_complete",
+                {"metadata": {"checkyourself": {"findings_path": str(clean)}}},
+            )
+            self.assertTrue(allowed["allowed"], allowed)
+            self.assertIsInstance(allowed["score"], int)
+            self.assertEqual(allowed["counts"], {"P0": 0, "P1": 0})
+            self.assertIsNone(
+                cy._on_pre_tool(
+                    "kanban_complete",
+                    {"metadata": {"checkyourself": {"findings_path": str(clean)}}},
+                )
+            )
+            blocked = cy.evaluate_completion_gate(
+                "kanban_complete",
+                {"metadata": {"checkyourself": {"findings_path": str(dirty)}}},
+            )
+            self.assertFalse(blocked["allowed"], blocked)
+            self.assertGreater(blocked["counts"]["P0"], 0)
+            hook = cy._on_pre_tool(
+                "kanban_complete",
+                {"metadata": {"checkyourself": {"findings_path": str(dirty)}}},
+            )
+            self.assertEqual(hook["action"], "block")
+            self.assertIn(str(blocked["score"]), hook["message"])
 
 
 if __name__ == "__main__":

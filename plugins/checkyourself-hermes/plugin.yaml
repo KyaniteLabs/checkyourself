@@ -1,7 +1,7 @@
 name: checkyourself
 version: "0.1.0"
 manifest_version: 2
-description: "CheckYourself for Hermes: Evidence Gate — before you believe a completion claim (done / tests pass / ready to ship), re-derive it with a local read-only scan, verifier-friendly score, and ranked backlog. Adds pre_llm_call claim brief, post_tool_call score ledger, /checkyourself (describe/scan/score/backlog/next/coverage/status/help), checkyourself_scan / _score / _backlog / _next / _describe / _coverage tools, and a bundled checkyourself skill. Disclosure — shells out to `npx -y @puenteworks/checkyourself@1.7.0` (downloads from npm on first run; needs Node >=18 and Python 3; Node only launches the bundled stdlib Python CLI); local-first — no network, no telemetry, secret values never printed by the CLI; scan/score/backlog artifacts live under <HERMES_HOME>/plugin-data/checkyourself/; child env is scrubbed (parent environment is never passed through); slash refuses project ops on gateway platforms unless opted in; challenge/init/mcp/receipt/diff are NOT exposed as Hermes slash or tools in v0.1.0."
+description: "CheckYourself for Hermes: Evidence Gate — before you believe a completion claim (done / tests pass / ready to ship), re-derive it with a local read-only scan, verifier-friendly score, and ranked backlog. The completion-evidence score is a gate: pre_tool_call blocks configured completion tools (default kanban_complete) unless the score is numeric and has no open P0 or P1. Also adds a pre_llm_call claim brief, a post_tool_call score ledger, /checkyourself (describe/scan/score/backlog/next/coverage/status/help), checkyourself_scan / _score / _backlog / _next / _describe / _coverage tools, and a bundled checkyourself skill. Disclosure — shells out to `npx -y @puenteworks/checkyourself@1.7.0` (downloads from npm on first run; needs Node >=18 and Python 3; Node only launches the bundled stdlib Python CLI); local-first — no network, no telemetry, secret values never printed by the CLI; scan/score/backlog artifacts live under <HERMES_HOME>/plugin-data/checkyourself/; child env is scrubbed (parent environment is never passed through); slash refuses project ops on gateway platforms unless opted in; challenge/init/mcp/receipt/diff are NOT exposed as Hermes slash or tools in v0.1.0. This is a native plugin (plugin.yaml + hooks), not an MCP-only listing."
 author: "Kyanite Labs"
 license: Apache-2.0
 homepage: https://github.com/KyaniteLabs/checkyourself/tree/main/plugins/checkyourself-hermes
@@ -17,9 +17,11 @@ provides_tools:
   - checkyourself_coverage
 provides_hooks:
   - pre_llm_call
+  - pre_tool_call
   - post_tool_call
 hooks:
   - pre_llm_call
+  - pre_tool_call
   - post_tool_call
 config_schema:
   checkyourself_command:
@@ -45,3 +47,8 @@ config_schema:
   timeout_seconds:
     type: int
     default: 180
+    description: "Per CLI call timeout in seconds."
+  completion_tools:
+    type: str
+    default: "kanban_complete"
+    description: "Comma-separated tool names blocked by pre_tool_call until the score gate passes. Empty disables the gate."

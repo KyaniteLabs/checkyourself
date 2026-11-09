@@ -24,6 +24,7 @@ Prefer these when running inside Hermes (registered as `checkyourself:checkyours
 - Tools `checkyourself_backlog` / `checkyourself_next` — ranked remediation + next approval batch.
 - Tools `checkyourself_describe` / `checkyourself_coverage` — capability manifest / 20-surface skeleton.
 - Slash `/checkyourself …` — same paths; project ops refused on gateway unless opted in.
+- Hook `pre_tool_call` — blocks `kanban_complete` (and any other name in `completion_tools`) until `checkyourself_score` returns a numeric score with no open P0 or P1. Missing evidence blocks. A passing gate is scoped evidence, not a launch certificate.
 
 Not exposed here: `challenge`, `init`, `mcp`, `receipt`, `diff` — use the CheckYourself CLI.
 
