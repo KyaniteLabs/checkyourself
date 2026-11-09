@@ -13,10 +13,10 @@
 - Two screenshots: missing evidence BLOCKED; executed evidence ALLOWED with C5 credit + low production score visibly labeled.
 - 2:1 (1200x600) banner: “Check Yourself / No receipts, no done”. Add before optional catalog image field; do not link a nonexistent image.
 - Captions and transcript; crop private absolute paths; no flashing/rapid cuts.
-- Pin card and product PR evidence in end slate. No catalog PR before Simon's Nov 11 submission.
+- Pin card and product PR evidence in end slate. No catalog PR before the maintainer's submission.
 
 ## Run
 Use the fresh-home real-runtime integration command in `hermes-plugin/README.md`. It loads the installed plugin into native Hermes discovery, invokes the real hook dispatcher and registered tool, and talks to the real stdio MCP child. The only simulated part is the final completion sink. Each run needs a fresh scratch home.
 
-## Mon Nov 9 go/no-go
+## Go/no-go
 GO only with independently reviewed product pin, green exact-head CI, validator-green receipt, and an actual <90s capture that clearly labels the bounded C5 policy and simulated completion sink. NO-GO if catalog reviewers require interception of all prose completions, sandboxed project commands, or whole-production evidence; do not market this narrower hook as those. Product owns final entry decision; Kai/Security reviews evidence and risks. Current recommendation: conditional GO pending review/CI/capture; no submission/publication performed.
