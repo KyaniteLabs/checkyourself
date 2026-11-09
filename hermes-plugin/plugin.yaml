@@ -1,0 +1,11 @@
+name: checkyourself-evidence-gate
+version: "0.1.0"
+requires_hermes: ">=0.23.0"
+description: "Local MCP evidence scoring with a fail-closed kanban completion-tool gate."
+author: KyaniteLabs
+requires_env: []
+provides_tools:
+  - checkyourself_evidence_score
+provides_hooks:
+  - pre_tool_call
+provides_middleware: []
