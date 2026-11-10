@@ -47,6 +47,7 @@ python3 tools/checkyourself.py describe --format json
 | `next --findings FILE` | Returns the next unresolved `highest_severity_batch`; it does not analyze safety. |
 | `diff --old FILE --new FILE` | Compares two findings artifacts and reports added, resolved, and regressed findings. |
 | `validate --kind KIND FILE` | Validates JSON against bundled schema contracts. |
+| `resolve --id ID --reason TEXT` | Records a durable reviewed `not-applicable` disposition in project config. |
 | `schema NAME` | Prints a bundled JSON schema. |
 | `init [PROJECT]` | Creates starter generated context and coverage files. |
 | `mcp` | Runs the stdio MCP server over the same functions. |
@@ -162,7 +163,34 @@ suppress:
 ```
 
 Suppressed findings remain in JSON with `status: "suppressed"` and a
-`suppression` note, but they do not count toward severity totals or score caps.
+`suppression` note. Suppression is a workflow label, not proof that the
+exposure is gone: the finding still counts toward severity totals, score caps,
+`diff` counts, `next`/`backlog`, the rendered report, and the `scan --ci` P0
+gate. Scan, score, diff, next, backlog and the report all use one definition of
+"still counts" — only `fixed` and `not-applicable` are resolved.
+
+To close a reviewed finding durably, record a `not-applicable` disposition with
+the CLI instead of hand-editing a generated artifact:
+
+```bash
+python3 tools/checkyourself.py resolve \
+  --id CY-SECRET-002 \
+  --reason "feedbackToken is a UUID reference, not a credential" \
+  --files src/dispatcher/tool-registry.ts \
+  --reviewed-by maintainer \
+  --reviewed-at 2026-06-12 \
+  --project .
+```
+
+`resolve` writes a `resolve:` entry to `.checkyourself.yml` (or an existing
+`.checkyourself.json`). Every later scan applies it, so the promotion survives
+regeneration. `not-applicable` is the only accepted resolution status: `fixed`
+is inferred when the detector no longer emits the finding. A path-scoped
+disposition applies only when every remaining evidence path is inside the
+scope. Remove the entry to reopen the finding. `scan --ci` and the GitHub
+Action read the same counts, so a suppressed P0 fails the gate until it is
+fixed or recorded as not applicable.
+
 Context-only matches from documentation, tests, audits, detector definitions,
 and explicitly guarded eval code are omitted from findings and listed in
 `context_suppressions` with a reason. High-confidence credential shapes and

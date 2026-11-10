@@ -9,7 +9,6 @@ from .constants import (
     COVERAGE_SURFACES,
     CRITICAL_CATEGORIES,
     HIGH_SCORE_GATE_CATEGORIES,
-    RESOLVED_STATUSES,
     SCAN_SCHEMA_ID,
     SCORE_CATEGORIES,
     SCORE_SCHEMA_ID,
@@ -18,6 +17,8 @@ from .constants import (
     TOOL_NAME,
     WORKFLOW_DISPOSITIONS,
     _NO_COVERAGE,
+    count_unresolved,
+    is_resolved_status,
 )
 from .coverage import _coverage_evidence_state, _coverage_validation_errors
 from .errors import CliError
@@ -330,7 +331,7 @@ def inferred_coverage_from_scan(scan_data: dict, findings: List[dict]) -> Dict[s
         }
         for cid in SCORE_CATEGORIES
     }
-    open_findings = [f for f in findings if f.get("status") not in RESOLVED_STATUSES]
+    open_findings = [f for f in findings if not is_resolved_status(f.get("status"))]
 
     def set_state(cid: str, status: str, evidence: List[str], missing: List[str], surfaces: List[str]) -> None:
         category_state[cid] = {
@@ -389,10 +390,8 @@ def score_from_inputs(
 ) -> dict:
     require_findings_artifact(findings_data)
     findings = normalize_findings(findings_data)
-    counts = {sev: 0 for sev in ("P0", "P1", "P2", "P3")}
-    unresolved = [f for f in findings if f.get("status") not in RESOLVED_STATUSES]
-    for f in unresolved:
-        counts[f["severity"]] = counts.get(f["severity"], 0) + 1
+    counts = count_unresolved(findings)
+    unresolved = [f for f in findings if not is_resolved_status(f.get("status"))]
 
     if coverage_data is not _NO_COVERAGE:
         coverage_errors = _coverage_validation_errors(coverage_data)
@@ -571,7 +570,7 @@ def score_from_inputs(
             {
                 "finding_id": finding["id"],
                 "status": finding["status"],
-                "residual_risk": "closed" if finding["status"] in RESOLVED_STATUSES else "open",
+                "residual_risk": "closed" if is_resolved_status(finding["status"]) else "open",
             }
             for finding in findings
             if finding.get("status") in WORKFLOW_DISPOSITIONS
