@@ -8,6 +8,7 @@ import json
 import sys
 from typing import List, Optional, Sequence
 from .challenge_run import challenge_from_root
+from .config import write_resolution
 from .constants import COVERAGE_SURFACES, DEFAULT_COVERAGE_PATH
 from .coverage import coverage_check, coverage_emit
 from .describe import describe_capabilities, load_schema, schema_registry
@@ -221,6 +222,29 @@ def command_diff(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_resolve(args: argparse.Namespace) -> int:
+    entry = {
+        "id": args.id,
+        "status": "not-applicable",
+        "reason": args.reason,
+        "files": list(args.files or []),
+        "reviewed_by": args.reviewed_by,
+        "reviewed_at": args.reviewed_at,
+    }
+    try:
+        result = write_resolution(Path(args.project), entry)
+    except CliError:
+        raise
+    except (ValueError, OSError, UnicodeError) as exc:
+        raise CliError(f"could not record resolution: {exc}") from exc
+    if args.format == "json":
+        write_json(result)
+    else:
+        print(f"Recorded not-applicable disposition for {result['finding_id']} in {result['config']}")
+        print("Future scans honor it; remove the resolve entry to reopen the finding.")
+    return 0
+
+
 def command_validate(args: argparse.Namespace) -> int:
     data = load_json_arg(args.file)
     result = validate_artifact(args.kind, data)
@@ -409,6 +433,28 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--format", choices=("text", "json"), default="text")
     p.set_defaults(func=command_validate)
 
+    p = sub.add_parser(
+        "resolve",
+        help="Record a durable reviewed not-applicable disposition in project config.",
+    )
+    p.add_argument("--id", required=True, help="Stable finding ID, for example CY-SECRET-001.")
+    p.add_argument("--reason", required=True, help="Why the finding does not apply to this project.")
+    p.add_argument(
+        "--files",
+        nargs="+",
+        default=[],
+        help="Optional evidence path(s) that scope the disposition; omit to cover every instance of the rule.",
+    )
+    p.add_argument("--reviewed-by", default="", help="Person or seat that reviewed the disposition.")
+    p.add_argument("--reviewed-at", default="", help="Review date, for example 2026-11-10.")
+    p.add_argument(
+        "--project",
+        default=".",
+        help="Project root whose .checkyourself.yml/.json receives the disposition (default: .)",
+    )
+    p.add_argument("--format", choices=("text", "json"), default="text")
+    p.set_defaults(func=command_resolve)
+
     p = sub.add_parser("init", help="Create starter generated CheckYourself files in a target project.")
     p.add_argument("project", nargs="?", default=".")
     p.add_argument("--force", action="store_true", help="Overwrite existing generated files.")
@@ -445,6 +491,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "next",
         "diff",
         "validate",
+        "resolve",
         "init",
         "mcp",
     }

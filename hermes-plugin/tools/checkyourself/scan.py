@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Dict, List, Optional
-from .config import apply_suppressions, load_checkyourself_config
+from .config import apply_resolutions, apply_suppressions, load_checkyourself_config
 from .constants import (
     LLM_DEPENDENCY_LABELS,
     LOCKFILE_NAMES,
@@ -12,6 +12,7 @@ from .constants import (
     SCAN_SCHEMA_ID,
     SEVERITY_ORDER,
     TOOL_NAME,
+    count_unresolved,
 )
 from .detectors import run_deep_checks, scan_file_contents
 from .models import Finding
@@ -325,15 +326,11 @@ def scan(root: Path, deep: bool = False, max_files: int = DEFAULT_MAX_FILES) -> 
         deep_findings=deep_results,
         config_error=config.get("config_error"),
     )
-    finding_dicts = apply_suppressions([f.to_dict() for f in findings], config.get("suppress") or [])
+    finding_dicts = apply_resolutions([f.to_dict() for f in findings], config.get("resolve") or [])
+    finding_dicts = apply_suppressions(finding_dicts, config.get("suppress") or [])
 
-    counts = {sev: 0 for sev in ("P0", "P1", "P2", "P3")}
-    suppression_count = 0
-    for f in finding_dicts:
-        if f.get("status") == "suppressed":
-            suppression_count += 1
-            continue
-        counts[f["severity"]] = counts.get(f["severity"], 0) + 1
+    counts = count_unresolved(finding_dicts)
+    suppression_count = sum(1 for f in finding_dicts if f.get("status") == "suppressed")
 
     return {
         "tool": TOOL_NAME,

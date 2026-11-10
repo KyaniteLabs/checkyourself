@@ -1,74 +1,126 @@
-"""Loading and validation of .checkyourself.yml/.json configuration and suppressions."""
+"""Loading and validation of .checkyourself.yml/.json configuration, suppressions and resolutions."""
 
 from __future__ import annotations
 
 from pathlib import Path
 import fnmatch
+import json
 import re
-from typing import Any, List, Optional, Tuple
-from .constants import CONFIG_NAMES, COVERAGE_SURFACES, DEFAULT_VERIFICATION_ARTIFACT_REGISTRY
+from typing import Any, Dict, List, Optional, Tuple
+from .constants import (
+    CONFIG_NAMES,
+    COVERAGE_SURFACES,
+    DEFAULT_VERIFICATION_ARTIFACT_REGISTRY,
+    RESOLVE_SCHEMA_ID,
+    is_resolved_status,
+)
 from .jsonlite import strict_json_loads
+from .errors import CliError
+from .output import safe_write_text
 from .util import parse_scalar
 
 
-def parse_minimal_yaml_suppressions(text: str) -> List[dict]:
-    suppressions: List[dict] = []
+def _strip_yaml_comment(line: str) -> str:
+    """Strip a YAML comment marker unless it sits inside a quoted scalar."""
+    quote: Optional[str] = None
+    escaped = False
+    for index, char in enumerate(line):
+        if quote is not None:
+            if escaped:
+                escaped = False
+            elif char == "\\" and quote == '"':
+                escaped = True
+            elif char == quote:
+                quote = None
+            continue
+        if char in {'"', "'"}:
+            quote = char
+        elif char == "#":
+            return line[:index]
+    return line
+
+
+def parse_minimal_yaml_sections(text: str, section_names: Tuple[str, ...] = ("suppress",)) -> dict:
+    """Parse the small list-of-mapping sections CheckYourself owns.
+
+    The project config is deliberately not a general YAML implementation.  It
+    understands top-level keys whose value is a list of mappings, which covers
+    both reviewed suppressions and durable resolved dispositions.
+    """
+    sections: dict = {name: [] for name in section_names}
     current: Optional[dict] = None
     current_item_indent: Optional[int] = None
     current_list_key: Optional[str] = None
-    in_suppress = False
+    active: Optional[str] = None
+
+    def flush_current() -> None:
+        nonlocal current
+        if current is not None and active is not None:
+            sections[active].append(current)
+        current = None
 
     for raw_line in text.splitlines():
-        line = raw_line.split("#", 1)[0].rstrip()
+        line = _strip_yaml_comment(raw_line).rstrip()
         if not line.strip():
             continue
         stripped = line.strip()
-        if stripped.startswith("suppress:"):
-            value = stripped.split(":", 1)[1].strip()
-            if value not in {"", "[]"}:
-                raise ValueError("suppress must be a YAML list")
-            in_suppress = True
+        indent = len(line) - len(line.lstrip())
+
+        if indent == 0 and not stripped.startswith("- "):
+            # A new zero-indent top-level key ends the active list section.
+            if active is not None:
+                flush_current()
+                current_list_key = None
+                active = None
+            if ":" not in stripped:
+                continue
+            key, value = stripped.split(":", 1)
+            key = key.strip()
+            if key not in sections:
+                continue
+            if value.strip() not in {"", "[]"}:
+                raise ValueError(f"{key} must be a YAML list")
+            active = key
             continue
-        if in_suppress and not raw_line[:1].isspace() and not stripped.startswith("- "):
-            # A new zero-indent top-level key ends the suppress block.
-            if current:
-                suppressions.append(current)
-                current = None
-            current_list_key = None
-            in_suppress = False
-        if not in_suppress:
+
+        if active is None:
             continue
+
         if stripped.startswith("- "):
-            indent = len(raw_line) - len(raw_line.lstrip())
+            item_indent = indent
             if (
                 current is not None
                 and current_list_key
                 and current_item_indent is not None
-                and indent > current_item_indent
+                and item_indent > current_item_indent
             ):
                 current[current_list_key].append(parse_scalar(stripped[2:].strip()))
                 continue
-            if current:
-                suppressions.append(current)
+            flush_current()
             current = {}
-            current_item_indent = indent
+            current_item_indent = item_indent
             current_list_key = None
-            stripped = stripped[2:].strip()
-            if stripped and ":" in stripped:
-                key, value = stripped.split(":", 1)
+            item = stripped[2:].strip()
+            if item and ":" in item:
+                key, value = item.split(":", 1)
                 current[key.strip()] = parse_scalar(value)
-            elif stripped:
-                raise ValueError("suppression list items must be mappings")
+            elif item:
+                raise ValueError(f"{active} list items must be mappings")
             continue
+
         if current is not None and ":" in stripped:
             key, value = stripped.split(":", 1)
             key = key.strip()
             current[key] = [] if not value.strip() else parse_scalar(value)
             current_list_key = key if not value.strip() else None
 
-    if current:
-        suppressions.append(current)
-    return suppressions
+    flush_current()
+    return sections
+
+
+def parse_minimal_yaml_suppressions(text: str) -> List[dict]:
+    """Backward-compatible suppression-only entry point."""
+    return parse_minimal_yaml_sections(text, ("suppress",))["suppress"]
 
 
 def validate_suppressions_config(data: Any, name: str) -> dict:
@@ -103,6 +155,70 @@ def validate_suppressions_config(data: Any, name: str) -> dict:
         if not has_id and not has_path:
             return {"suppress": [], "config_error": f"{name} suppression {index} needs id, files, or paths"}
     return {"suppress": suppressions}
+
+
+def validate_resolutions_config(data: Any, name: str) -> dict:
+    """Validate durable ``resolve:`` dispositions that close a finding.
+
+    Only ``not-applicable`` is accepted: a finding cannot be declared
+    ``fixed`` by configuration while the detector still emits it.  A reason is
+    mandatory so the promotion stays reviewable after the scan artifact is
+    regenerated.
+    """
+    if not isinstance(data, dict):
+        return {"resolve": [], "config_error": f"{name} must contain a JSON/YAML object"}
+    resolutions = data.get("resolve", [])
+    if not isinstance(resolutions, list):
+        return {"resolve": [], "config_error": f"{name} resolve must be a list"}
+    normalized: List[dict] = []
+    for index, resolution in enumerate(resolutions):
+        if not isinstance(resolution, dict):
+            return {"resolve": [], "config_error": f"{name} resolution {index} must be an object"}
+        for key in ("id", "reason", "status", "reviewed_by", "reviewed_at"):
+            if key in resolution and not isinstance(resolution[key], str):
+                return {
+                    "resolve": [],
+                    "config_error": f"{name} resolution {index} field {key} must be a string",
+                }
+        finding_id = str(resolution.get("id") or "").strip()
+        if not finding_id:
+            return {"resolve": [], "config_error": f"{name} resolution {index} needs a finding id"}
+        status = str(resolution.get("status") or "not-applicable").strip()
+        if status != "not-applicable":
+            return {
+                "resolve": [],
+                "config_error": (
+                    f"{name} resolution {index} status must be not-applicable; "
+                    "fix the exposure or remove the detector finding to mark it fixed"
+                ),
+            }
+        reason = str(resolution.get("reason") or "").strip()
+        if not reason:
+            return {"resolve": [], "config_error": f"{name} resolution {index} needs a reason"}
+        files: List[str] = []
+        for key in ("files", "paths"):
+            if key not in resolution:
+                continue
+            value = resolution[key]
+            if isinstance(value, str):
+                value = [value]
+            if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+                return {
+                    "resolve": [],
+                    "config_error": f"{name} resolution {index} field {key} must be a string or list of strings",
+                }
+            files.extend(item.strip() for item in value if item.strip())
+        entry: Dict[str, Any] = {
+            "id": finding_id,
+            "status": "not-applicable",
+            "reason": reason,
+            "reviewed_by": str(resolution.get("reviewed_by") or "").strip(),
+            "reviewed_at": str(resolution.get("reviewed_at") or "").strip(),
+        }
+        if files:
+            entry["files"] = list(dict.fromkeys(files))
+        normalized.append(entry)
+    return {"resolve": normalized}
 
 
 def _copy_verification_registry(registry: dict) -> dict:
@@ -201,13 +317,19 @@ def validate_verification_registry_config(data: Any, name: str) -> Tuple[dict, O
 
 def _config_with_registry(data: Any, name: str) -> dict:
     suppressions = validate_suppressions_config(data, name)
+    resolutions = validate_resolutions_config(data, name)
     registry, registry_error = validate_verification_registry_config(data, name)
     result = {
         "suppress": suppressions.get("suppress", []),
+        "resolve": resolutions.get("resolve", []),
         "verification_artifact_registry": registry,
     }
     if suppressions.get("config_error"):
         result["config_error"] = suppressions["config_error"]
+    if resolutions.get("config_error"):
+        result["config_error"] = "; ".join(
+            item for item in (result.get("config_error"), resolutions["config_error"]) if item
+        )
     if registry_error:
         result["verification_registry_error"] = registry_error
         result["config_error"] = "; ".join(item for item in (result.get("config_error"), registry_error) if item)
@@ -226,6 +348,7 @@ def load_checkyourself_config(root: Path) -> dict:
             except (ValueError, OSError, UnicodeError):
                 return {
                     "suppress": [],
+                    "resolve": [],
                     "verification_artifact_registry": _copy_verification_registry(
                         DEFAULT_VERIFICATION_ARTIFACT_REGISTRY
                     ),
@@ -233,21 +356,22 @@ def load_checkyourself_config(root: Path) -> dict:
                     "config_error": f"{name} could not be parsed as JSON",
                 }
         try:
-            # The minimal YAML parser intentionally remains suppression-only.
-            # JSON is the explicit configuration format for registry overrides.
-            return _config_with_registry(
-                {"suppress": parse_minimal_yaml_suppressions(path.read_text(encoding="utf-8"))},
-                name,
-            )
+            # The minimal YAML parser reads reviewed suppressions and durable
+            # resolved dispositions. JSON is the explicit configuration format
+            # for registry overrides.
+            sections = parse_minimal_yaml_sections(path.read_text(encoding="utf-8"), ("suppress", "resolve"))
+            return _config_with_registry(sections, name)
         except (OSError, UnicodeError, ValueError) as exc:
             return {
                 "suppress": [],
+                "resolve": [],
                 "verification_artifact_registry": _copy_verification_registry(DEFAULT_VERIFICATION_ARTIFACT_REGISTRY),
                 "verification_registry_error": f"{name} is invalid: {exc}",
                 "config_error": f"{name} is invalid: {exc}",
             }
     return {
         "suppress": [],
+        "resolve": [],
         "verification_artifact_registry": _copy_verification_registry(DEFAULT_VERIFICATION_ARTIFACT_REGISTRY),
     }
 
@@ -274,8 +398,163 @@ def suppression_matches(finding: dict, suppression: dict) -> bool:
     return True
 
 
+def resolution_matches(finding: dict, resolution: dict) -> bool:
+    """Match a durable disposition without hiding unrelated evidence.
+
+    A path-scoped resolution only applies when every evidence path falls
+    inside the reviewed scope.  A broader id-only disposition covers the whole
+    finding.
+    """
+    sid = str(resolution.get("id") or "").strip()
+    files = resolution.get("files") or resolution.get("paths") or []
+    if not sid and not files:
+        return False
+    if sid and sid not in {str(finding.get("id")), str(finding.get("finding")), str(finding.get("title"))}:
+        return False
+    if isinstance(files, str):
+        files = [files]
+    if not files:
+        return True
+    paths = [evidence_path(str(item)) for item in finding.get("evidence") or []]
+    return bool(paths) and all(
+        any(fnmatch.fnmatch(path, pattern) or path == pattern for pattern in files) for path in paths
+    )
+
+
+def apply_resolutions(findings: List[dict], resolutions: List[dict]) -> List[dict]:
+    """Promote findings with a durable reviewed disposition.
+
+    Resolutions are applied before suppressions so a reviewed
+    ``not-applicable`` disposition wins over a broader suppression entry.
+    """
+    for finding in findings:
+        for resolution in resolutions:
+            if not resolution_matches(finding, resolution):
+                continue
+            finding["status"] = "not-applicable"
+            finding["disposition"] = {
+                "status": "not-applicable",
+                "reason": str(resolution.get("reason") or ""),
+                "reviewed_by": str(resolution.get("reviewed_by") or ""),
+                "reviewed_at": str(resolution.get("reviewed_at") or ""),
+            }
+            break
+    return findings
+
+
+def _resolution_key(entry: dict) -> Tuple[str, Tuple[str, ...]]:
+    files = entry.get("files") or entry.get("paths") or []
+    if isinstance(files, str):
+        files = [files]
+    return (
+        str(entry.get("id") or "").strip(),
+        tuple(sorted(str(item).strip() for item in files if str(item).strip())),
+    )
+
+
+def _upsert_resolution(existing: List[dict], entry: dict) -> List[dict]:
+    key = _resolution_key(entry)
+    updated: List[dict] = []
+    replaced = False
+    for resolution in existing:
+        if isinstance(resolution, dict) and _resolution_key(resolution) == key:
+            updated.append(entry)
+            replaced = True
+        else:
+            updated.append(resolution)
+    if not replaced:
+        updated.append(entry)
+    return updated
+
+
+def _render_resolve_block(resolutions: List[dict]) -> str:
+    lines = ["resolve:"]
+    for resolution in resolutions:
+        lines.append(f"  - id: {json.dumps(str(resolution.get('id') or ''))}")
+        lines.append("    status: not-applicable")
+        lines.append(f"    reason: {json.dumps(str(resolution.get('reason') or ''))}")
+        files = resolution.get("files") or resolution.get("paths") or []
+        if isinstance(files, str):
+            files = [files]
+        if files:
+            lines.append("    files: [" + ", ".join(json.dumps(str(item)) for item in files) + "]")
+        reviewed_by = str(resolution.get("reviewed_by") or "")
+        if reviewed_by:
+            lines.append(f"    reviewed_by: {json.dumps(reviewed_by)}")
+        reviewed_at = str(resolution.get("reviewed_at") or "")
+        if reviewed_at:
+            lines.append(f"    reviewed_at: {json.dumps(reviewed_at)}")
+    return "\n".join(lines) + "\n"
+
+
+def _replace_top_level_block(text: str, key: str, block: str) -> Optional[str]:
+    lines = text.splitlines(keepends=True)
+    start = None
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith(key + ":") and not line[:1].isspace():
+            start = index
+            break
+    if start is None:
+        return None
+    end = len(lines)
+    for index in range(start + 1, len(lines)):
+        stripped = lines[index].strip()
+        if stripped and not lines[index][:1].isspace() and not stripped.startswith("- "):
+            end = index
+            break
+    return "".join(lines[:start]) + block + "".join(lines[end:])
+
+
+def write_resolution(root: Path, entry: dict) -> dict:
+    """Write one durable ``not-applicable`` disposition to project config."""
+    root = root.resolve()
+    if not root.is_dir():
+        raise CliError(f"project root not found: {root}")
+    normalized = validate_resolutions_config({"resolve": [entry]}, "config")
+    if normalized.get("config_error"):
+        raise CliError(str(normalized["config_error"]))
+    resolution = normalized["resolve"][0]
+    path = next((root / name for name in CONFIG_NAMES if (root / name).exists()), root / CONFIG_NAMES[0])
+    if path.suffix == ".json":
+        if path.exists():
+            data = strict_json_loads(path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                raise CliError(f"{path.name} must contain a JSON object")
+        else:
+            data = {"version": 1}
+        existing = data.get("resolve") or []
+        if not isinstance(existing, list):
+            raise CliError(f"{path.name} resolve must be a list")
+        data["resolve"] = _upsert_resolution(existing, resolution)
+        body = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    else:
+        text = path.read_text(encoding="utf-8") if path.exists() else "version: 1\n"
+        sections = parse_minimal_yaml_sections(text, ("suppress", "resolve"))
+        updated = _upsert_resolution(sections["resolve"], resolution)
+        block = _render_resolve_block(updated)
+        replacement = _replace_top_level_block(text, "resolve", block)
+        if replacement is None:
+            replacement = text.rstrip() + "\n\n" + block if text.strip() else "version: 1\n\n" + block
+        body = replacement if replacement.endswith("\n") else replacement + "\n"
+    safe_write_text(path, body)
+    return {
+        "tool": "checkyourself-cli",
+        "schema": RESOLVE_SCHEMA_ID,
+        "config": str(path),
+        "finding_id": resolution["id"],
+        "status": resolution["status"],
+        "reason": resolution["reason"],
+        "reviewed_by": resolution["reviewed_by"],
+        "reviewed_at": resolution["reviewed_at"],
+        "files": resolution.get("files", []),
+    }
+
+
 def apply_suppressions(findings: List[dict], suppressions: List[dict]) -> List[dict]:
     for finding in findings:
+        if is_resolved_status(finding.get("status")):
+            continue
         for suppression in suppressions:
             sid = str(suppression.get("id") or "").strip()
             files = suppression.get("files") or suppression.get("paths") or []
