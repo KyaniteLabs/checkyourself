@@ -5,8 +5,8 @@ These notes are durable operating lessons, not a trophy shelf.
 
 ## 2026-05-29: Dependabot `glib` remediation
 
-Source: resolving the final medium Dependabot alert in
-`a private application repository`.
+Source: resolving the final medium Dependabot alert in a private Tauri
+application.
 
 ### What happened
 

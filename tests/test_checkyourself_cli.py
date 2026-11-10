@@ -1230,11 +1230,18 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         for tool in tools:
             description = tool["description"].lower()
             self.assertIn("requires no authentication", description, tool["name"])
+            self.assertIn("no external rate limits", description, tool["name"])
+            self.assertFalse(tool["annotations"]["destructiveHint"], tool["name"])
+            if tool["name"] == "score":
+                # Coverage with executed receipts re-runs project challenge commands.
+                self.assertIn("re-runs the project's configured challenge commands", description)
+                self.assertNotIn("does not modify local files", description)
+                self.assertFalse(tool["annotations"]["readOnlyHint"])
+                self.assertTrue(tool["annotations"]["openWorldHint"])
+                continue
             self.assertIn("does not make network calls", description, tool["name"])
             self.assertIn("does not modify local files", description, tool["name"])
-            self.assertIn("no external rate limits", description, tool["name"])
             self.assertTrue(tool["annotations"]["readOnlyHint"], tool["name"])
-            self.assertFalse(tool["annotations"]["destructiveHint"], tool["name"])
 
         by_name = {tool["name"]: tool for tool in tools}
         for tool_name in ("score", "backlog", "next"):
