@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List
-from .constants import RESOLVED_STATUSES, SEVERITY_ORDER, TOOL_NAME
+from .constants import SEVERITY_ORDER, TOOL_NAME, count_unresolved, is_resolved_status
 from .scoring import default_fix_for, normalize_findings, require_findings_artifact
 from .util import now_iso
 
@@ -84,7 +84,7 @@ def diff_findings(old_data: Any, new_data: Any) -> dict:
     persisting_ids = sorted(set(old_findings) & set(new_findings))
 
     def is_open(finding: dict) -> bool:
-        return finding.get("status") not in RESOLVED_STATUSES
+        return not is_resolved_status(finding.get("status"))
 
     status_changes: List[dict] = []
     severity_changes: List[dict] = []
@@ -179,11 +179,7 @@ def diff_findings(old_data: Any, new_data: Any) -> dict:
             )
 
     def open_counts(findings: Dict[str, dict]) -> Dict[str, int]:
-        counts = {sev: 0 for sev in ("P0", "P1", "P2", "P3")}
-        for f in findings.values():
-            if f.get("status") not in RESOLVED_STATUSES:
-                counts[f["severity"]] = counts.get(f["severity"], 0) + 1
-        return counts
+        return count_unresolved(findings.values())
 
     old_counts = open_counts(old_findings)
     new_counts = open_counts(new_findings)
@@ -207,7 +203,7 @@ def diff_findings(old_data: Any, new_data: Any) -> dict:
 
 
 def first_batch(backlog: List[dict]) -> List[dict]:
-    open_items = [b for b in backlog if b.get("status") not in RESOLVED_STATUSES]
+    open_items = [b for b in backlog if not is_resolved_status(b.get("status"))]
     if not open_items:
         return []
     first_severity = open_items[0]["severity"]

@@ -1065,7 +1065,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         self.assertIn("CY-SECRET-001", ids)
         self.assertEqual(data["suppression_count"], 0)
 
-    def test_checkyourself_yml_can_suppress_reviewed_finding_without_counting_it(self) -> None:
+    def test_checkyourself_yml_suppression_keeps_reviewed_finding_counted(self) -> None:
         token = "sk-" + ("s" * 32)
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
@@ -1090,10 +1090,190 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn(token, result.stdout)
         data = json.loads(result.stdout)
-        self.assertEqual(data["counts"]["P0"], 0)
+        self.assertEqual(data["config_error"], None)
+        # Suppression marks a finding reviewed; it does not close the risk.
+        self.assertEqual(data["counts"]["P0"], 1)
         suppressed = [finding for finding in data["findings"] if finding["status"] == "suppressed"]
         self.assertEqual([finding["id"] for finding in suppressed], ["CY-SECRET-001"])
         self.assertEqual(data["suppression_count"], 1)
+
+    def test_suppressed_p0_agrees_across_scan_score_diff_next_backlog_and_report(self) -> None:
+        token = "sk-" + ("c" * 32)
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "app.py").write_text(f'API_KEY = "{token}"\n', encoding="utf-8")
+            (project / ".checkyourself.yml").write_text(
+                "\n".join(
+                    [
+                        "version: 1",
+                        "suppress:",
+                        "  - id: CY-SECRET-001",
+                        "    reason: synthetic detector shape, not a real credential",
+                        '    files: ["app.py"]',
+                        "    reviewed_by: unit-test",
+                        '    reviewed_at: "2026-11-10"',
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            scan_result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+            self.assertEqual(scan_result.returncode, 0, scan_result.stderr)
+            scan_data = json.loads(scan_result.stdout)
+            artifact = project / "scan.json"
+            artifact.write_text(json.dumps(scan_data), encoding="utf-8")
+
+            ci_result = self.run_cli("scan", str(project), "--ci", "--format", "json", "--no-write")
+            self.assertEqual(ci_result.returncode, 1, ci_result.stderr)
+            self.assertEqual(json.loads(ci_result.stdout)["counts"]["P0"], 1)
+
+            score_result = self.run_cli("score", "--findings", str(artifact), "--format", "json", "--no-history")
+            self.assertEqual(score_result.returncode, 0, score_result.stderr)
+            score_data = json.loads(score_result.stdout)
+
+            diff_result = self.run_cli("diff", "--old", str(artifact), "--new", str(artifact), "--format", "json")
+            self.assertEqual(diff_result.returncode, 0, diff_result.stderr)
+            diff_data = json.loads(diff_result.stdout)
+
+            next_result = self.run_cli("next", "--findings", str(artifact), "--format", "json")
+            self.assertEqual(next_result.returncode, 0, next_result.stderr)
+            next_data = json.loads(next_result.stdout)
+
+            backlog_result = self.run_cli("backlog", "--findings", str(artifact), "--format", "json")
+            self.assertEqual(backlog_result.returncode, 0, backlog_result.stderr)
+            backlog_data = json.loads(backlog_result.stdout)
+
+            report_path = project / "report.md"
+            report_json = project / "report-scan.json"
+            report_result = self.run_cli(
+                "scan", str(project), "--out", str(report_path), "--json", str(report_json), "--quiet"
+            )
+            self.assertEqual(report_result.returncode, 0, report_result.stderr)
+
+            self.assertEqual(scan_data["counts"]["P0"], 1)
+            self.assertEqual(scan_data["suppression_count"], 1)
+            self.assertEqual(score_data["counts"], scan_data["counts"])
+            self.assertEqual(score_data["score"], 49)
+            self.assertIn(49, [cap["cap"] for cap in score_data["caps_applied"]])
+            self.assertEqual(diff_data["old_counts"], scan_data["counts"])
+            self.assertEqual(diff_data["new_counts"], scan_data["counts"])
+            self.assertIn("CY-SECRET-001", next_data["finding_ids"])
+            self.assertIn("CY-SECRET-001", backlog_data["highest_severity_batch"])
+
+            report = report_path.read_text(encoding="utf-8")
+            self.assertIn("Counts — P0: 1", report)
+            self.assertIn("### [P0] CY-SECRET-001", report)
+            self.assertIn("Status: suppressed", report)
+            self.assertNotIn("Counts — P0: 0", report)
+
+    def test_resolve_cli_promotes_finding_durably_across_every_surface(self) -> None:
+        token = "sk-" + ("r" * 32)
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "app.py").write_text(f'API_KEY = "{token}"\n', encoding="utf-8")
+            baseline_result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+            self.assertEqual(baseline_result.returncode, 0, baseline_result.stderr)
+            baseline = json.loads(baseline_result.stdout)
+            self.assertEqual(baseline["counts"]["P0"], 1)
+            baseline_path = project / "baseline.json"
+            baseline_path.write_text(json.dumps(baseline), encoding="utf-8")
+
+            resolve_result = self.run_cli(
+                "resolve",
+                "--id",
+                "CY-SECRET-001",
+                "--reason",
+                "synthetic fixture key, not a credential",
+                "--files",
+                "app.py",
+                "--reviewed-by",
+                "unit-test",
+                "--reviewed-at",
+                "2026-11-10",
+                "--project",
+                str(project),
+                "--format",
+                "json",
+            )
+            self.assertEqual(resolve_result.returncode, 0, resolve_result.stderr)
+            resolve_data = json.loads(resolve_result.stdout)
+            self.assertEqual(resolve_data["status"], "not-applicable")
+            self.assertEqual(resolve_data["finding_id"], "CY-SECRET-001")
+            config_text = (project / ".checkyourself.yml").read_text(encoding="utf-8")
+            self.assertIn("resolve:", config_text)
+            self.assertIn("not-applicable", config_text)
+
+            current = None
+            for _ in range(2):
+                scan_result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+                self.assertEqual(scan_result.returncode, 0, scan_result.stderr)
+                current = json.loads(scan_result.stdout)
+                self.assertEqual(current["counts"]["P0"], 0)
+                finding = next(item for item in current["findings"] if item["id"] == "CY-SECRET-001")
+                self.assertEqual(finding["status"], "not-applicable")
+                self.assertEqual(finding["disposition"]["reason"], "synthetic fixture key, not a credential")
+
+            artifact = project / "resolved.json"
+            artifact.write_text(json.dumps(current), encoding="utf-8")
+
+            score_result = self.run_cli("score", "--findings", str(artifact), "--format", "json", "--no-history")
+            self.assertEqual(score_result.returncode, 0, score_result.stderr)
+            score_data = json.loads(score_result.stdout)
+            self.assertEqual(score_data["counts"]["P0"], 0)
+            self.assertNotIn(49, [cap["cap"] for cap in score_data["caps_applied"]])
+
+            next_result = self.run_cli("next", "--findings", str(artifact), "--format", "json")
+            self.assertEqual(next_result.returncode, 0, next_result.stderr)
+            self.assertNotIn("CY-SECRET-001", json.loads(next_result.stdout)["finding_ids"])
+
+            diff_result = self.run_cli("diff", "--old", str(baseline_path), "--new", str(artifact), "--format", "json")
+            self.assertEqual(diff_result.returncode, 0, diff_result.stderr)
+            diff_data = json.loads(diff_result.stdout)
+            self.assertEqual(diff_data["old_counts"]["P0"], 1)
+            self.assertEqual(diff_data["new_counts"]["P0"], 0)
+            self.assertIn("CY-SECRET-001", [item["id"] for item in diff_data["resolved"]])
+
+            ci_result = self.run_cli("scan", str(project), "--ci", "--format", "json", "--no-write")
+            self.assertEqual(ci_result.returncode, 0, ci_result.stderr)
+
+            report_path = project / "report.md"
+            report_result = self.run_cli(
+                "scan", str(project), "--out", str(report_path), "--json", str(project / "report.json"), "--quiet"
+            )
+            self.assertEqual(report_result.returncode, 0, report_result.stderr)
+            report = report_path.read_text(encoding="utf-8")
+            self.assertIn("Counts — P0: 0", report)
+            self.assertNotIn("### [P0] CY-SECRET-001", report)
+            self.assertIn("### Resolved dispositions", report)
+            self.assertIn("- `CY-SECRET-001` — not-applicable", report)
+
+    def test_report_recomputes_counts_and_never_prints_resolved_p0_section(self) -> None:
+        token = "sk-" + ("v" * 32)
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "app.py").write_text(f'API_KEY = "{token}"\n', encoding="utf-8")
+            scan_result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+            self.assertEqual(scan_result.returncode, 0, scan_result.stderr)
+            scan_data = json.loads(scan_result.stdout)
+
+            stale = deepcopy(scan_data)
+            stale["counts"] = {"P0": 0, "P1": 0, "P2": 0, "P3": 0}
+            report = cy.render_markdown(project, stale)
+            self.assertIn("Counts — P0: 1", report)
+            self.assertIn("### [P0] CY-SECRET-001", report)
+
+            resolved = deepcopy(scan_data)
+            for finding in resolved["findings"]:
+                if finding["id"] == "CY-SECRET-001":
+                    finding["status"] = "not-applicable"
+                    finding["disposition"] = {
+                        "status": "not-applicable",
+                        "reason": "reviewed fixture shape",
+                    }
+            report = cy.render_markdown(project, resolved)
+            self.assertIn("Counts — P0: 0", report)
+            self.assertNotIn("### [P0] CY-SECRET-001", report)
+            self.assertIn("### Resolved dispositions", report)
 
     def test_multiline_yaml_suppression_paths_are_parsed(self) -> None:
         token = "sk-" + ("m" * 32)

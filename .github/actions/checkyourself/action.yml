@@ -7,7 +7,7 @@ inputs:
     required: false
     default: .
   fail-on-p0:
-    description: Fail the job when an unresolved P0 is detected.
+    description: Fail the job when an unresolved P0 is detected (suppressed findings remain unresolved).
     required: false
     default: "true"
   deep:
@@ -57,6 +57,8 @@ runs:
         from pathlib import Path
 
         data = json.loads(Path(os.environ["CY_OUTPUT"]).read_text(encoding="utf-8"))
+        # Scan counts use the shared "still counts" rule: suppressed findings
+        # remain unresolved until fixed or recorded not-applicable.
         p0 = int(data.get("counts", {}).get("P0", 0))
         if p0:
             raise SystemExit(f"CheckYourself found {p0} unresolved P0 finding(s).")

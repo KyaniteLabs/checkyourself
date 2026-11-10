@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
+from typing import Any, Dict, Iterable
 
 
 TOOL_NAME = "checkyourself-cli"
@@ -21,6 +22,8 @@ RECEIPT_SCHEMA_ID = "checkyourself-receipt/1"
 CHALLENGE_SCHEMA_ID = "checkyourself-challenges/1"
 
 CHALLENGE_RESULT_SCHEMA_ID = "checkyourself-challenge/1"
+
+RESOLVE_SCHEMA_ID = "checkyourself-resolve/1"
 
 RECEIPT_ISSUER = "checkyourself-verifier/1"
 
@@ -332,6 +335,30 @@ SEVERITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
 WORKFLOW_DISPOSITIONS = {"fixed", "accepted-risk", "deferred", "not-applicable", "suppressed"}
 
 RESOLVED_STATUSES = {"fixed", "not-applicable"}
+
+
+def is_resolved_status(status: Any) -> bool:
+    """Return True only for dispositions that close the underlying risk.
+
+    This is the single definition of "no longer counts" used by scan counts,
+    scoring, diff, backlog, next, report rendering, and the CI gate.  A
+    workflow label such as ``suppressed``, ``accepted-risk`` or ``deferred``
+    keeps the finding unresolved until the exposure is fixed or proven not
+    applicable.
+    """
+    return str(status or "open") in RESOLVED_STATUSES
+
+
+def count_unresolved(findings: Iterable[dict]) -> Dict[str, int]:
+    """Count findings by severity using the shared resolved-status contract."""
+    counts: Dict[str, int] = {severity: 0 for severity in SEVERITY_ORDER}
+    for finding in findings:
+        if is_resolved_status(finding.get("status")):
+            continue
+        severity = str(finding.get("severity") or "P3")
+        counts[severity] = counts.get(severity, 0) + 1
+    return counts
+
 
 COVERAGE_SURFACES = [
     ("S01", "Product purpose, users, and harm model", "context"),
