@@ -21,8 +21,11 @@ State = gate_mod.State
 
 PASSING_TEST = "import unittest\nclass T(unittest.TestCase):\n    def test_ok(self):\n        self.assertEqual(1, 1)\n"
 FAILING_TEST = "import unittest\nclass T(unittest.TestCase):\n    def test_ok(self):\n        self.assertEqual(1, 2)\n"
-UNITTEST_S11 = {"command": [sys.executable, "-m", "unittest", "-q"], "timeout_s": 60,
-                "success": {"exit_zero": True, "regex_match": r"\bOK\b"}}
+UNITTEST_S11 = {
+    "command": [sys.executable, "-m", "unittest", "-q"],
+    "timeout_s": 60,
+    "success": {"exit_zero": True, "regex_match": r"\bOK\b"},
+}
 
 
 class Fixture:
@@ -253,16 +256,26 @@ class ForgeryAndExecution(unittest.TestCase):
 
     def test_regex_is_required_even_on_exit_zero(self):
         with tempfile.TemporaryDirectory() as tmp:
-            fx = Fixture(tmp, s11={"command": [sys.executable, "-c", "print('nothing ran')"],
-                                   "success": {"exit_zero": True, "regex_match": r"\d+ passed"}})
+            fx = Fixture(
+                tmp,
+                s11={
+                    "command": [sys.executable, "-c", "print('nothing ran')"],
+                    "success": {"exit_zero": True, "regex_match": r"\d+ passed"},
+                },
+            )
             fx.approve()
             with fx.worker():
                 self.assertEqual(fx.check()["state"], "TESTS_FAILED")
 
     def test_exit_code_is_required(self):
         with tempfile.TemporaryDirectory() as tmp:
-            fx = Fixture(tmp, s11={"command": [sys.executable, "-c", "print('1 passed'); raise SystemExit(3)"],
-                                   "success": {"exit_zero": True, "regex_match": "passed"}})
+            fx = Fixture(
+                tmp,
+                s11={
+                    "command": [sys.executable, "-c", "print('1 passed'); raise SystemExit(3)"],
+                    "success": {"exit_zero": True, "regex_match": "passed"},
+                },
+            )
             fx.approve()
             with fx.worker():
                 result = fx.check()
@@ -285,18 +298,24 @@ class ForgeryAndExecution(unittest.TestCase):
 
     def test_child_env_is_pinned_not_inherited(self):
         with tempfile.TemporaryDirectory() as tmp:
-            probe = "import os,sys; sys.exit(1 if 'LEAK_ME' in os.environ or os.environ.get('PYTHONNOUSERSITE') != '1' else 0)"
+            probe = (
+                "import os,sys; "
+                "sys.exit(1 if 'LEAK_ME' in os.environ or os.environ.get('PYTHONNOUSERSITE') != '1' else 0)"
+            )
             fx = Fixture(tmp, s11={"command": [sys.executable, "-c", probe], "success": {"exit_zero": True}})
             fx.approve()
             with fx.worker(LEAK_ME="secret"):
                 self.assertEqual(fx.check()["state"], "ALLOWED")
 
     def test_timeout_kills_whole_process_group(self):  # R5: orphaned challenge
-        script = ("import subprocess,sys,time; p=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)']);"
-                  " print('child', p.pid, flush=True); time.sleep(60)")
+        script = (
+            "import subprocess,sys,time; p=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)']);"
+            " print('child', p.pid, flush=True); time.sleep(60)"
+        )
         with tempfile.TemporaryDirectory() as tmp:
-            fx = Fixture(tmp, s11={"command": [sys.executable, "-c", script], "timeout_s": 60,
-                                   "success": {"exit_zero": True}})
+            fx = Fixture(
+                tmp, s11={"command": [sys.executable, "-c", script], "timeout_s": 60, "success": {"exit_zero": True}}
+            )
             fx.approve(max_run_s=1)
             with fx.worker():
                 start = time.monotonic()
@@ -317,8 +336,13 @@ class ForgeryAndExecution(unittest.TestCase):
 
     def test_tree_written_during_run_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
-            fx = Fixture(tmp, s11={"command": [sys.executable, "-c", "open('made.txt','w').write('x')"],
-                                   "success": {"exit_zero": True}})
+            fx = Fixture(
+                tmp,
+                s11={
+                    "command": [sys.executable, "-c", "open('made.txt','w').write('x')"],
+                    "success": {"exit_zero": True},
+                },
+            )
             fx.approve()
             with fx.worker():
                 self.assertEqual(fx.check()["state"], "TREE_CHANGED_DURING_RUN")
@@ -355,8 +379,9 @@ class Findings(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             fx = Fixture(tmp)
             (fx.ws / ".env").write_text("TOKEN=1\n")
-            (fx.ws / ".checkyourself.json").write_text(json.dumps(
-                {"suppress": [{"id": "CY-ENV-001", "reason": "agent says fine"}]}))
+            (fx.ws / ".checkyourself.json").write_text(
+                json.dumps({"suppress": [{"id": "CY-ENV-001", "reason": "agent says fine"}]})
+            )
             fx.approve()
             with fx.worker():
                 result = fx.check()
@@ -413,8 +438,16 @@ class OperatorConfig(unittest.TestCase):
     def test_cli_approve_needs_matching_digest_and_operator_shell(self):
         with tempfile.TemporaryDirectory() as tmp:
             fx = Fixture(tmp)
-            ns = argparse.Namespace(evidence_gate_cmd="approve", project=str(fx.ws), prefix=None, max_run_s=None,
-                                    max_attempts=None, ignore=None, accept_finding=None, confirm=None)
+            ns = argparse.Namespace(
+                evidence_gate_cmd="approve",
+                project=str(fx.ws),
+                prefix=None,
+                max_run_s=None,
+                max_attempts=None,
+                ignore=None,
+                accept_finding=None,
+                confirm=None,
+            )
             env = {"PATH": os.environ["PATH"], "HOME": tmp}
             with patch("builtins.print"):
                 self.assertEqual(gate_mod.run_cli(fx.store, ns, env), 0)
@@ -456,8 +489,10 @@ class OperatorConfig(unittest.TestCase):
             fake.kanban_db_path = lambda board=None: db
             pkg = types.ModuleType("hermes_cli")
             pkg.kanban_db = fake
-            with patch.dict(sys.modules, {"hermes_cli": pkg, "hermes_cli.kanban_db": fake}), \
-                    patch.dict(os.environ, {}, clear=True):
+            with (
+                patch.dict(sys.modules, {"hermes_cli": pkg, "hermes_cli.kanban_db": fake}),
+                patch.dict(os.environ, {}, clear=True),
+            ):
                 self.assertEqual(blocked_state(fx.complete({"task_id": "t_x"})), "NO_VERDICT")
                 self.assertEqual(blocked_state(fx.complete({"task_id": "t_missing"})), "WORKSPACE_UNRESOLVED")
                 self.assertEqual(fx.check(task_id="t_x")["state"], "ALLOWED")
@@ -471,14 +506,18 @@ class OperatorConfig(unittest.TestCase):
             with self.assertRaises(gate_mod.GateError) as err:
                 gate_mod.fingerprint(root, [], time.monotonic() - 1)
             self.assertEqual(err.exception.state, State.FINGERPRINT_TIMEOUT)
-            self.assertEqual(gate_mod.fingerprint(root, [], time.monotonic() + 30),
-                             gate_mod.fingerprint(root, [], time.monotonic() + 30))
+            self.assertEqual(
+                gate_mod.fingerprint(root, [], time.monotonic() + 30),
+                gate_mod.fingerprint(root, [], time.monotonic() + 30),
+            )
 
     def test_internal_errors_fail_closed(self):
         with tempfile.TemporaryDirectory() as tmp:
             fx = Fixture(tmp)
-            with patch.object(gate_mod.Gate, "completion", side_effect=RuntimeError("boom")), \
-                    self.assertLogs(gate_mod.logger, "ERROR"):
+            with (
+                patch.object(gate_mod.Gate, "completion", side_effect=RuntimeError("boom")),
+                self.assertLogs(gate_mod.logger, "ERROR"),
+            ):
                 self.assertEqual(blocked_state(fx.complete()), "RUN_ERROR")
 
     def test_messages_separate_operator_and_agent_faults(self):
@@ -499,8 +538,9 @@ class OperatorConfig(unittest.TestCase):
 
         with patch("subprocess.Popen", side_effect=AssertionError("I/O during register")):
             gate_mod.register(Context())
-        self.assertEqual([c[0] for c in calls],
-                         ["register_tool", "register_hook", "register_command", "register_cli_command"])
+        self.assertEqual(
+            [c[0] for c in calls], ["register_tool", "register_hook", "register_command", "register_cli_command"]
+        )
         self.assertEqual(calls[0][2]["name"], gate_mod.TOOL_NAME)
 
 
