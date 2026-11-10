@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 from .constants import SEVERITY_ORDER, TOOL_NAME, count_unresolved, is_resolved_status
 from .scoring import default_fix_for, normalize_findings, require_findings_artifact
+from .states import finding_status
 from .util import now_iso
 
 
@@ -13,7 +14,7 @@ def backlog_from_findings(findings_data: Any) -> dict:
     findings = normalize_findings(findings_data)
     backlog = []
     for f in findings:
-        status = f.get("status", "open")
+        status = finding_status(f)
         item = {
             "finding_id": f["id"],
             "severity": f["severity"],
@@ -93,8 +94,8 @@ def diff_findings(old_data: Any, new_data: Any) -> dict:
     for fid in persisting_ids:
         old_finding = old_findings[fid]
         new_finding = new_findings[fid]
-        old_status = old_finding.get("status", "open")
-        new_status = new_finding.get("status", "open")
+        old_status = finding_status(old_finding)
+        new_status = finding_status(new_finding)
         old_severity = old_finding.get("severity", "P3")
         new_severity = new_finding.get("severity", "P3")
         if old_status != new_status:
