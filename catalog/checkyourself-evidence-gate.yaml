@@ -1,22 +1,24 @@
 name: checkyourself-evidence-gate
 title: Check Yourself Evidence Gate
 repo: https://github.com/KyaniteLabs/checkyourself
-sha: d421e421b38168ca8e4e5e4f06dd72c907ace957
+sha: 0cdefd734eb8fb4f1bb1f1f6239441b8dbf591d8
 subdir: hermes-plugin
-description: "Disclosure: scoring re-executes operator-approved local challenge commands, which can write files/use network; no credentials inherited. Blocks kanban_complete without executed test evidence."
+description: "Blocks kanban_complete until an operator-approved test command passed on the unchanged task workspace. Disclosure: the check runs that project command with your OS user's authority; it is not a sandbox."
 maintainer: KyaniteLabs
 tier: community
 category: tools
 requires_hermes: ">=0.23.0"
-version: "0.1.0"
-docs_url: https://github.com/KyaniteLabs/checkyourself/blob/d421e421b38168ca8e4e5e4f06dd72c907ace957/hermes-plugin/README.md
-platforms: [linux, macos]
+version: "0.2.0"
+docs_url: https://github.com/KyaniteLabs/checkyourself/blob/0cdefd734eb8fb4f1bb1f1f6239441b8dbf591d8/hermes-plugin/README.md
+platforms: [linux]
 known_issues:
-  - "macOS unverified; Windows unsupported."
-  - "Only exact kanban_complete tool dispatch is gated, not prose or external board clients."
-  - "Requires trusted project commands, explicit launch opt-in and hook timeout >=25s; not a sandbox."
+  - "Linux only; macOS and Windows are not supported."
+  - "Only the exact kanban_complete tool is gated, not prose answers, external board clients or kanban_request_review."
+  - "Keep plugins.hook_callback_timeout above 15 seconds (default 30)."
+  - "One private import (hermes_cli.kanban_db, read-only board lookup for orchestrator completions); the validator warns, and a break fails closed."
+  - "Runs trusted project tests with OS-user authority; same-user processes can edit plugin state. Not a sandbox."
 capabilities:
-  provides_tools: [checkyourself_evidence_score]
+  provides_tools: [checkyourself_evidence_check]
   provides_hooks: [pre_tool_call]
   provides_middleware: []
   requires_env: []

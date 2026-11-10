@@ -208,11 +208,15 @@ def _tool_score() -> dict:
     return {
         "name": "score",
         "title": "Score Findings",
-        "description": description(
+        "description": (
             "Compute a deterministic Production Reality Score from inline findings and optional coverage evidence. "
             "Returns score, raw score, confidence, score mode, severity counts, caps "
             "applied, per-category penalties, "
-            "and manual evidence still needed. MCP mode does not write score history."
+            "and manual evidence still needed. MCP mode does not write score history. "
+            "Requires no authentication and has no external rate limits. Without coverage it reads inline "
+            "inputs only. With coverage that cites executed receipts, it re-runs the project's configured "
+            "challenge commands under the scan root to verify them: that is project code, which can read and "
+            "write files and use the network. Pass coverage only for projects whose challenge commands you trust."
         ),
         "inputSchema": object_schema(
             {
@@ -224,13 +228,19 @@ def _tool_score() -> dict:
                 },
                 "claim": {
                     "type": "string",
-                    "description": "Optional accepted completion claim. This records the claim but does not execute"
-                    " an independent challenge runner.",
+                    "description": "Optional accepted completion claim. The claim itself is only recorded; it"
+                    " triggers no command.",
                 },
             },
             ["findings"],
         ),
-        "annotations": read_only_annotations("Score Findings"),
+        "annotations": {
+            "title": "Score Findings",
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": False,
+            "openWorldHint": True,
+        },
         "outputSchema": {"type": "object", "description": "Score result using schema checkyourself-score/1."},
     }
 
