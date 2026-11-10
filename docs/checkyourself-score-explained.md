@@ -57,9 +57,14 @@ keeps the score at 49 no matter how polished everything else looks.
 
 Workflow dispositions do not erase residual risk: `accepted-risk`, `deferred`,
 and `suppressed` findings retain their penalties and caps until the underlying
-exposure is fixed or proven not applicable. The optional `--claim` input records
-what completion means and marks evidence as explicitly bound or unbound; it is
-not an independent challenge runner.
+exposure is fixed or proven not applicable. The scan counts, rendered report,
+`diff`, `backlog`, `next`, and the `scan --ci` gate use that same rule, so one
+artifact cannot produce two verdicts for the same tree. To record a durable
+`not-applicable` disposition, use `checkyourself resolve` (see
+[`docs/cli.md`](cli.md)); it writes to `.checkyourself.yml` and survives later
+scans. The optional `--claim` input records what completion means and marks
+evidence as explicitly bound or unbound; it is not an independent challenge
+runner.
 
 ## How to raise the score honestly
 

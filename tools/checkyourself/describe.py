@@ -11,6 +11,7 @@ from .constants import (
     MCP_PROTOCOL_VERSION,
     PUBLIC_REPO_SCOPE_GUARDRAILS,
     RECEIPT_SCHEMA_ID,
+    RESOLVE_SCHEMA_ID,
     ROOT,
     SCAN_SCHEMA_ID,
     SCHEMA_DIR,
@@ -110,6 +111,12 @@ def describe_capabilities() -> dict:
             "Validate an artifact against a bundled JSON schema subset.",
             {"kind": "schema kind", "file": "json path"},
             "checkyourself-validation/1",
+        ),
+        (
+            "resolve",
+            "Record a durable reviewed not-applicable disposition in project config so later scans do not reopen it.",
+            {"id": "stable finding ID", "reason": "why it does not apply", "files": "optional evidence paths"},
+            RESOLVE_SCHEMA_ID,
         ),
         ("schema", "Print a bundled schema by name.", {"name": "schema name"}, "json-schema"),
         (

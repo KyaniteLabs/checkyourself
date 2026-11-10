@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### 2026-11-10 — Suppression no longer disagrees with score, diff or the CI gate
+
+- One shared `is_resolved_status`/`count_unresolved` definition now drives scan
+  counts, score counts and caps, diff counts, backlog/next selection, report
+  rendering, and the `scan --ci` P0 gate. A `suppressed` finding remains
+  unresolved everywhere; only `fixed` and `not-applicable` close risk. This is
+  a deliberate behavior change: a suppressed P0 now fails `scan --ci` and the
+  GitHub Action until it is fixed or recorded not applicable.
+- New `checkyourself resolve --id ... --reason ...` records a durable
+  `not-applicable` disposition in `.checkyourself.yml`/`.checkyourself.json`;
+  later scans honor it instead of regenerating `status: suppressed`. The
+  rendered report lists resolved dispositions separately and refuses to print
+  a `[P0]` section for a finding it counted as resolved.
+- New cross-verb regression tests over one findings artifact cover scan,
+  score, diff, next, backlog and report rendering, plus `resolve` durability.
+- Reconciled `docs/cli.md`, `docs/checkyourself-score-explained.md` and the
+  diagnostic status list to the implemented contract.
+
 ### 2026-11-01 — npm tarball no longer ships Python bytecode (packaging hygiene; nothing published)
 
 - `package.json` `files` now negates `!**/*.pyc`. Running the test suite
