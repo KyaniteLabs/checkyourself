@@ -1,7 +1,7 @@
 name: checkyourself-evidence-gate
 title: Check Yourself Evidence Gate
 repo: https://github.com/KyaniteLabs/checkyourself
-sha: 0cdefd734eb8fb4f1bb1f1f6239441b8dbf591d8
+sha: 9531280b8857e10530511da7345ac0c9fe4e841e
 subdir: hermes-plugin
 description: "Blocks kanban_complete until an operator-approved test command passed on the unchanged task workspace. Disclosure: the check runs that project command with your OS user's authority; it is not a sandbox."
 maintainer: KyaniteLabs
@@ -9,7 +9,7 @@ tier: community
 category: tools
 requires_hermes: ">=0.23.0"
 version: "0.2.0"
-docs_url: https://github.com/KyaniteLabs/checkyourself/blob/0cdefd734eb8fb4f1bb1f1f6239441b8dbf591d8/hermes-plugin/README.md
+docs_url: https://github.com/KyaniteLabs/checkyourself/blob/9531280b8857e10530511da7345ac0c9fe4e841e/hermes-plugin/README.md
 platforms: [linux]
 known_issues:
   - "Linux only; macOS and Windows are not supported."
