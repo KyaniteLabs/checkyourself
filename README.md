@@ -337,7 +337,7 @@ Apache License, Version 2.0 — free and open source. See [`LICENSE`](LICENSE).
 | **Category** | Local-first completion-evidence review for apps built with AI |
 | **Best for** | founders and engineers shipping AI-generated apps |
 | **Not** | a generic linter or code formatter |
-| **Source** | [GitHub](https://github.com/KyaniteLabs/checkyourself) · [Forgejo](https://forge.invalid/KyaniteLabs/checkyourself) (private, maintainers only) |
+| **Source** | [GitHub](https://github.com/KyaniteLabs/checkyourself) |
 | **Keywords** | AI app completion evidence, verifier-owned challenge, pre-launch review |
 
 ## Who it's for

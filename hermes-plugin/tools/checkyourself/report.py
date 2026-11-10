@@ -6,7 +6,7 @@ from pathlib import Path
 import json
 import re
 from typing import Any, Iterable, List
-from .constants import RESOLVED_STATUSES, SCORE_CATEGORIES
+from .constants import SCORE_CATEGORIES, count_unresolved, is_resolved_status
 from .describe import load_schema
 from .errors import CliError
 from .jsonlite import strict_json_loads, validate_json_schema
@@ -55,14 +55,28 @@ def render_markdown(root: Path, data: dict) -> str:
     add("> These are cheap, high-confidence checks. The full CheckYourself diagnostic, run by your")
     add("> AI assistant, sweeps the entire production surface and explains, ranks, and fixes findings.")
     add("")
-    if data["findings"]:
-        c = data["counts"]
-        add(f"Counts — P0: {c['P0']}, P1: {c['P1']}, P2: {c['P2']}, P3: {c['P3']}")
+    findings = data["findings"]
+    if findings:
+        counts = count_unresolved(findings)
+        add(f"Counts — P0: {counts['P0']}, P1: {counts['P1']}, P2: {counts['P2']}, P3: {counts['P3']}")
         add("")
-        for f in data["findings"]:
+        counted = [f for f in findings if not is_resolved_status(f.get("status"))]
+        resolved = [f for f in findings if is_resolved_status(f.get("status"))]
+        for f in counted:
             add(f"### [{f['severity']}] {f['id']} — {f['finding']}")
             add("")
             add(f["plain_english_risk"])
+            if f.get("status") == "suppressed":
+                suppression = f.get("suppression") if isinstance(f.get("suppression"), dict) else {}
+                reason = str(suppression.get("reason") or "reviewed suppression")
+                reviewer = str(suppression.get("reviewed_by") or "").strip()
+                reviewed = f" (reviewed by {reviewer})" if reviewer else ""
+                add("")
+                add(
+                    f"Status: suppressed — {reason}{reviewed}. This finding still counts as unresolved risk "
+                    "until the exposure is fixed or recorded as not-applicable with "
+                    f'`checkyourself resolve --id {f["id"]} --reason "..."`.'
+                )
             if f.get("recommended_fix"):
                 add("")
                 add(f"Recommended first move: {f['recommended_fix']}")
@@ -70,6 +84,16 @@ def render_markdown(root: Path, data: dict) -> str:
                 add("")
                 for e in f["evidence"]:
                     add(f"- {e}")
+            add("")
+        if resolved:
+            add("### Resolved dispositions (not counted above)")
+            add("")
+            for f in resolved:
+                status = str(f.get("status") or "resolved")
+                disposition = f.get("disposition") if isinstance(f.get("disposition"), dict) else {}
+                reason = str(disposition.get("reason") or "").strip()
+                suffix = f" — {reason}" if reason else ""
+                add(f"- `{f['id']}` — {status}{suffix}")
             add("")
     else:
         add("- No deterministic issues found by this lightweight scan. (This is not a clean bill of health.)")
@@ -144,7 +168,7 @@ def semantic_report_errors(report: dict) -> List[str]:
     """Check report conclusions against their own findings and evidence state."""
     errors: List[str] = []
     findings = normalize_findings({"findings": report.get("findings", [])})
-    unresolved = [finding for finding in findings if finding.get("status") not in RESOLVED_STATUSES]
+    unresolved = [finding for finding in findings if not is_resolved_status(finding.get("status"))]
     score = report.get("score")
     caps = _report_cap_values(report.get("score_caps"))
     if isinstance(score, int) and not isinstance(score, bool):

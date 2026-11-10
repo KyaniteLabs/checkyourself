@@ -54,7 +54,10 @@ Call `initialize`, `tools/list`, then `describe` before `scan`,
 `coverage_emit`, `coverage_check`, `score`, `backlog`, `next`, `diff`,
 `validate`, or `schema`. MCP wraps the same CLI; it does not upload files, use
 an API key, or write score history. Requests outside
-`CHECKYOURSELF_SCAN_ROOT` and unknown arguments are rejected.
+`CHECKYOURSELF_SCAN_ROOT` and unknown arguments are rejected. Every tool except
+`score` only reads. `score` with coverage that cites executed receipts re-runs
+the project's configured challenge commands to verify them, so it is marked
+not read-only; pass coverage only for projects whose commands you trust.
 
 ## Approval boundary
 

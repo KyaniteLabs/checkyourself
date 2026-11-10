@@ -58,6 +58,10 @@ CLI_INVOCATIONS: dict[str, str] = {
     "next": f"{CLI_ENTRY} next --findings findings.json --format json",
     "diff": f"{CLI_ENTRY} diff --old baseline.json --new current.json --format json",
     "validate": f"{CLI_ENTRY} validate --kind scan scan.json --format json",
+    "resolve": (
+        f'{CLI_ENTRY} resolve --id CY-SECRET-001 --reason "<why it does not apply>" '
+        "--reviewed-by <reviewer> --reviewed-at <YYYY-MM-DD> --project . --format json"
+    ),
     "schema": f"{CLI_ENTRY} schema scan",
     "init": f"{CLI_ENTRY} init /abs/project/root",
     "mcp": f"{CLI_ENTRY} mcp  # stdio JSON-RPC: initialize, then tools/list, then tools/call",
