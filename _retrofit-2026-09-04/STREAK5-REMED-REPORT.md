@@ -3,7 +3,7 @@
 Status: DONE_WITH_CONCERNS
 
 Date: 2026-09-05
-Scope: SOL's two post-ASTRA laundering exploits
+Scope: SOL's two post-review laundering exploits
 Git: no commit or push performed
 
 ## Finding status

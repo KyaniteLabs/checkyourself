@@ -49,7 +49,7 @@ The `schemas/` directory contains JSON schema contracts for every structured out
 - The local integrity HMAC detects project-local receipt tampering. It is not proof of independent issuance or operator identity; externally controlled custody is future work.
 - `--claim` records the accepted completion claim and labels evidence as claim-bound or unbound.
 - Report validation labels schema validity separately from semantic verdict consistency and recomputes verdicts.
-- The ASTRA adversarial review found eight findings; the retrofit closed them. See [`_retrofit-2026-09-04/ASTRA-REVIEW.md`](_retrofit-2026-09-04/ASTRA-REVIEW.md) and [`_retrofit-2026-09-04/ASTRA-FIX-REPORT.md`](_retrofit-2026-09-04/ASTRA-FIX-REPORT.md).
+- The adversarial review found eight findings; the retrofit closed them. The review and fix reports are not included in this repository.
 
 ## Current repository facts
 

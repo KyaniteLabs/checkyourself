@@ -94,7 +94,7 @@
   count to 152. Caveat for anyone re-running history: the
   `retrofit-2026-09-05` tag fails its own link-validation test today
   because the tag-point privacy sanitize removed
-  `_retrofit-2026-09-04/ASTRA-REVIEW.md` while three markdown links still
+  the adversarial review report while three markdown links still
   referenced it; `main` is green because those links were since de-linked.
 
 ### 2026-09-19 — npm packaging for the CLI/MCP surface
@@ -107,7 +107,7 @@
   audit workspace remains the repo. Publishing itself is staged, not fired.
 
 The 2026-09-04/05 retrofit brought the local evidence contract through the
-gauntlet, an ASTRA adversarial review, verifier-owned challenges, hardening, and
+gauntlet, an adversarial review, verifier-owned challenges, hardening, and
 two independent final reviews. The documented boundary remains local evidence,
 not production-safety certification or independent external custody.
 
@@ -121,20 +121,20 @@ not production-safety certification or independent external custody.
   license surfaces. See `WAVE8-REPORT.md`,
   `WAVE9-REPORT.md`, and `WAVE10-REPORT.md`.
 
-### 2026-09-04 — ASTRA adversarial review
+### 2026-09-04 — Adversarial review
 
-- ASTRA found eight findings, including fabricated evidence credit, blanket
+- The adversarial review found eight findings, including fabricated evidence credit, blanket
   non-applicability, residual-risk laundering, unknown/finding folding,
   unsupported report verdicts, broad discovery claims, and missing claim
   binding. The findings and executable repros are recorded in
-  `ASTRA-REVIEW.md`.
+  the adversarial review report (not included in this repository).
 
-### 2026-09-04 — ASTRA fixes and claim binding
+### 2026-09-04 — Adversarial review fixes and claim binding
 
-- Closed the eight ASTRA findings with verifier-captured evidence, delegation
+- Closed the eight adversarial review findings with verifier-captured evidence, delegation
   receipts, residual-risk separation, independent unknown tracking, semantic
   report validation, and `--claim` evidence binding. Schema validity is now
-  distinct from recomputed verdict consistency. See `ASTRA-FIX-REPORT.md`.
+  distinct from recomputed verdict consistency. See the fix report (not included in this repository).
 
 ### 2026-09-04 — Verifier-owned challenge runner
 
@@ -164,14 +164,14 @@ not production-safety certification or independent external custody.
 ### 2026-09-05 — Final independent green pair at `cd9cf85`
 
 - Grok and Sol independently reviewed pinned `cd9cf85`; both reported fully
-  green after ASTRA, challenge-runner, hardening, and normalization work. The
+  green after the adversarial review, challenge-runner, hardening, and normalization work. The
   receipts are `FINAL-grok.md` and `FINAL-sol.md`.
 
 ### 2026-09-05 — Documentation and token-density passes
 
 - Public docs updated across Forgejo and GitHub: README, `llms.txt`, and this
   changelog reflect the challenge runner, score-time re-execution, semantic
-  vacuity rejection, local-integrity binding, `--claim` binding, and the ASTRA
+  vacuity rejection, local-integrity binding, `--claim` binding, and the adversarial-review
   arc (see `DOCS2-REPORT.md`).
 - Token-density pass (caveman + ponytail compression; protected-verbatim
   classes untouched), per `DENSITY-PASS-REPORT.md`:
@@ -187,7 +187,7 @@ not production-safety certification or independent external custody.
   Losslessness proven by the full verification chain after compression:
   150 tests + 88 subtests green; `tools/validate_public.py` green.
 - Final landed state: verifier-executed challenges across 20 canonical
-  surfaces and 10 scored categories; ASTRA 8/8 findings closed; final
+  surfaces and 10 scored categories; adversarial review 8/8 findings closed; final
   independent green pair (Grok-4.6 + Codex-SOL) at `cd9cf85`.
 
 ## 1.7.0 — 2026-06-12

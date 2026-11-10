@@ -137,7 +137,7 @@ At score time, stored executed receipts survive only a fresh verifier run that a
 
 The local integrity HMAC is project-local tamper evidence. It is **not** proof of independent issuance, operator identity, or external custody; externally controlled custody is future work. `--claim` records the accepted completion claim and labels evidence rows as claim-bound or unbound. Report validation labels schema validity separately from semantic verdict consistency and recomputes the verdict rather than trusting the supplied score.
 
-The ASTRA adversarial review found eight findings and the retrofit closed them; the ASTRA review and fix reports are not included in this repository.
+The adversarial review found eight findings and the retrofit closed them; the review and fix reports are not included in this repository.
 
 ---
 
