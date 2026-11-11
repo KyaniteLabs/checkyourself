@@ -1247,6 +1247,73 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
             self.assertIn("### Resolved dispositions", report)
             self.assertIn("- `CY-SECRET-001` — not-applicable", report)
 
+    def test_resolve_artifact_validates_against_bundled_schema(self) -> None:
+        token = "sk-" + ("s" * 32)
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "app.py").write_text(f'API_KEY = "{token}"\n', encoding="utf-8")
+
+            resolve_result = self.run_cli(
+                "resolve",
+                "--id",
+                "CY-SECRET-001",
+                "--reason",
+                "synthetic fixture key, not a credential",
+                "--files",
+                "app.py",
+                "--reviewed-by",
+                "unit-test",
+                "--reviewed-at",
+                "2026-11-11",
+                "--project",
+                str(project),
+                "--format",
+                "json",
+            )
+            self.assertEqual(resolve_result.returncode, 0, resolve_result.stderr)
+            captured = json.loads(resolve_result.stdout)
+            self.assertEqual(captured["schema"], cy.RESOLVE_SCHEMA_ID)
+
+            artifact = project / "resolve.json"
+            artifact.write_text(json.dumps(captured), encoding="utf-8")
+
+            schema_result = self.run_cli("schema", "resolve")
+            self.assertEqual(schema_result.returncode, 0, schema_result.stderr)
+            bundled = json.loads(schema_result.stdout)
+            self.assertEqual(bundled["properties"]["schema"]["const"], cy.RESOLVE_SCHEMA_ID)
+            self.assertEqual(bundled["properties"]["status"]["const"], "not-applicable")
+            self.assertEqual(
+                set(bundled["required"]),
+                {
+                    "tool",
+                    "schema",
+                    "config",
+                    "finding_id",
+                    "status",
+                    "reason",
+                    "reviewed_by",
+                    "reviewed_at",
+                    "files",
+                },
+            )
+
+            accepted = self.run_cli("validate", "--kind", "resolve", str(artifact), "--format", "json")
+            self.assertEqual(accepted.returncode, 0, accepted.stdout + accepted.stderr)
+            self.assertTrue(json.loads(accepted.stdout)["valid"])
+
+            malformed = {
+                "missing finding id": {key: value for key, value in captured.items() if key != "finding_id"},
+                "wrong status": {**captured, "status": "fixed"},
+                "files not a list": {**captured, "files": "app.py"},
+            }
+            for label, variant in malformed.items():
+                with self.subTest(variant=label):
+                    path = project / "malformed.json"
+                    path.write_text(json.dumps(variant), encoding="utf-8")
+                    rejected = self.run_cli("validate", "--kind", "resolve", str(path), "--format", "json")
+                    self.assertEqual(rejected.returncode, 1, rejected.stdout + rejected.stderr)
+                    self.assertFalse(json.loads(rejected.stdout)["valid"])
+
     def test_report_recomputes_counts_and_never_prints_resolved_p0_section(self) -> None:
         token = "sk-" + ("v" * 32)
         with tempfile.TemporaryDirectory() as tmp:
