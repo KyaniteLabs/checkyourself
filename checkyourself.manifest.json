@@ -1,7 +1,7 @@
 {
   "name": "checkyourself",
   "display_name": "CheckYourself",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "license": "Apache-2.0",
   "copyright": "Copyright (c) 2026 Simon Gonzalez De Cruz",
   "description": "Reviewable completion-evidence workflow, bounded scoring, guided hardening, and learning-plan system for AI-built apps.",
