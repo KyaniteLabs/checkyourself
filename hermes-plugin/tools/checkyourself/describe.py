@@ -205,6 +205,7 @@ def schema_registry() -> Dict[str, str]:
         "next": "next-batch.schema.json",
         "diff": "diff.schema.json",
         "capabilities": "capabilities.schema.json",
+        "resolve": "resolve.schema.json",
     }
 
 

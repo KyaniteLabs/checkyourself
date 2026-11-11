@@ -434,7 +434,11 @@ Supported schema kinds:
 - `report`;
 - `dashboard`;
 - `dashboard-data`;
-- `learning-plan`.
+- `learning-plan`;
+- `challenges`;
+- `challenge`;
+- `receipt`;
+- `resolve`.
 
 Validation is standard-library-only and executes the supported contract
 keywords: `type`, `enum`, `const`, `oneOf`, `anyOf`, `allOf`, `not`, `required`,

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### 2026-11-11 — `resolve` output has a bundled schema and validation path
+
+- New `schemas/resolve.schema.json`: `schema resolve` prints it and
+  `validate --kind resolve` validates a captured `resolve --format json`
+  artifact, so automation consumers can check the disposition record. The
+  schema requires `tool`, `schema` (`checkyourself-resolve/1`), `config`,
+  `finding_id`, `status` (`not-applicable`), `reason`, `reviewed_by`,
+  `reviewed_at`, and `files`.
+- Test: real `resolve` output validates; a missing `finding_id` or a `status`
+  other than `not-applicable` is rejected.
+
 ### 2026-11-10 — Coverage and finding statuses are named state machines
 
 - New `tools/checkyourself/states.py` names both status lifecycles
