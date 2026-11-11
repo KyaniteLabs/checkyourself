@@ -1,0 +1,38 @@
+name: checkyourself
+version: "0.1.0"
+manifest_version: 2
+description: "Check a project before calling it done: a brief when someone asks if work is ready to ship, plus a read-only scan for launch risks. Runs the bundled CheckYourself CLI; reads files only, no network, no telemetry."
+author: "Kyanite Labs"
+license: Apache-2.0
+homepage: https://github.com/KyaniteLabs/checkyourself/tree/main/plugins/checkyourself-hermes
+tags: [qa, verification, launch-readiness, security, code-review]
+requires_hermes: ">=0.21.6"
+requires_env: []
+provides_tools:
+  - checkyourself_scan
+  - checkyourself_next
+provides_hooks:
+  - pre_llm_call
+hooks:
+  - pre_llm_call
+config_schema:
+  scan_root:
+    type: str
+    default: ""
+    description: "Absolute folder that scans may read. Empty means the session's working folder as Hermes resolves it."
+  inject_on_ship_talk:
+    type: bool
+    default: true
+    description: "Add the CheckYourself brief when a message asks whether work is done or ready to ship."
+  allow_slash_scan_on_gateway:
+    type: bool
+    default: false
+    description: "When false, /checkyourself scan and next are refused on chat platforms, because they read this machine's files."
+  max_files:
+    type: int
+    default: 6000
+    description: "Most files one scan reads (100 to 50000)."
+  timeout_seconds:
+    type: int
+    default: 120
+    description: "Time limit for each CLI call (5 to 900)."
