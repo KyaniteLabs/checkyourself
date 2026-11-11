@@ -8,9 +8,9 @@ files that contain sensitive signals.
 
 | Track | Support status | Meaning |
 |---|---|---|
-| Tagged `1.7.x` release line | Supported | The latest tagged release is `1.7.0`; security fixes target this line. |
+| Tagged `1.7.x` release line | Supported | The latest tagged release is `1.7.1`; security fixes target this line. |
 | Public `main` branch | Supported | The current development branch receives fixes and may change between releases. |
-| Tags older than `1.7.0` | Unsupported | Upgrade to the supported release line before requesting a security fix. |
+| Tags older than `1.7.1` | Unsupported | Upgrade to the supported release line before requesting a security fix. |
 
 ## Reporting A Vulnerability
 

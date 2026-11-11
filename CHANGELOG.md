@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 1.7.1 — 2026-11-11
+
+Release highlights: a suppressed finding is unresolved everywhere (scan counts,
+`scan --ci`, diff, backlog and score agree), and `resolve` records a durable
+not-applicable disposition. Upgrade is recommended for every consumer: the
+1.7.0 `scan --ci` gate could pass an unresolved suppressed P0.
 
 ### 2026-11-11 — `resolve` output has a bundled schema and validation path
 

@@ -1,6 +1,6 @@
 {
   "name": "@puenteworks/checkyourself",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "Reviewable completion-evidence workflow, bounded scoring, guided hardening, and learning-plan system for AI-built apps. Stdlib-only Python CLI plus a stdio MCP server with 11 tools; no network, no telemetry, secret values never printed.",
   "keywords": [
     "checkyourself",
