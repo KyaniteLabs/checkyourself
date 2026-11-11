@@ -66,6 +66,9 @@ jobs:
       - name: Run unit tests
         run: python -m unittest discover -s tests
 
+      - name: Run Hermes plugin tests
+        run: python -m pytest plugins/checkyourself-hermes/tests -q -p no:cacheprovider
+
       - name: Smoke-test agent CLI contracts
         run: |
           python tools/checkyourself.py describe --format json > /tmp/checkyourself-capabilities.json

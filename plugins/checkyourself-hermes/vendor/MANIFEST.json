@@ -1,0 +1,19 @@
+{
+  "source": "KyaniteLabs/checkyourself tools/checkyourself.py and schemas/ at v1.7.0",
+  "files": {
+    "checkyourself/schemas/backlog.schema.json": "8af88c156d4141c74074a1605ff3ab07966dccf9ed12aaeb5bd3eef7908aacc2",
+    "checkyourself/schemas/capabilities.schema.json": "ce67d941c2efee3d7edd30106e904797ed8fbee75bf0994f7a2d15e489a30fc3",
+    "checkyourself/schemas/challenge-result.schema.json": "b9ea4c896a964e45981dcbf5f9547784dac9f6901bc0ee8ed8e3480397e4f317",
+    "checkyourself/schemas/challenges.schema.json": "05730cfd39181302c64a4c61d202d899e83dc1b80a2d6eaf9d5666bcf455e7ea",
+    "checkyourself/schemas/checkyourself-report.schema.json": "34a4c22dd63b82dbe2a50bfb34c75b9c9ab43f8770417e757618ece941f8b40c",
+    "checkyourself/schemas/coverage.schema.json": "7d6412092f09b38d4832f965bb67ea97542cc4dae573e87fe6519f7e04b968f5",
+    "checkyourself/schemas/dashboard-data.schema.json": "51aaf72b90193454f07af6ff5ab795de554549d0803dd951618fc7b64ecb61b8",
+    "checkyourself/schemas/diff.schema.json": "5f9732c1148d19b30396bcc3802247099f74f50ff16eba76a88516166dee1920",
+    "checkyourself/schemas/learning-plan.schema.json": "2412f58beb82872ab8fb0e68285a8f960cb1a773de4e54d6b33739b0200f4562",
+    "checkyourself/schemas/next-batch.schema.json": "b56956d613f4612df44ee82416c39080a69ecfbe7384f17d9be5d6bafb907bf0",
+    "checkyourself/schemas/receipt.schema.json": "26083ad3a541d10209385e69eb7817b36cd4c7eed3fc775d315fca369c1e4a54",
+    "checkyourself/schemas/scan.schema.json": "068d643319d4ed88b24bfd71185b0b575a7168461e5728201bfdc241e714955b",
+    "checkyourself/schemas/score-result.schema.json": "6d0922b73071dd20e486b82e8c5d7da6fa5c95ed2a3de97c76a015c70f04ff7f",
+    "checkyourself/tools/checkyourself.py": "b0945c5f6dbf1b543779203a991cb2e682d42cb57fa88dfa2f4119975fbde009"
+  }
+}
