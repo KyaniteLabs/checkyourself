@@ -21,6 +21,7 @@ from .project import init_project
 from .receipts import issue_receipt
 from .report import render_markdown
 from .scan import scan
+from .states import FindingStatus
 from .scanning import DEFAULT_MAX_FILES
 from .scoring import score_from_inputs
 from .validation import validate_artifact
@@ -225,7 +226,7 @@ def command_diff(args: argparse.Namespace) -> int:
 def command_resolve(args: argparse.Namespace) -> int:
     entry = {
         "id": args.id,
-        "status": "not-applicable",
+        "status": FindingStatus.NOT_APPLICABLE.value,
         "reason": args.reason,
         "files": list(args.files or []),
         "reviewed_by": args.reviewed_by,

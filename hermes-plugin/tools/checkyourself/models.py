@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import List
 
+from .states import FindingStatus
+
 
 class Finding:
     def __init__(
@@ -15,7 +17,7 @@ class Finding:
         evidence: List[str],
         category: str = "C3",
         recommended_fix: str = "",
-        status: str = "open",
+        status: str = FindingStatus.OPEN.value,
     ):
         self.id = fid
         self.severity = severity

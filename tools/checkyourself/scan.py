@@ -16,6 +16,7 @@ from .constants import (
 )
 from .detectors import run_deep_checks, scan_file_contents
 from .models import Finding
+from .states import FindingStatus, finding_status
 from .scanning import (
     DEFAULT_MAX_FILES,
     detect_stack,
@@ -330,7 +331,7 @@ def scan(root: Path, deep: bool = False, max_files: int = DEFAULT_MAX_FILES) -> 
     finding_dicts = apply_suppressions(finding_dicts, config.get("suppress") or [])
 
     counts = count_unresolved(finding_dicts)
-    suppression_count = sum(1 for f in finding_dicts if f.get("status") == "suppressed")
+    suppression_count = sum(1 for f in finding_dicts if finding_status(f) == FindingStatus.SUPPRESSED.value)
 
     return {
         "tool": TOOL_NAME,

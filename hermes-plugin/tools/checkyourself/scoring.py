@@ -22,6 +22,17 @@ from .constants import (
 )
 from .coverage import _coverage_evidence_state, _coverage_validation_errors
 from .errors import CliError
+from .states import (
+    EVIDENCE_GATED_COVERAGE_STATUSES,
+    CoverageStatus,
+    category_needs_evidence,
+    finalize_category_status,
+    finding_status,
+    fold_category_status,
+    gate_surface_status,
+    has_not_applicable_reason,
+    parse_declared_coverage_status,
+)
 from .util import now_iso
 
 
@@ -45,7 +56,7 @@ def normalize_findings(data: Any) -> List[dict]:
         title = str(raw.get("finding") or raw.get("title") or raw.get("fix_summary") or "Untitled finding")
         detail = str(raw.get("plain_english_risk") or raw.get("detail") or raw.get("why_this_order") or "")
         severity = str(raw.get("severity") or "P3")
-        status = str(raw.get("status") or "open")
+        status = finding_status(raw)
         fid = str(raw.get("id") or raw.get("finding_id") or f"F-{i:03d}")
         raw_category = str(raw.get("category") or "")
         # Unknown category labels (e.g. "security") would be counted toward
@@ -188,7 +199,6 @@ def category_coverage(
         }
         for cid in SCORE_CATEGORIES
     }
-    status_rank = {"Finding": 4, "Unknown": 3, "Pass": 2, "NotApplicable": 1}
     present_ids = set()
     used_receipt_ids: set[str] = set()
     unscored_verification_gaps: List[str] = []
@@ -202,7 +212,7 @@ def category_coverage(
         if category not in SCORE_CATEGORIES:
             if sid:
                 present_ids.add(sid)
-            if item.get("status") in {"Pass", "NotApplicable"}:
+            if parse_declared_coverage_status(item.get("status")) in EVIDENCE_GATED_COVERAGE_STATUSES:
                 evidence_state = _coverage_evidence_state(
                     item,
                     evidence_root,
@@ -217,22 +227,30 @@ def category_coverage(
         if sid:
             present_ids.add(sid)
         state = category_state[category]
-        status = item.get("status") or "Unknown"
+        raw_status = item.get("status")
+        declared = parse_declared_coverage_status(raw_status)
         evidence = [str(x) for x in item.get("evidence_reviewed") or []]
         evidence_state = _coverage_evidence_state(
             item,
             evidence_root,
             used_receipt_ids=used_receipt_ids,
         )
-        if status == "Pass" and not evidence:
-            status = "Unknown"
+        # One gate decides the effective status; the branches below only
+        # explain a demotion to Unknown.
+        status = gate_surface_status(
+            raw_status,
+            verified_evidence=bool(evidence_state["verified_evidence"]),
+            verified_delegation=bool(evidence_state["verified_delegation"]),
+            not_applicable_reason=has_not_applicable_reason(item),
+        )
+        if declared is None and raw_status not in (None, ""):
+            state["missing_evidence"].append(f"{sid or 'surface'} has unrecognized status {raw_status!r}")
+        if declared is CoverageStatus.PASS and not evidence:
             state["missing_evidence"].append(f"{sid or 'surface'} marked Pass without evidence_reviewed")
-        if status == "NotApplicable" and not str(item.get("not_applicable_reason") or "").strip():
-            status = "Unknown"
+        if declared is CoverageStatus.NOT_APPLICABLE and not has_not_applicable_reason(item):
             state["missing_evidence"].append(f"{sid or 'surface'} marked NotApplicable without a reason")
-        if evidence_state["status"] == "Unknown" and status in {"Pass", "NotApplicable"}:
+        if declared in EVIDENCE_GATED_COVERAGE_STATUSES and status is CoverageStatus.UNKNOWN:
             verification_gap = True
-            status = "Unknown"
             state["missing_evidence"].extend(f"{sid or 'surface'}: {warning}" for warning in evidence_state["warnings"])
         for failed in evidence_state.get("failed_receipts") or []:
             failed_id = f"CY-CHALLENGE-{sid or category}"
@@ -252,9 +270,9 @@ def category_coverage(
             state["missing_evidence"].append(
                 f"{sid or category}: executed challenge failed ({failed.get('reference') or 'capture'})"
             )
-        if status == "Unknown":
+        if status is CoverageStatus.UNKNOWN:
             state["has_unknown"] = True
-        if status == "Finding":
+        if status is CoverageStatus.FINDING:
             state["coverage_findings"].append(
                 {
                     "id": f"CY-COVERAGE-{sid or category}",
@@ -267,8 +285,7 @@ def category_coverage(
                     "linked_finding_ids": [str(x) for x in item.get("finding_ids") or []],
                 }
             )
-        if state["status"] is None or status_rank.get(status, 3) > status_rank.get(state["status"], 0):
-            state["status"] = status
+        state["status"] = fold_category_status(state["status"], status).value
         state["surfaces"].append(sid or str(item.get("surface") or category))
         state["evidence_reviewed"].extend(evidence)
         state["verified_evidence"].extend(evidence_state["verified_evidence"])
@@ -288,12 +305,11 @@ def category_coverage(
         state = category_state[category]
         state["has_unknown"] = True
         state["missing_evidence"].append(f"surface {sid} missing from coverage artifact")
-        if state["status"] is None or status_rank.get("Unknown", 3) > status_rank.get(state["status"], 0):
-            state["status"] = "Unknown"
+        state["status"] = fold_category_status(state["status"], CoverageStatus.UNKNOWN).value
 
     for state in category_state.values():
         if state["status"] is None:
-            state["status"] = "MissingCoverage"
+            state["status"] = finalize_category_status(None).value
             state["has_unknown"] = True
             state["missing_evidence"].append("no coverage entries supplied for this category")
         state["evidence_reviewed"] = sorted(set(state["evidence_reviewed"]))
@@ -310,7 +326,7 @@ def missing_manual_evidence(coverage_by_category: Dict[str, dict]) -> List[dict]
     needed: List[dict] = []
     for cid, (name, _weight) in SCORE_CATEGORIES.items():
         state = coverage_by_category[cid]
-        if state.get("has_unknown") or state["status"] == "MissingCoverage":
+        if category_needs_evidence(state):
             needed.append(
                 {
                     "category": cid,
@@ -521,9 +537,9 @@ def score_from_inputs(
     # Evidence caps apply in every score mode: an estimate without coverage
     # evidence must never report a launch-ready number.
     for cid, state in coverage_by_category.items():
-        if (state.get("has_unknown") or state["status"] == "MissingCoverage") and cid in CRITICAL_CATEGORIES:
+        if category_needs_evidence(state) and cid in CRITICAL_CATEGORIES:
             critical_gap = True
-        if (state.get("has_unknown") or state["status"] == "MissingCoverage") and cid in HIGH_SCORE_GATE_CATEGORIES:
+        if category_needs_evidence(state) and cid in HIGH_SCORE_GATE_CATEGORIES:
             high_score_gap = True
     if critical_gap:
         cap_value = min(cap_value, 84)
@@ -539,10 +555,7 @@ def score_from_inputs(
         )
 
     score = min(raw_score, cap_value)
-    any_gap = any(
-        state.get("has_unknown") or state["status"] in {"Unknown", "MissingCoverage"}
-        for state in coverage_by_category.values()
-    )
+    any_gap = any(category_needs_evidence(state) for state in coverage_by_category.values())
     if score_mode != "coverage-backed":
         confidence = "low"
     elif coverage_complete and not critical_gap and not any_gap:

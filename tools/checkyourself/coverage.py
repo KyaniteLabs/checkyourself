@@ -7,6 +7,7 @@ import re
 from typing import Any, List, Optional, Tuple
 from .constants import COVERAGE_SCHEMA_ID, COVERAGE_SURFACES, TOOL_NAME, VALID_COVERAGE_STATUSES
 from .receipts import _evidence_root, _resolve_evidence_reference, _verify_receipts
+from .states import CoverageStatus, gate_surface_status, has_not_applicable_reason
 from .util import now_iso
 
 
@@ -62,7 +63,7 @@ def _coverage_evidence_state(
     surface_id = _coverage_surface_id(item)
     claim_value = item.get("claim") if isinstance(item.get("claim"), str) else ""
     claim = claim_value.strip() or None
-    if status == "Pass":
+    if status == CoverageStatus.PASS.value:
         if not item.get("evidence_reviewed"):
             result["warnings"].append("Pass requires reviewer assertions in evidence_reviewed")
         verified, errors = _verify_receipts(
@@ -85,10 +86,8 @@ def _coverage_evidence_state(
         result["warnings"].extend(f"evidence receipt: {error}" for error in errors)
         if verified and not result["verified_evidence"]:
             result["warnings"].append("verifier receipt is not bound to an evidence_reviewed artifact reference")
-        if not result["verified_evidence"]:
-            result["status"] = "Unknown"
-    elif status == "NotApplicable":
-        if not str(item.get("not_applicable_reason") or "").strip():
+    elif status == CoverageStatus.NOT_APPLICABLE.value:
+        if not has_not_applicable_reason(item):
             result["warnings"].append("NotApplicable requires a concrete reason")
         verified, errors = _verify_receipts(
             item.get("delegation_receipts"),
@@ -100,8 +99,13 @@ def _coverage_evidence_state(
         )
         result["verified_delegation"] = verified
         result["warnings"].extend(f"delegation receipt: {error}" for error in errors)
-        if not verified:
-            result["status"] = "Unknown"
+    if status in {CoverageStatus.PASS.value, CoverageStatus.NOT_APPLICABLE.value}:
+        result["status"] = gate_surface_status(
+            status,
+            verified_evidence=bool(result["verified_evidence"]),
+            verified_delegation=bool(result["verified_delegation"]),
+            not_applicable_reason=has_not_applicable_reason(item),
+        ).value
     return result
 
 
@@ -254,7 +258,7 @@ def coverage_check(data: Any, evidence_root: Optional[Path] = None) -> dict:
             warnings.append(f"{sid} {warning}")
         if status == "Unknown" and not missing:
             warnings.append(f"{sid} is Unknown but missing_evidence is empty")
-        if status == "NotApplicable" and not item.get("not_applicable_reason"):
+        if status == "NotApplicable" and not has_not_applicable_reason(item):
             errors.append(f"{sid} is NotApplicable but has no not_applicable_reason")
         if status in {"Pass", "NotApplicable"} and evidence_state["status"] == "Unknown":
             verification_gap = True

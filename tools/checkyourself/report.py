@@ -11,6 +11,7 @@ from .describe import load_schema
 from .errors import CliError
 from .jsonlite import strict_json_loads, validate_json_schema
 from .scoring import normalize_findings
+from .states import FindingStatus, finding_status
 
 
 def render_markdown(root: Path, data: dict) -> str:
@@ -66,7 +67,7 @@ def render_markdown(root: Path, data: dict) -> str:
             add(f"### [{f['severity']}] {f['id']} — {f['finding']}")
             add("")
             add(f["plain_english_risk"])
-            if f.get("status") == "suppressed":
+            if finding_status(f) == FindingStatus.SUPPRESSED.value:
                 suppression = f.get("suppression") if isinstance(f.get("suppression"), dict) else {}
                 reason = str(suppression.get("reason") or "reviewed suppression")
                 reviewer = str(suppression.get("reviewed_by") or "").strip()

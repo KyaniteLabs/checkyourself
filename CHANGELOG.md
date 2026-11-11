@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### 2026-11-10 — Coverage and finding statuses are named state machines
+
+- New `tools/checkyourself/states.py` names both status lifecycles
+  (`CoverageStatus`, `FindingStatus`) with a transition diagram, one evidence
+  gate (`gate_surface_status`), one category fold, one "needs evidence"
+  predicate, and named finding moves (`resolve`, `suppress`) that refuse
+  illegal transitions. Every persisted string is unchanged.
+- Fixed: `coverage --check` accepted a whitespace-only `not_applicable_reason`
+  while `score` rejected it, so the two disagreed about `complete`.
+- Fixed: scan-derived scores listed C3/C5/C6 as `Unknown` but left them out of
+  `manual_evidence_needed`; the copied gap predicates now share one function.
+- Fixed: `category_coverage` gave an unrecognized status (e.g. `"Passed"`)
+  category credit instead of reading it as `Unknown`.
+- Fixed: a `resolve:` entry re-labeled a human `fixed` finding as
+  `not-applicable`; resolved findings are now terminal.
+
 ### 2026-11-10 — Suppression no longer disagrees with score, diff or the CI gate
 
 - One shared `is_resolved_status`/`count_unresolved` definition now drives scan

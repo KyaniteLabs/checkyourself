@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
-from typing import Any, Dict, Iterable
+from typing import Dict, Iterable
+
+from .states import (
+    DECLARABLE_COVERAGE_STATUSES,
+    RESOLVED_STATUSES as _RESOLVED_STATUSES,
+    WORKFLOW_DISPOSITIONS as _WORKFLOW_DISPOSITIONS,
+    is_resolved_status,
+)
 
 
 TOOL_NAME = "checkyourself-cli"
@@ -332,21 +339,10 @@ SEVERITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
 
 # Workflow disposition and residual risk are deliberately separate.  A ticket
 # can be deferred or accepted while the underlying exposure remains open.
-WORKFLOW_DISPOSITIONS = {"fixed", "accepted-risk", "deferred", "not-applicable", "suppressed"}
+# The finding lifecycle itself is named in ``states.py``.
+WORKFLOW_DISPOSITIONS = set(_WORKFLOW_DISPOSITIONS)
 
-RESOLVED_STATUSES = {"fixed", "not-applicable"}
-
-
-def is_resolved_status(status: Any) -> bool:
-    """Return True only for dispositions that close the underlying risk.
-
-    This is the single definition of "no longer counts" used by scan counts,
-    scoring, diff, backlog, next, report rendering, and the CI gate.  A
-    workflow label such as ``suppressed``, ``accepted-risk`` or ``deferred``
-    keeps the finding unresolved until the exposure is fixed or proven not
-    applicable.
-    """
-    return str(status or "open") in RESOLVED_STATUSES
+RESOLVED_STATUSES = set(_RESOLVED_STATUSES)
 
 
 def count_unresolved(findings: Iterable[dict]) -> Dict[str, int]:
@@ -496,7 +492,7 @@ CRITICAL_CATEGORIES = {"C1", "C2", "C3"}
 
 HIGH_SCORE_GATE_CATEGORIES = {"C1", "C2", "C3", "C5", "C6", "C7"}
 
-VALID_COVERAGE_STATUSES = {"Pass", "Finding", "Unknown", "NotApplicable"}
+VALID_COVERAGE_STATUSES = set(DECLARABLE_COVERAGE_STATUSES)
 
 RECEIPT_BINDING_FIELDS = (
     "reference",

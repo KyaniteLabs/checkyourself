@@ -12,11 +12,11 @@ from .constants import (
     COVERAGE_SURFACES,
     DEFAULT_VERIFICATION_ARTIFACT_REGISTRY,
     RESOLVE_SCHEMA_ID,
-    is_resolved_status,
 )
 from .jsonlite import strict_json_loads
 from .errors import CliError
 from .output import safe_write_text
+from .states import FindingStatus, can_transition_finding, transition_finding
 from .util import parse_scalar
 
 
@@ -183,8 +183,8 @@ def validate_resolutions_config(data: Any, name: str) -> dict:
         finding_id = str(resolution.get("id") or "").strip()
         if not finding_id:
             return {"resolve": [], "config_error": f"{name} resolution {index} needs a finding id"}
-        status = str(resolution.get("status") or "not-applicable").strip()
-        if status != "not-applicable":
+        status = str(resolution.get("status") or FindingStatus.NOT_APPLICABLE.value).strip()
+        if status != FindingStatus.NOT_APPLICABLE.value:
             return {
                 "resolve": [],
                 "config_error": (
@@ -426,14 +426,17 @@ def apply_resolutions(findings: List[dict], resolutions: List[dict]) -> List[dic
 
     Resolutions are applied before suppressions so a reviewed
     ``not-applicable`` disposition wins over a broader suppression entry.
+    Already-resolved findings are terminal and keep their disposition.
     """
     for finding in findings:
+        if not can_transition_finding(finding, "resolve"):
+            continue
         for resolution in resolutions:
             if not resolution_matches(finding, resolution):
                 continue
-            finding["status"] = "not-applicable"
+            transition_finding(finding, "resolve")
             finding["disposition"] = {
-                "status": "not-applicable",
+                "status": FindingStatus.NOT_APPLICABLE.value,
                 "reason": str(resolution.get("reason") or ""),
                 "reviewed_by": str(resolution.get("reviewed_by") or ""),
                 "reviewed_at": str(resolution.get("reviewed_at") or ""),
@@ -553,7 +556,7 @@ def write_resolution(root: Path, entry: dict) -> dict:
 
 def apply_suppressions(findings: List[dict], suppressions: List[dict]) -> List[dict]:
     for finding in findings:
-        if is_resolved_status(finding.get("status")):
+        if not can_transition_finding(finding, "suppress"):
             continue
         for suppression in suppressions:
             sid = str(suppression.get("id") or "").strip()
@@ -589,7 +592,7 @@ def apply_suppressions(findings: List[dict], suppressions: List[dict]) -> List[d
             elif not suppression_matches(finding, suppression):
                 continue
             if not files or not finding.get("evidence"):
-                finding["status"] = "suppressed"
+                transition_finding(finding, "suppress")
                 finding["suppression"] = {
                     "reason": str(suppression.get("reason") or "reviewed suppression"),
                     "reviewed_by": str(suppression.get("reviewed_by") or ""),
