@@ -1,6 +1,6 @@
 # CheckYourself for Hermes
 
-An agent that says "done" is making a claim, and the claim is often wrong: the tests never ran, the key is still in the repo, or there is no CI at all. This plugin makes Hermes check before it agrees. It re-derives each claim from the work and scans the project for launch risks. It wraps the CheckYourself v1.7.0 command-line tool.
+An agent that says "done" is making a claim, and the claim is often wrong: the tests never ran, the key is still in the repo, or there is no CI at all. This plugin makes Hermes check before it agrees. It re-derives each claim from the work and scans the project for launch risks. It wraps the CheckYourself v1.7.1 command-line tool.
 
 ## What it adds
 

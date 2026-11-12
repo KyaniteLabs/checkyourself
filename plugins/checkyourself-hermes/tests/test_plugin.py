@@ -11,7 +11,7 @@ import pytest
 
 from conftest import PLUGIN_DIR, FakeCtx
 
-REPO_CLI = PLUGIN_DIR.parents[1] / "tools" / "checkyourself.py"
+REPO_ROOT = PLUGIN_DIR.parents[1]
 
 
 def _tool(plugin, name, args):
@@ -105,24 +105,31 @@ def test_unexpected_error_does_not_leak_detail(plugin, monkeypatch):
 def test_vendor_manifest_is_complete_and_current(plugin):
     manifest = json.loads(plugin.VENDOR_MANIFEST.read_text(encoding="utf-8"))
     base = plugin.VENDOR_MANIFEST.parent
-    on_disk = {str(p.relative_to(base)) for p in base.rglob("*") if p.is_file() and p.name != "MANIFEST.json"}
+    on_disk = {p.relative_to(base).as_posix() for p in base.rglob("*")
+               if p.is_file() and p.name != "MANIFEST.json" and "__pycache__" not in p.parts}
     assert set(manifest["files"]) == on_disk
     assert plugin._vendor_problem() is None
 
 
-def _repo_cli_is_single_file() -> bool:
-    """The bundle is the single-file CLI. A repo whose tools/checkyourself.py is a
-    thin facade over a package has no single file to compare against."""
-    try:
-        return len(REPO_CLI.read_text(encoding="utf-8").splitlines()) > 1000
-    except OSError:
-        return False
+def _repo_engine_files() -> set:
+    """Every engine file the plugin must bundle: the launcher, its package and the schemas."""
+    names = {"tools/checkyourself.py"}
+    names |= {p.relative_to(REPO_ROOT).as_posix() for p in (REPO_ROOT / "tools" / "checkyourself").glob("*.py")}
+    names |= {p.relative_to(REPO_ROOT).as_posix() for p in (REPO_ROOT / "schemas").glob("*.json")}
+    return names
 
 
-@pytest.mark.skipif(not _repo_cli_is_single_file(), reason="needs the single-file CLI in this repository")
-def test_vendored_cli_matches_repo_cli(plugin):
-    """A release must ship the CLI it names; re-vendor when tools/ changes."""
-    assert plugin.CLI_PATH.read_bytes() == REPO_CLI.read_bytes()
+def test_vendored_engine_matches_repo(plugin):
+    """A release must ship the engine it names; re-vendor when tools/ or schemas/ change.
+    Never skips: a split or renamed engine must fail here, not pass silently."""
+    base = plugin.VENDOR_MANIFEST.parent / "checkyourself"
+    vendored = {p.relative_to(base).as_posix() for p in base.rglob("*") if p.is_file() and "__pycache__" not in p.parts}
+    assert vendored == _repo_engine_files()
+    for rel in sorted(vendored):
+        assert (base / rel).read_bytes() == (REPO_ROOT / rel).read_bytes(), rel
+    repo_version = json.loads((REPO_ROOT / "package.json").read_text(encoding="utf-8"))["version"]
+    assert plugin.CLI_VERSION == repo_version
+    assert f"v{repo_version}" in plugin.VENDOR_MANIFEST.read_text(encoding="utf-8")
 
 
 def test_changed_vendor_file_blocks_the_cli(plugin, tmp_path, monkeypatch):
