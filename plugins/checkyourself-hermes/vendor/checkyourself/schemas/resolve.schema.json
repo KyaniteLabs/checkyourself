@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CheckYourself Resolve Result",
+  "type": "object",
+  "required": [
+    "tool",
+    "schema",
+    "config",
+    "finding_id",
+    "status",
+    "reason",
+    "reviewed_by",
+    "reviewed_at",
+    "files"
+  ],
+  "properties": {
+    "tool": { "type": "string" },
+    "schema": { "type": "string", "const": "checkyourself-resolve/1" },
+    "config": { "type": "string", "minLength": 1 },
+    "finding_id": { "type": "string", "minLength": 1 },
+    "status": { "type": "string", "const": "not-applicable" },
+    "reason": { "type": "string", "minLength": 1 },
+    "reviewed_by": { "type": "string" },
+    "reviewed_at": { "type": "string" },
+    "files": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}
