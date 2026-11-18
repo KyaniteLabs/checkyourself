@@ -1766,6 +1766,24 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         self.assertEqual(data["tests"], [])
         self.assertIn("CY-TEST-001", {finding["id"] for finding in data["findings"]})
 
+    def test_mjs_cjs_and_js_test_files_are_detected(self) -> None:
+        # CY-TEST-001 used to fire for projects whose only tests were .mjs/.cjs
+        # because find_tests had no ESM Node extension in its allowlist.
+        for name, extension in (("foo.test.mjs", ".mjs"), ("foo.test.cjs", ".cjs"), ("foo.test.js", ".js")):
+            with tempfile.TemporaryDirectory() as tmp:
+                project = Path(tmp)
+                (project / "app.js").write_text("console.log('app')\n", encoding="utf-8")
+                (project / "tests").mkdir()
+                (project / "tests" / name).write_text(
+                    "// a test file exercises the assertion library\n", encoding="utf-8"
+                )
+                result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["tests"], [f"tests/{name}"], extension)
+            self.assertNotIn("CY-TEST-001", {finding["id"] for finding in data["findings"]}, extension)
+
     def test_scan_does_not_read_symlinked_files_out_of_tree(self) -> None:
         # Built by concatenation so the committed source never contains a
         # credential-shaped literal (keeps gitleaks clean).

@@ -22,7 +22,7 @@
     "checkyourself/tools/checkyourself/receipts.py": "1ac827e340355e3102082de3d60a15e613ba394ec0943dc5d02b871a5bf64c18",
     "checkyourself/tools/checkyourself/report.py": "7e097abd28d197a27fc99db80d45ac1f5924b02e78db2318c5b24dd45b0674ad",
     "checkyourself/tools/checkyourself/scan.py": "ed7e0510acb0ed1b9a8d1bf7a8a9f27aeee156ae1f38c100432a0ff423266a79",
-    "checkyourself/tools/checkyourself/scanning.py": "d9e5778b012d5e3a042ae99447360be7ffb1dd1b7f80f4b668d64ff34f74de7e",
+    "checkyourself/tools/checkyourself/scanning.py": "17766de3094c11a099ae8bc44641fcc7e1311d187fbdf275bad0c8070ee0c6b4",
     "checkyourself/tools/checkyourself/scoring.py": "63dc2612c9c3e905dc552ddf003b90284b0d4a299fec6c96f8825287f55874f3",
     "checkyourself/tools/checkyourself/states.py": "173e5bf749b6663a5bc504278a2e8dfc9b82f172ef77d863c38dfa5367fac090",
     "checkyourself/tools/checkyourself/util.py": "e571cdc76b4f0a5419d44a38745b9907470850dadee1c88e38c4ed1ff5dd5879",
