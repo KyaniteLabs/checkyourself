@@ -234,7 +234,7 @@ def is_placeholder_secret_value(value: str) -> bool:
 
 def find_tests(root: Path, files: List[Path]) -> List[str]:
     test_dirs = {"test", "tests", "spec", "specs", "__tests__", "playwright", "cypress", "e2e"}
-    test_extensions = {".js", ".jsx", ".ts", ".tsx", ".py", ".go", ".java", ".rb", ".rs"}
+    test_extensions = {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".py", ".go", ".java", ".rb", ".rs"}
     tests: List[str] = []
     for p in files:
         rp = rel(root, p)
