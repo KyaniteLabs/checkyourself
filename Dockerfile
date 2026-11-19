@@ -1,6 +1,6 @@
 # Minimal image so MCP directories (e.g. Glama) can start the stdio MCP server
 # and run introspection. CheckYourself's CLI is stdlib-only; no extra deps.
-FROM python:3.14-slim
+FROM python:3.15-slim
 WORKDIR /app
 COPY tools/ tools/
 COPY schemas/ schemas/
