@@ -19,6 +19,7 @@ from .models import Finding
 from .states import FindingStatus, finding_status
 from .scanning import (
     DEFAULT_MAX_FILES,
+    declared_dependency_count,
     detect_stack,
     find_ci,
     find_tests,
@@ -316,7 +317,14 @@ def scan(root: Path, deep: bool = False, max_files: int = DEFAULT_MAX_FILES) -> 
     gitignore = gitignore_entries(root)
     deep_results = run_deep_checks(root, ci, gitignore) if deep else []
     config = load_checkyourself_config(root)
-    missing_lockfile = (root / "package.json").exists() and not any((root / name).exists() for name in LOCKFILE_NAMES)
+    # A manifest with no declared dependencies installs nothing, so a missing
+    # lockfile cannot make its installs resolve varying versions. Only a
+    # project that actually declares dependencies needs a pinned lockfile.
+    missing_lockfile = (
+        (root / "package.json").exists()
+        and not any((root / name).exists() for name in LOCKFILE_NAMES)
+        and declared_dependency_count(root) > 0
+    )
     findings = build_findings(
         content,
         tests,

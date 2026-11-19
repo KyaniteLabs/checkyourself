@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### 2026-11-18 — a dependency-free Node project no longer reports a missing lockfile
+
+- Fixed: `CY-SUPPLY-002` fired for any `package.json` without a lockfile, even
+  when the manifest declared no dependencies. It now fires only when the
+  manifest declares at least one dependency in `dependencies`,
+  `devDependencies`, `peerDependencies` or `optionalDependencies`.
+- The rule reads the declared dependency sections, not the known-library
+  hints, so a project depending on a package outside the hint list still gets
+  the finding.
+- Test: a manifest with empty `dependencies` and `devDependencies` scans
+  without `CY-SUPPLY-002`; a manifest that declares a dependency and has no
+  lockfile still reports it.
+
 ## 1.7.1 — 2026-11-11
 
 Release highlights: a suppressed finding is unresolved everywhere (scan counts,

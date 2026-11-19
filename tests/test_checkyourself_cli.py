@@ -1883,11 +1883,36 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
     def test_missing_lockfile_is_flagged(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
-            (project / "package.json").write_text('{"name": "x"}\n', encoding="utf-8")
+            # "left-pad" is outside the known-library hints, so this only
+            # holds if the rule reads the declared dependency sections.
+            (project / "package.json").write_text(
+                '{"name": "x", "dependencies": {"left-pad": "1.3.0"}}\n', encoding="utf-8"
+            )
             result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
         self.assertEqual(result.returncode, 0, result.stderr)
         ids = {f["id"] for f in json.loads(result.stdout)["findings"]}
         self.assertIn("CY-SUPPLY-002", ids)
+
+    def test_dependency_free_package_json_does_not_flag_missing_lockfile(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "package.json").write_text(
+                json.dumps(
+                    {
+                        "name": "audit-dependency-free-cli",
+                        "version": "1.0.0",
+                        "private": True,
+                        "scripts": {"start": "node index.js"},
+                        "dependencies": {},
+                        "devDependencies": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        ids = {f["id"] for f in json.loads(result.stdout)["findings"]}
+        self.assertNotIn("CY-SUPPLY-002", ids)
 
     def test_non_object_package_json_is_reported_without_traceback(self) -> None:
         for label, package_json in {
