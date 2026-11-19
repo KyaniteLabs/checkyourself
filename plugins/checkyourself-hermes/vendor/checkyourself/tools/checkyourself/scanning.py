@@ -138,6 +138,35 @@ def detect_stack(root: Path) -> Tuple[List[str], Dict[str, str], Dict[str, List[
     return sorted(signals), scripts, deps_found
 
 
+def declared_dependency_count(root: Path) -> int:
+    """How many dependencies the manifest declares, across npm's install sections.
+
+    dependencies, devDependencies, peerDependencies and optionalDependencies are
+    all resolved by an install, so any of them makes a committed lockfile
+    meaningful. A manifest that declares none installs nothing, so a missing
+    lockfile cannot resolve varying versions.
+
+    This is deliberately not the known-library hints that detect_stack reports:
+    those only name a fixed allowlist, so a project depending on a package
+    outside it would look dependency-free while its installs still drift.
+    """
+    package_json = root / "package.json"
+    if not package_json.exists():
+        return 0
+    try:
+        data = json.loads(read_text(package_json))
+    except (ValueError, UnicodeError):
+        return 0
+    if not isinstance(data, dict):
+        return 0
+    total = 0
+    for section in ("dependencies", "devDependencies", "peerDependencies", "optionalDependencies"):
+        entries = data.get(section)
+        if isinstance(entries, dict):
+            total += len(entries)
+    return total
+
+
 def parse_gitignore_patterns(text: str) -> List[str]:
     patterns: List[str] = []
     for raw_line in text.splitlines():

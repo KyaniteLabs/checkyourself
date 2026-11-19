@@ -125,7 +125,7 @@ for conditions that the CLI does not detect.
 | `CY-PAY-001` | P1 | Payments dependency present but no tests. |
 | `CY-AI-001` | P2 | LLM dependency present but no tests. |
 | `CY-SUPPLY-001` | P2 | Mutable GitHub Action references (deep). |
-| `CY-SUPPLY-002` | P2 | `package.json` with no committed lockfile. |
+| `CY-SUPPLY-002` | P2 | `package.json` that declares dependencies, with no committed lockfile. |
 | `CY-SUPPLY-003` | P3 | No dependency update automation (deep). |
 | `CY-SUPPLY-004` | P3 | CI uses `npm install` instead of `npm ci` (deep). |
 
