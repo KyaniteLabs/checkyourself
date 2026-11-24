@@ -701,10 +701,12 @@ def _messaging(platform: Any) -> bool:
 
 
 def _redact(text: str) -> str:
-    """Absolute paths of this machine shortened to their last part, for chat replies."""
-    for raw in {str(Path.home()), os.environ.get("HERMES_HOME") or "", _safe_root_str()}:
+    """Shorten machine paths for chat, replacing the most specific path first."""
+    home = str(Path.home())
+    paths = {home, os.environ.get("HERMES_HOME") or "", _safe_root_str()}
+    for raw in sorted(paths, key=len, reverse=True):
         if raw and len(raw) > 1:
-            text = text.replace(raw, "~" if raw == str(Path.home()) else f"…/{Path(raw).name}")
+            text = text.replace(raw, "~" if raw == home else f"…/{Path(raw).name}")
     return re.sub(r"(?<![\w~.:/])/(?:[\w.-]+/)+([\w.-]+)", r"…/\1", text)
 
 
