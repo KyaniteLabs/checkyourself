@@ -1,5 +1,7 @@
 # CheckYourself
 
+<p align="center"><img src="branding/checkyourself-512.png" alt="CheckYourself icon: a smoky quartz core inside a black tourmaline return frame" width="128"></p>
+
 For AI app builders, CheckYourself runs local challenges to test claimed work, record evidence, and expose risks. Score is not a guarantee.
 
 > **Check yourself before you wreck yourself — for the apps you ship.** Before you launch it, CheckYourself.

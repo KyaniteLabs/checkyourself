@@ -339,8 +339,26 @@ def _config_with_registry(data: Any, name: str) -> dict:
 def load_checkyourself_config(root: Path) -> dict:
     for name in CONFIG_NAMES:
         path = root / name
-        if not path.exists():
+        if not path.exists() and not path.is_symlink():
             continue
+        try:
+            path.resolve(strict=True).relative_to(root.resolve(strict=True))
+            confined = True
+        except (OSError, RuntimeError, ValueError):
+            confined = False
+        try:
+            unsafe_config = path.is_symlink() or not confined or not path.is_file() or path.stat().st_size > 1_000_000
+        except OSError:
+            unsafe_config = True
+        if unsafe_config:
+            reason = f"{name} was not read: it must be a regular file under 1 MB inside the project, not a symlink"
+            return {
+                "suppress": [],
+                "resolve": [],
+                "verification_artifact_registry": _copy_verification_registry(DEFAULT_VERIFICATION_ARTIFACT_REGISTRY),
+                "verification_registry_error": reason,
+                "config_error": reason,
+            }
         if path.suffix == ".json":
             try:
                 data = strict_json_loads(path.read_text(encoding="utf-8"))

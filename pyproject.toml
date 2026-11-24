@@ -1,0 +1,7 @@
+[tool.mutmut]
+source_paths = ["tools"]
+only_mutate = ["*validate_public.py"]
+pytest_add_cli_args_test_selection = [
+    "tests/test_validate_public_behavior.py",
+    # Keep the mutmut child process in-process; the subprocess CLI suite can deadlock under fork.
+]

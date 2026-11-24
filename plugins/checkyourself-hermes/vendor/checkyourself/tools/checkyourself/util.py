@@ -26,9 +26,23 @@ def read_text(path: Path, max_chars: int = 200_000) -> str:
         # source-looking file at credentials outside the scanned tree.
         if path.is_symlink():
             return ""
-        return path.read_text(encoding="utf-8", errors="ignore")[:max_chars]
+        with path.open("r", encoding="utf-8", errors="ignore") as handle:
+            return handle.read(max_chars)
     except OSError:
         return ""
+
+
+def read_confined(root: Path, path: Path, max_chars: int = 200_000) -> str:
+    """Read text only from a regular path whose resolved location is in root.
+
+    A symlinked parent directory (not just a symlinked file) could otherwise
+    point a project-relative path at files outside the scanned tree.
+    """
+    try:
+        path.resolve(strict=True).relative_to(root.resolve(strict=True))
+    except (OSError, RuntimeError, ValueError):
+        return ""
+    return read_text(path, max_chars)
 
 
 def read_text_with_status(path: Path, max_chars: int) -> Tuple[str, bool, bool]:
@@ -71,9 +85,10 @@ def secret_evidence(
     confidence: str,
     line: str,
 ) -> str:
-    return (
-        f'{rp}:{line_no} ({tag}; matched: {match_type}; confidence: {confidence}; context: "{compact_context(line)}")'
-    )
+    # No line context: redaction catches the matched secret, but the same line
+    # can hold a second credential in a shape the patterns don't know.
+    del line
+    return f"{rp}:{line_no} ({tag}; matched: {match_type}; confidence: {confidence})"
 
 
 def parse_scalar(value: str) -> Any:

@@ -24,7 +24,7 @@ from .constants import (
 )
 from .models import Finding
 from .scanning import classify_env_file, gitignore_ignores_path, is_placeholder_secret_value
-from .util import compact_context, looks_binary, read_text, read_text_with_status, rel, secret_evidence
+from .util import compact_context, looks_binary, read_confined, read_text_with_status, rel, secret_evidence
 
 
 def context_path_reason(path: str) -> Optional[str]:
@@ -117,6 +117,9 @@ def scan_file_contents(root: Path, files: List[Path], scan_limits: Optional[dict
         elif kind == "example":
             results["env_files"].append(rp)
 
+        if kind == "real":
+            # Real env files are reported by name only; their values are live secrets.
+            continue
         is_known_config = name in EXTENSIONLESS_CONFIG_NAMES
         if suffix not in TEXT_EXTENSIONS and not name.startswith(".env") and kind is None and not is_known_config:
             continue
@@ -227,7 +230,7 @@ def run_deep_checks(root: Path, ci: List[str], gitignore: List[str]) -> List[Fin
         if not workflow.startswith(".github/workflows/"):
             continue
         path = root / workflow
-        for line_no, line in enumerate(read_text(path).splitlines(), start=1):
+        for line_no, line in enumerate(read_confined(root, path).splitlines(), start=1):
             match = action_re.search(line)
             if match:
                 action, ref = match.groups()

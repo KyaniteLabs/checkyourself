@@ -1015,6 +1015,47 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         self.assertNotIn("CY-ENV-001", ids)
         self.assertNotIn("CY-ENV-003", ids)
 
+    def test_real_env_file_is_reported_by_name_without_reading_values(self) -> None:
+        key = "AKIA" + "QQQQQQQQQQQQQQQQ"
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / ".env").write_text(f"AWS_KEY={key}\nDEBUG=true\n", encoding="utf-8")
+            result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        ids = {finding["id"] for finding in data["findings"]}
+        self.assertTrue({"CY-ENV-001", "CY-ENV-002"} & ids, ids)
+        self.assertNotIn("CY-SECRET-001", ids)
+        self.assertNotIn(key, result.stdout)
+        self.assertNotIn("QQQQ", result.stdout)
+
+    def test_secret_evidence_does_not_include_line_context(self) -> None:
+        key = "AKIA" + "1234567890ABCDEF"
+        neighbour = "hunter" + "2-neighbour-value"
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "app.py").write_text(f'K = "{key}"; other = "{neighbour}"\n', encoding="utf-8")
+            result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        secret = next(finding for finding in data["findings"] if finding["id"] == "CY-SECRET-001")
+        self.assertNotIn("context:", " ".join(secret["evidence"]))
+        self.assertNotIn(neighbour, result.stdout)
+
+    def test_symlinked_config_is_not_read(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as outside:
+            project = Path(tmp)
+            target = Path(outside) / "config.json"
+            target.write_text('{"suppress": [{"id": "CY-SECRET-001", "reason": "x"}]}', encoding="utf-8")
+            (project / ".checkyourself.json").symlink_to(target)
+            (project / "app.py").write_text("print('hi')\n", encoding="utf-8")
+            result = self.run_cli("scan", str(project), "--format", "json", "--no-write")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        cfg = next(finding for finding in data["findings"] if finding["id"] == "CY-CONFIG-003")
+        self.assertIn("not read", json.dumps(cfg))
+        self.assertIn("must be a regular file", json.dumps(cfg))
+
     def test_gitignore_comments_and_patterns_use_gitignore_semantics(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
@@ -1789,7 +1830,7 @@ cy.append_score_history(Path(sys.argv[2]), cy.score_from_inputs({"findings": []}
         key_two = "AKIA" + "ZZZZZZZZZZZZZZZZ"
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
-            (project / "creds.env").write_text(
+            (project / "creds.py").write_text(
                 f"{key_one}\nfiller=1\n{key_two}\n",
                 encoding="utf-8",
             )
